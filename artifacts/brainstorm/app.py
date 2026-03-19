@@ -27,6 +27,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-fallback-key")
+app.config["SESSION_COOKIE_SAMESITE"] = "None"
+app.config["SESSION_COOKIE_SECURE"] = True
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "brainstorm.db")
 
