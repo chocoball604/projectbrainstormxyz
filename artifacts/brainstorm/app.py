@@ -1,5 +1,5 @@
 """
-app.py — Project Brainstorm V1 (PROMPT 1–4)
+app.py — Project Brainstorm V1 (PROMPT 1–5)
 
 Single-page Flask app with SQLite.
 Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
@@ -7,6 +7,7 @@ Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
 PROMPT 2: studies table, study list on dashboard, "New Research" button.
 PROMPT 3: Research Brief form with 6 required anchors; saving creates a draft study.
 PROMPT 4: Study type selector + limits enforcement.
+PROMPT 5: Personas — create, save, version (v1, v2…), view (read-only), delete.
 
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
@@ -44,6 +45,17 @@ STUDY_TYPE_LIMITS = {
     "synthetic_idi": {"min_personas": 1, "max_personas": 3},
     "synthetic_focus_group": {"min_personas": 4, "max_personas": 6},
 }
+
+PERSONA_DOSSIER_FIELDS = [
+    ("persona_summary", "Persona Summary"),
+    ("demographic_frame", "Demographic Frame"),
+    ("psychographic_profile", "Psychographic Profile"),
+    ("contextual_constraints", "Contextual Constraints"),
+    ("behavioural_tendencies", "Behavioural Tendencies"),
+    ("ai_model_provenance", "AI Model Provenance (provider family + model id + selection method)"),
+    ("grounding_sources", "Grounding Sources (list)"),
+    ("confidence_and_limits", "Confidence and Limits"),
+]
 
 
 def get_db():
@@ -88,6 +100,26 @@ def init_db():
             definition_useful_insight TEXT,
             created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS personas (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            persona_id              TEXT    NOT NULL,
+            version                 INTEGER NOT NULL DEFAULT 1,
+            name                    TEXT    NOT NULL,
+            persona_summary         TEXT    NOT NULL,
+            demographic_frame       TEXT    NOT NULL,
+            psychographic_profile   TEXT    NOT NULL,
+            contextual_constraints  TEXT    NOT NULL,
+            behavioural_tendencies  TEXT    NOT NULL,
+            ai_model_provenance     TEXT    NOT NULL,
+            grounding_sources       TEXT    NOT NULL,
+            confidence_and_limits   TEXT    NOT NULL,
+            created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            UNIQUE(persona_id, version)
         )
     """)
     conn.commit()
@@ -135,6 +167,16 @@ def get_token():
     return request.args.get("token") or request.form.get("token") or ""
 
 
+def get_user_personas_summary(conn, user_id):
+    rows = conn.execute(
+        """SELECT persona_id, name, MAX(version) as latest_version, created_at
+           FROM personas WHERE user_id = ?
+           GROUP BY persona_id ORDER BY MAX(id) DESC""",
+        (user_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @app.route("/")
 def index():
     token = get_token()
@@ -143,6 +185,9 @@ def index():
     pending_users = []
     all_users = []
     studies = []
+    personas_summary = []
+    view_persona = None
+    configure_study = None
 
     if is_admin:
         conn = get_db()
@@ -154,7 +199,6 @@ def index():
         ).fetchall()]
         conn.close()
 
-    configure_study = None
     if user and user["state"] == "active":
         conn = get_db()
         studies = [dict(r) for r in conn.execute(
@@ -169,6 +213,30 @@ def index():
             ).fetchone()
             if row:
                 configure_study = dict(row)
+
+        personas_summary = get_user_personas_summary(conn, user["id"])
+
+        view_pid = request.args.get("view_persona")
+        view_ver = request.args.get("ver")
+        if view_pid:
+            if view_ver:
+                row = conn.execute(
+                    "SELECT * FROM personas WHERE persona_id = ? AND version = ? AND user_id = ?",
+                    (view_pid, view_ver, user["id"]),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM personas WHERE persona_id = ? AND user_id = ? ORDER BY version DESC LIMIT 1",
+                    (view_pid, user["id"]),
+                ).fetchone()
+            if row:
+                view_persona = dict(row)
+                all_versions = conn.execute(
+                    "SELECT version, created_at FROM personas WHERE persona_id = ? AND user_id = ? ORDER BY version DESC",
+                    (view_pid, user["id"]),
+                ).fetchall()
+                view_persona["all_versions"] = [dict(v) for v in all_versions]
+
         conn.close()
 
     return render_template(
@@ -182,6 +250,10 @@ def index():
         show_new_research=request.args.get("new_research") == "1",
         configure_study=configure_study,
         study_type_limits=STUDY_TYPE_LIMITS,
+        personas_summary=personas_summary,
+        show_new_persona=request.args.get("new_persona") == "1",
+        new_version_of=request.args.get("new_version_of"),
+        view_persona=view_persona,
     )
 
 
@@ -369,12 +441,88 @@ def set_study_type(study_id):
     return redirect(url_for("index", token=token))
 
 
-def render_error(message, show_new_research=False):
+@app.route("/create-persona", methods=["POST"])
+def create_persona():
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        return render_error("Persona name is required.", show_new_persona=True)
+
+    dossier = {}
+    for field_key, field_label in PERSONA_DOSSIER_FIELDS:
+        val = (request.form.get(field_key) or "").strip()
+        if not val:
+            return render_error(
+                f'"{field_label}" is required. All dossier fields must be filled.',
+                show_new_persona=True,
+            )
+        dossier[field_key] = val
+
+    new_version_of = (request.form.get("new_version_of") or "").strip()
+
+    conn = get_db()
+    if new_version_of:
+        existing = conn.execute(
+            "SELECT MAX(version) as max_ver FROM personas WHERE persona_id = ? AND user_id = ?",
+            (new_version_of, user["id"]),
+        ).fetchone()
+        if not existing or existing["max_ver"] is None:
+            conn.close()
+            return render_error("Original persona not found.")
+        next_version = existing["max_ver"] + 1
+        persona_id = new_version_of
+    else:
+        persona_id = f"P-{secrets.token_hex(4).upper()}"
+        next_version = 1
+
+    conn.execute(
+        """INSERT INTO personas
+           (user_id, persona_id, version, name,
+            persona_summary, demographic_frame, psychographic_profile,
+            contextual_constraints, behavioural_tendencies,
+            ai_model_provenance, grounding_sources, confidence_and_limits)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            user["id"], persona_id, next_version, name,
+            dossier["persona_summary"], dossier["demographic_frame"],
+            dossier["psychographic_profile"], dossier["contextual_constraints"],
+            dossier["behavioural_tendencies"], dossier["ai_model_provenance"],
+            dossier["grounding_sources"], dossier["confidence_and_limits"],
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, view_persona=persona_id, ver=next_version))
+
+
+@app.route("/delete-persona/<persona_id>", methods=["POST"])
+def delete_persona(persona_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM personas WHERE persona_id = ? AND user_id = ?",
+        (persona_id, user["id"]),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+def render_error(message, show_new_research=False, show_new_persona=False):
     token = get_token()
     user, is_admin = get_session_data(token)
     pending_users = []
     all_users = []
     studies = []
+    personas_summary = []
     configure_study = None
     if is_admin:
         conn = get_db()
@@ -391,9 +539,12 @@ def render_error(message, show_new_research=False):
             "SELECT id, title, study_type, status, created_at FROM studies WHERE user_id = ? ORDER BY created_at DESC",
             (user["id"],),
         ).fetchall()]
+        personas_summary = get_user_personas_summary(conn, user["id"])
         conn.close()
     if not show_new_research:
         show_new_research = request.args.get("new_research") == "1"
+    if not show_new_persona:
+        show_new_persona = request.args.get("new_persona") == "1"
     return render_template(
         "index.html",
         user=user,
@@ -406,6 +557,10 @@ def render_error(message, show_new_research=False):
         show_new_research=show_new_research,
         configure_study=configure_study,
         study_type_limits=STUDY_TYPE_LIMITS,
+        personas_summary=personas_summary,
+        show_new_persona=show_new_persona,
+        new_version_of=request.args.get("new_version_of"),
+        view_persona=None,
     )
 
 
