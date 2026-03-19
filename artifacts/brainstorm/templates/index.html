@@ -311,67 +311,77 @@
 
         {% if configure_study %}
         <div class="card" id="configure-study-section">
-            <h2>Configure Study: {{ configure_study.title }}</h2>
-            <p style="font-size: 14px; color: #777; margin-bottom: 20px;">
-                Select a study type for this draft study. Each type has specific limits.
-            </p>
-
-            <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin-bottom: 20px; font-size: 13px;">
-                <strong>Study Type Limits:</strong>
-                <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
-                    <li><strong>Synthetic Survey:</strong> max 12 questions, max 400 respondents</li>
-                    <li><strong>Synthetic IDI:</strong> 1–3 personas</li>
-                    <li><strong>Synthetic Focus Group:</strong> 4–6 personas</li>
-                </ul>
+            <div class="card-header">
+                <h2>Configure Study: {{ configure_study.title }}</h2>
+                <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
             </div>
 
-            {% if configure_study.study_type %}
             <div class="info-msg" style="margin-bottom: 16px;">
-                Current type: <strong>{{ configure_study.study_type }}</strong>
+                Type: <strong>{{ configure_study.study_type or 'Not set' }}</strong>
+                &middot; Status: <span class="badge badge-{{ configure_study.status }}">{{ configure_study.status }}</span>
             </div>
-            {% endif %}
 
+            {% if not configure_study.study_type %}
             <form action="/set-study-type/{{ configure_study.id }}" method="POST">
                 <input type="hidden" name="token" value="{{ token }}">
                 <div class="form-group">
                     <label for="study-type-select">Study Type</label>
                     <select id="study-type-select" name="study_type" required style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: #fff;">
                         <option value="">— Select a type —</option>
-                        <option value="synthetic_survey" {% if configure_study.study_type == 'synthetic_survey' %}selected{% endif %}>Synthetic Survey</option>
-                        <option value="synthetic_idi" {% if configure_study.study_type == 'synthetic_idi' %}selected{% endif %}>Synthetic IDI</option>
-                        <option value="synthetic_focus_group" {% if configure_study.study_type == 'synthetic_focus_group' %}selected{% endif %}>Synthetic Focus Group</option>
+                        <option value="synthetic_survey">Synthetic Survey</option>
+                        <option value="synthetic_idi">Synthetic IDI</option>
+                        <option value="synthetic_focus_group">Synthetic Focus Group</option>
                     </select>
                 </div>
-                <div style="display: flex; gap: 12px; margin-top: 8px;">
-                    <button type="submit" class="btn btn-primary">Save Study Type</button>
-                    <a href="/?token={{ token }}" class="btn btn-secondary">Back to Dashboard</a>
-                </div>
+                <button type="submit" class="btn btn-primary">Save Study Type</button>
             </form>
-
-            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            {% endif %}
 
             {% if configure_study.study_type == 'synthetic_survey' %}
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Survey Configuration</h3>
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Survey Summary</h3>
             <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                Surveys do not use inspectable personas. Configure respondent and question counts below.
+                Surveys do not use inspectable personas.
             </p>
+            <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
+                <p style="margin: 0 0 8px;"><strong>Respondents:</strong> {{ configure_study.respondent_count or 100 }}</p>
+                <p style="margin: 0 0 8px;"><strong>Questions:</strong> {{ configure_study.question_count or 8 }}</p>
+                {% if configure_study.survey_brief_data %}
+                <p style="margin: 8px 0 4px;"><strong>Survey Brief:</strong></p>
+                <ul style="margin: 4px 0 8px 20px; line-height: 1.6;">
+                    {% for k, v in configure_study.survey_brief_data.items() %}
+                    <li><strong>{{ k | replace('_', ' ') | title }}:</strong> {{ v }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                {% if configure_study.survey_questions_list %}
+                <p style="margin: 8px 0 4px;"><strong>Survey Questions:</strong></p>
+                <ol style="margin: 4px 0 0 20px; line-height: 1.8;">
+                    {% for q in configure_study.survey_questions_list %}
+                    <li>{{ q }}</li>
+                    {% endfor %}
+                </ol>
+                {% endif %}
+            </div>
             <form action="/save-survey-config/{{ configure_study.id }}" method="POST" style="margin-bottom: 16px;">
                 <input type="hidden" name="token" value="{{ token }}">
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label for="respondent-count">Respondent Count (1–400)</label>
-                    <input type="number" id="respondent-count" name="respondent_count"
-                           value="{{ configure_study.respondent_count or 100 }}"
-                           min="1" max="400" required
-                           style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                <div style="display: flex; gap: 16px; margin-bottom: 12px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="respondent-count">Respondent Count (1–400)</label>
+                        <input type="number" id="respondent-count" name="respondent_count"
+                               value="{{ configure_study.respondent_count or 100 }}"
+                               min="1" max="400" required
+                               style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="question-count">Question Count (1–12)</label>
+                        <input type="number" id="question-count" name="question_count"
+                               value="{{ configure_study.question_count or 8 }}"
+                               min="1" max="12" required
+                               style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                    </div>
                 </div>
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label for="question-count">Question Count (1–12)</label>
-                    <input type="number" id="question-count" name="question_count"
-                           value="{{ configure_study.question_count or 8 }}"
-                           min="1" max="12" required
-                           style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
-                </div>
-                <button type="submit" class="btn btn-primary btn-small">Save Survey Config</button>
+                <button type="submit" class="btn btn-primary btn-small">Update Survey Config</button>
             </form>
 
             {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
@@ -480,18 +490,171 @@
         </div>
         {% endif %}
 
-        {% if show_new_research %}
+        {% if new_research_step == '1' %}
         <div class="card" id="new-research-section">
-            <h2>New Research Brief</h2>
+            <h2>New Research</h2>
             <p style="font-size: 14px; color: #777; margin-bottom: 20px;">
-                Complete all 6 required anchors below to create a draft study.
+                Choose a study title and type to get started.
+            </p>
+            <div class="form-group">
+                <label for="nr-title">Study Title</label>
+                <input type="text" id="nr-title" required>
+            </div>
+            <div class="form-group">
+                <label for="nr-type-select">Study Type</label>
+                <select id="nr-type-select" required style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: #fff;">
+                    <option value="">— Select a type —</option>
+                    <option value="synthetic_survey">Synthetic Survey</option>
+                    <option value="synthetic_idi">Synthetic IDI</option>
+                    <option value="synthetic_focus_group">Synthetic Focus Group</option>
+                </select>
+            </div>
+            <div style="background: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 13px;">
+                <strong>Study Type Limits:</strong>
+                <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
+                    <li><strong>Survey:</strong> max 12 questions, max 400 respondents, no persona dossiers</li>
+                    <li><strong>IDI:</strong> 1–3 personas required</li>
+                    <li><strong>Focus Group:</strong> 4–6 personas required</li>
+                </ul>
+            </div>
+            <div style="display: flex; gap: 12px; margin-top: 8px;">
+                <button type="button" class="btn btn-primary" id="nr-continue-btn">Continue</button>
+                <a href="/?token={{ token }}" class="btn btn-secondary">Cancel</a>
+            </div>
+            <script>
+            document.getElementById('nr-continue-btn').addEventListener('click', function() {
+                var title = document.getElementById('nr-title').value.trim();
+                var stype = document.getElementById('nr-type-select').value;
+                if (!title) { alert('Title is required.'); return; }
+                if (!stype) { alert('Please select a study type.'); return; }
+                var url = '/?token={{ token }}&new_research=2&nr_type=' + encodeURIComponent(stype) + '&nr_title=' + encodeURIComponent(title);
+                window.location.href = url;
+            });
+            </script>
+        </div>
+        {% endif %}
+
+        {% if new_research_step == '2' and new_research_type == 'synthetic_survey' %}
+        <div class="card" id="new-research-survey-section">
+            <h2>New Survey Study</h2>
+            <p style="font-size: 14px; color: #777; margin-bottom: 8px;">
+                Title: <strong>{{ request.args.get('nr_title', '') }}</strong> &middot; Type: <strong>Synthetic Survey</strong>
+            </p>
+            <p style="font-size: 13px; color: #999; margin-bottom: 20px;">
+                Surveys do not use inspectable personas. Configure respondent/question counts, fill in the survey brief, and enter your questions.
             </p>
             <form action="/create-study" method="POST">
                 <input type="hidden" name="token" value="{{ token }}">
-                <div class="form-group">
-                    <label for="brief-title">Study Title</label>
-                    <input type="text" id="brief-title" name="title" required>
+                <input type="hidden" name="title" value="{{ request.args.get('nr_title', '') }}">
+                <input type="hidden" name="study_type" value="synthetic_survey">
+
+                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Survey Configuration</h3>
+                <div style="display: flex; gap: 16px; margin-bottom: 20px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="sv-respondent-count">Respondent Count (1–400)</label>
+                        <input type="number" id="sv-respondent-count" name="respondent_count" value="100" min="1" max="400" required>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label for="sv-question-count">Question Count (1–12)</label>
+                        <input type="number" id="sv-question-count" name="question_count" value="8" min="1" max="12" required onchange="updateQuestionFields()">
+                    </div>
                 </div>
+
+                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Survey Brief</h3>
+                <div class="form-group">
+                    <label for="sv-ds">Decision to Support</label>
+                    <textarea id="sv-ds" name="decision_to_support" rows="2" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="sv-ta">Target Audience</label>
+                    <textarea id="sv-ta" name="target_audience" rows="2" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="sv-dui">Definition of Useful Insight</label>
+                    <textarea id="sv-dui" name="definition_useful_insight" rows="2" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="sv-th">Top Hypotheses (1–3 bullets)</label>
+                    <textarea id="sv-th" name="top_hypotheses" rows="3" required placeholder="- Hypothesis 1&#10;- Hypothesis 2&#10;- Hypothesis 3"></textarea>
+                </div>
+
+                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Survey Questions</h3>
+                <div id="survey-questions-container">
+                    <div class="form-group">
+                        <label>Question 1</label>
+                        <input type="text" name="survey_q_1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Question 2</label>
+                        <input type="text" name="survey_q_2">
+                    </div>
+                    <div class="form-group">
+                        <label>Question 3</label>
+                        <input type="text" name="survey_q_3">
+                    </div>
+                    <div class="form-group">
+                        <label>Question 4</label>
+                        <input type="text" name="survey_q_4">
+                    </div>
+                    <div class="form-group">
+                        <label>Question 5</label>
+                        <input type="text" name="survey_q_5">
+                    </div>
+                    <div class="form-group">
+                        <label>Question 6</label>
+                        <input type="text" name="survey_q_6">
+                    </div>
+                    <div class="form-group">
+                        <label>Question 7</label>
+                        <input type="text" name="survey_q_7">
+                    </div>
+                    <div class="form-group">
+                        <label>Question 8</label>
+                        <input type="text" name="survey_q_8">
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    <button type="submit" class="btn btn-primary">Save Draft Study</button>
+                    <a href="/?token={{ token }}&new_research=1" class="btn btn-secondary">Back</a>
+                    <a href="/?token={{ token }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+            <script>
+            function updateQuestionFields() {
+                var count = parseInt(document.getElementById('sv-question-count').value) || 8;
+                if (count < 1) count = 1;
+                if (count > 12) count = 12;
+                var container = document.getElementById('survey-questions-container');
+                container.innerHTML = '';
+                for (var i = 1; i <= count; i++) {
+                    var div = document.createElement('div');
+                    div.className = 'form-group';
+                    div.innerHTML = '<label>Question ' + i + '</label><input type="text" name="survey_q_' + i + '"' + (i === 1 ? ' required' : '') + '>';
+                    container.appendChild(div);
+                }
+            }
+            </script>
+        </div>
+        {% endif %}
+
+        {% if new_research_step == '2' and new_research_type in ['synthetic_idi', 'synthetic_focus_group'] %}
+        <div class="card" id="new-research-brief-section">
+            <h2>New {{ 'IDI' if new_research_type == 'synthetic_idi' else 'Focus Group' }} Study</h2>
+            <p style="font-size: 14px; color: #777; margin-bottom: 8px;">
+                Title: <strong>{{ request.args.get('nr_title', '') }}</strong> &middot; Type: <strong>{{ 'Synthetic IDI' if new_research_type == 'synthetic_idi' else 'Synthetic Focus Group' }}</strong>
+            </p>
+            <p style="font-size: 13px; color: #999; margin-bottom: 20px;">
+                {% if new_research_type == 'synthetic_idi' %}
+                IDI requires 1–3 attached personas. Complete the 6 required anchors below, then attach personas after saving.
+                {% else %}
+                Focus Group requires 4–6 attached personas. Complete the 6 required anchors below, then attach personas after saving.
+                {% endif %}
+            </p>
+            <form action="/create-study" method="POST">
+                <input type="hidden" name="token" value="{{ token }}">
+                <input type="hidden" name="title" value="{{ request.args.get('nr_title', '') }}">
+                <input type="hidden" name="study_type" value="{{ new_research_type }}">
                 <div class="form-group">
                     <label for="brief-bp">1. Business Problem</label>
                     <textarea id="brief-bp" name="business_problem" rows="3" required></textarea>
@@ -518,6 +681,7 @@
                 </div>
                 <div style="display: flex; gap: 12px; margin-top: 8px;">
                     <button type="submit" class="btn btn-primary">Save Draft Study</button>
+                    <a href="/?token={{ token }}&new_research=1" class="btn btn-secondary">Back</a>
                     <a href="/?token={{ token }}" class="btn btn-secondary">Cancel</a>
                 </div>
             </form>

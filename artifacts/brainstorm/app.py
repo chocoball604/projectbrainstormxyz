@@ -1,5 +1,5 @@
 """
-app.py — Project Brainstorm V1 (PROMPT 1–7 + PRD alignment fix)
+app.py — Project Brainstorm V1 (PROMPT 1–7 + PRD fixes + branching flow)
 
 Single-page Flask app with SQLite.
 Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
@@ -11,6 +11,8 @@ PROMPT 5: Personas — immutable once saved, clone-as-new, no versioning.
 PROMPT 6: Grounding Trace logging + Admin-Directed Web Sources.
 PROMPT 7: Execute studies with placeholder outputs.
 PRD FIX: Survey no personas (respondent/question config), IDI 1-3 personas, FG 4-6 personas.
+BRANCHING: Study type chosen first in New Research flow. Survey gets survey brief + questions.
+           IDI/FG get existing 6-anchor brief. Type set at creation, not after.
 
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
@@ -186,6 +188,10 @@ def migrate_db(conn):
         conn.execute("ALTER TABLE studies ADD COLUMN respondent_count INTEGER DEFAULT 100")
     if "question_count" not in study_cols:
         conn.execute("ALTER TABLE studies ADD COLUMN question_count INTEGER DEFAULT 8")
+    if "survey_brief" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN survey_brief TEXT")
+    if "survey_questions" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN survey_questions TEXT")
 
     rows = conn.execute(
         "SELECT id, persona_versions_used, personas_used FROM studies"
@@ -411,6 +417,20 @@ def index():
             ).fetchone()
             if row:
                 configure_study = dict(row)
+                if configure_study.get("survey_questions"):
+                    try:
+                        configure_study["survey_questions_list"] = json.loads(configure_study["survey_questions"])
+                    except (json.JSONDecodeError, TypeError):
+                        configure_study["survey_questions_list"] = []
+                else:
+                    configure_study["survey_questions_list"] = []
+                if configure_study.get("survey_brief"):
+                    try:
+                        configure_study["survey_brief_data"] = json.loads(configure_study["survey_brief"])
+                    except (json.JSONDecodeError, TypeError):
+                        configure_study["survey_brief_data"] = {}
+                else:
+                    configure_study["survey_brief_data"] = {}
                 raw_ids = normalize_personas_used(configure_study.get("personas_used"))
                 cleaned_ids = []
                 for pid in raw_ids:
@@ -463,6 +483,9 @@ def index():
 
         conn.close()
 
+    new_research_step = request.args.get("new_research")
+    new_research_type = request.args.get("nr_type", "")
+
     return render_template(
         "index.html",
         user=user,
@@ -471,7 +494,8 @@ def index():
         all_users=all_users,
         studies=studies,
         token=token,
-        show_new_research=request.args.get("new_research") == "1",
+        new_research_step=new_research_step,
+        new_research_type=new_research_type,
         configure_study=configure_study,
         configure_study_personas=configure_study_personas,
         available_personas=available_personas,
@@ -606,35 +630,88 @@ def create_study():
         return render_error("You must be an active user to create a study.")
 
     title = (request.form.get("title") or "").strip()
+    study_type = (request.form.get("study_type") or "").strip()
+
     if not title:
-        return render_error("Title is required.", show_new_research=True)
+        return render_error("Title is required.")
+    if study_type not in VALID_STUDY_TYPES:
+        return render_error("Please select a valid study type.")
 
-    brief = {}
-    for field_key, field_label in RESEARCH_BRIEF_FIELDS:
-        val = (request.form.get(field_key) or "").strip()
-        if not val:
-            return render_error(
-                f'"{field_label}" is required. All 6 anchors must be filled.',
-                show_new_research=True,
-            )
-        brief[field_key] = val
+    if study_type == "synthetic_survey":
+        decision_to_support = (request.form.get("decision_to_support") or "").strip()
+        target_audience = (request.form.get("target_audience") or "").strip()
+        definition_useful_insight = (request.form.get("definition_useful_insight") or "").strip()
+        top_hypotheses = (request.form.get("top_hypotheses") or "").strip()
+        if not decision_to_support or not target_audience or not definition_useful_insight or not top_hypotheses:
+            return render_error("All survey brief fields are required (Decision to Support, Target Audience, Definition of Useful Insight, Top Hypotheses).")
 
-    conn = get_db()
-    conn.execute(
-        """INSERT INTO studies
-           (user_id, title, status, business_problem, decision_to_support,
-            known_vs_unknown, target_audience, study_fit, definition_useful_insight)
-           VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)""",
-        (
-            user["id"], title,
-            brief["business_problem"], brief["decision_to_support"],
-            brief["known_vs_unknown"], brief["target_audience"],
-            brief["study_fit"], brief["definition_useful_insight"],
-        ),
-    )
-    conn.commit()
-    conn.close()
-    return redirect(url_for("index", token=token))
+        try:
+            respondent_count = int(request.form.get("respondent_count", 100))
+        except (ValueError, TypeError):
+            respondent_count = 100
+        try:
+            question_count = int(request.form.get("question_count", 8))
+        except (ValueError, TypeError):
+            question_count = 8
+        respondent_count = max(1, min(400, respondent_count))
+        question_count = max(1, min(12, question_count))
+
+        survey_questions = []
+        for i in range(1, question_count + 1):
+            q = (request.form.get(f"survey_q_{i}") or "").strip()
+            if q:
+                survey_questions.append(q)
+        if len(survey_questions) == 0:
+            return render_error("At least 1 survey question is required.")
+        if len(survey_questions) > 12:
+            survey_questions = survey_questions[:12]
+
+        survey_brief = json.dumps({
+            "decision_to_support": decision_to_support,
+            "target_audience": target_audience,
+            "definition_useful_insight": definition_useful_insight,
+            "top_hypotheses": top_hypotheses,
+        })
+
+        conn = get_db()
+        conn.execute(
+            """INSERT INTO studies
+               (user_id, title, status, study_type, respondent_count, question_count,
+                survey_brief, survey_questions)
+               VALUES (?, ?, 'draft', ?, ?, ?, ?, ?)""",
+            (user["id"], title, study_type, respondent_count, question_count,
+             survey_brief, json.dumps(survey_questions)),
+        )
+        conn.commit()
+        conn.close()
+        return redirect(url_for("index", token=token))
+
+    else:
+        brief = {}
+        for field_key, field_label in RESEARCH_BRIEF_FIELDS:
+            val = (request.form.get(field_key) or "").strip()
+            if not val:
+                return render_error(
+                    f'"{field_label}" is required. All 6 anchors must be filled.',
+                )
+            brief[field_key] = val
+
+        conn = get_db()
+        conn.execute(
+            """INSERT INTO studies
+               (user_id, title, status, study_type, business_problem, decision_to_support,
+                known_vs_unknown, target_audience, study_fit, definition_useful_insight)
+               VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                user["id"], title, study_type,
+                brief["business_problem"], brief["decision_to_support"],
+                brief["known_vs_unknown"], brief["target_audience"],
+                brief["study_fit"], brief["definition_useful_insight"],
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return redirect(url_for("index", token=token))
 
 
 @app.route("/set-study-type/<int:study_id>", methods=["POST"])
@@ -781,6 +858,13 @@ def run_study(study_id):
         if q_count < 1 or q_count > 12:
             conn.close()
             return render_error("Survey question count must be between 1 and 12.")
+        sq = json.loads(study["survey_questions"] or "[]")
+        if len(sq) < 1:
+            conn.close()
+            return render_error("Survey must have at least 1 question.")
+        if len(sq) > 12:
+            conn.close()
+            return render_error("Survey allows max 12 questions.")
     elif study_type == "synthetic_idi":
         if persona_count < 1:
             conn.close()
@@ -1093,8 +1177,6 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         ).fetchall()]
         personas_list = get_user_personas_list(conn, user["id"])
         conn.close()
-    if not show_new_research:
-        show_new_research = request.args.get("new_research") == "1"
     if not show_new_persona:
         show_new_persona = request.args.get("new_persona") == "1"
     admin_web_sources = []
@@ -1115,7 +1197,8 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         studies=studies,
         token=token,
         error=message,
-        show_new_research=show_new_research,
+        new_research_step=None,
+        new_research_type="",
         configure_study=configure_study,
         configure_study_personas=[],
         available_personas=[],

@@ -1,0 +1,90 @@
+IMPLEMENT BRANCHING NEW RESEARCH FLOW (Study Type first)
+
+Goal (plain English):
+Change the “New Research” flow so Study Type is chosen first.
+Then:
+- If Survey: ask survey configuration + survey brief + survey questions
+- If IDI/Focus Group: use the existing 6-anchor Research Brief flow
+
+Rules (must follow):
+- Single-page app only (same screen, sections switch).
+- Keep token-based sessions working on every form submit.
+- Surveys must NOT use attachable personas or persona dossiers.
+- IDI requires 1–3 attached personas.
+- Focus Group requires 4–6 attached personas.
+- Survey requires respondent_count (≤400) and question_count (≤12) and a list of ≤12 survey questions.
+
+What to implement (in order):
+
+1) New Research entry screen changes:
+   - When user clicks “New Research”, show ONLY:
+     a) Study Title
+     b) Study Type selector (survey / idi / focus group)
+     c) Continue button
+   - Do NOT show the 6 anchors immediately.
+
+2) Branch A: Survey configuration + survey brief + survey questions:
+   After selecting study type = survey and clicking Continue, show:
+   - Survey Configuration:
+     * respondent_count (default 100, max 400)
+     * question_count (default 8, max 12)
+   - Survey Brief (4 fields):
+     * decision_to_support
+     * target_audience
+     * definition_of_useful_insight
+     * top_hypotheses (1–3 bullets)
+   - Survey Questions:
+     * Provide a simple UI to enter up to question_count questions
+     * Enforce max 12
+
+   Save behavior:
+   - On “Save Draft Study”, create a draft study record with:
+     study_type = synthetic_survey
+     respondent_count, question_count
+     survey_brief fields
+     survey_questions stored as JSON
+   - Do NOT allow persona attachments for survey:
+     * hide the Attached Personas UI entirely when survey is selected
+     * if someone tries to attach anyway, block with a clear message.
+
+3) Branch B: IDI / Focus Group uses existing 6-anchor brief:
+   After selecting study type = idi or focus_group and clicking Continue, show:
+   - The existing 6-anchor Research Brief form (your current Prompt 3 form)
+   Save behavior:
+   - Save as draft study with those 6 anchors.
+   - Existing persona attachment UI remains available.
+
+4) Update Run Study prerequisites:
+   - Survey run requires:
+     respondent_count <= 400
+     question_count <= 12
+     survey_questions count <= 12 and >= 1
+     no personas required
+   - IDI run requires attached personas count between 1 and 3
+   - Focus group run requires attached personas count between 4 and 6
+
+5) Migration / DB fields (do not wipe DB):
+   - Add new columns to studies table if missing:
+     respondent_count INTEGER
+     question_count INTEGER
+     survey_brief TEXT (JSON)
+     survey_questions TEXT (JSON)
+   - Keep existing anchor columns for IDI/FG.
+
+6) UI:
+   - Dashboard “Configure Study” section should show:
+     * For survey: respondent_count, question_count, survey questions summary
+     * For idi/fg: persona attachment + anchors summary
+   - Make it obvious which branch the study is in.
+
+Constraints:
+- Do NOT touch budgets, grounding trace logic, QA logic, cost telemetry.
+- Do NOT reset/delete DB.
+- Keep it minimal and working.
+
+Deliverables:
+- List files changed.
+- How to test:
+  A) Survey flow: choose survey first, set respondent+questions, enter questions, save, run with 0 personas.
+  B) IDI flow: choose idi first, complete 6 anchors, attach 1–3 personas, run.
+  C) Focus group flow: choose focus group first, complete 6 anchors, attach 4–6 personas, run.
