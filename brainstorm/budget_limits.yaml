@@ -1,0 +1,30 @@
+# Budget Limits — Project Brainstorm V1
+# These are PLACEHOLDER values. Real billing is not implemented.
+# Do NOT use these for real financial decisions.
+
+per_study_run:
+  max_cost_usd: 50.00
+  warning_threshold_usd: 40.00
+  currency: USD
+
+per_user_monthly:
+  max_cost_usd: 500.00
+  warning_threshold_usd: 400.00
+  currency: USD
+
+study_type_defaults:
+  survey:
+    estimated_cost_usd: 5.00
+    note: PLACEHOLDER
+  idi:
+    estimated_cost_usd: 15.00
+    note: PLACEHOLDER
+  focus_group:
+    estimated_cost_usd: 25.00
+    note: PLACEHOLDER
+
+model_costs:
+  # PLACEHOLDER — not real API costs
+  tokens_per_1k_input: 0.001
+  tokens_per_1k_output: 0.002
+  note: PLACEHOLDER values only
