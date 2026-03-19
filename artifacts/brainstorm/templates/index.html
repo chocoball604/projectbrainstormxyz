@@ -675,6 +675,133 @@
     </div>
     {% endif %}
 
+    {% if is_admin %}
+    <div class="section visible" id="section-admin-sources">
+        <div class="card">
+            <h2>Admin-Directed Web Sources</h2>
+            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
+                Configure web sources for grounding trace. Active sources set admin_sources_configured and admin_sources_queried to true.
+            </p>
+
+            {% if admin_web_sources %}
+            <table style="margin-bottom: 20px;">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>URL</th>
+                        <th>City</th>
+                        <th>Country</th>
+                        <th>Language</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for src in admin_web_sources %}
+                    <tr>
+                        <td>{{ src.name }}</td>
+                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            <a href="{{ src.url }}" target="_blank" style="color: #3b82f6;">{{ src.url }}</a>
+                        </td>
+                        <td>{{ src.city or '—' }}</td>
+                        <td>{{ src.country or '—' }}</td>
+                        <td>{{ src.language }}</td>
+                        <td>
+                            <span class="badge badge-{{ 'active' if src.status == 'active' else 'disabled' }}">{{ src.status }}</span>
+                        </td>
+                        <td>
+                            <form action="/admin/toggle-source/{{ src.id }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-primary btn-small">
+                                    {{ 'Disable' if src.status == 'active' else 'Enable' }}
+                                </button>
+                            </form>
+                            <form action="/admin/delete-source/{{ src.id }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-danger btn-small">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No web sources configured.</p>
+            {% endif %}
+
+            <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add New Source</h3>
+            <form action="/admin/add-source" method="POST">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div>
+                        <label class="form-label">URL *</label>
+                        <input type="url" name="url" required class="form-input" placeholder="https://example.com">
+                    </div>
+                    <div>
+                        <label class="form-label">Source Name *</label>
+                        <input type="text" name="source_name" required class="form-input" placeholder="Source name">
+                    </div>
+                    <div>
+                        <label class="form-label">City (optional)</label>
+                        <input type="text" name="city" class="form-input" placeholder="City">
+                    </div>
+                    <div>
+                        <label class="form-label">Country (optional)</label>
+                        <input type="text" name="country" class="form-input" placeholder="Country">
+                    </div>
+                    <div>
+                        <label class="form-label">Language</label>
+                        <input type="text" name="language" class="form-input" value="en" placeholder="en">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-success">Add Source</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Grounding Traces (Recent 50)</h2>
+            {% if grounding_traces %}
+            <div style="overflow-x: auto;">
+                <table style="font-size: 12px;">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Trigger</th>
+                            <th>Study ID</th>
+                            <th>Persona ID</th>
+                            <th>Sources Configured</th>
+                            <th>Queried</th>
+                            <th>Matched</th>
+                            <th>Used in Output</th>
+                            <th>Reason Code</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for gt in grounding_traces %}
+                        <tr>
+                            <td>{{ gt.id }}</td>
+                            <td><code>{{ gt.trigger_event }}</code></td>
+                            <td>{{ gt.study_id or '—' }}</td>
+                            <td>{{ gt.persona_id or '—' }}</td>
+                            <td>{{ 'Yes' if gt.admin_sources_configured else 'No' }}</td>
+                            <td>{{ 'Yes' if gt.admin_sources_queried else 'No' }}</td>
+                            <td>{{ 'Yes' if gt.admin_sources_matched else 'No' }}</td>
+                            <td>{{ 'Yes' if gt.admin_sources_used_in_output else 'No' }}</td>
+                            <td><code style="color: #c0392b;">{{ gt.admin_source_reason_code or '—' }}</code></td>
+                            <td>{{ gt.timestamp_utc }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color: #999; font-size: 13px;">No grounding traces recorded yet.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 
 <script>

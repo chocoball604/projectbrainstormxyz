@@ -51,9 +51,19 @@ Python Flask + SQLite single-page app for AI-Native Market Research.
 
 - **Auth**: Token-based (URL query param `?token=xxx`) — needed because Replit preview iframe blocks cookies. Sessions stored in `sessions` table.
 - **Admin password**: `admin123` (env var `ADMIN_PASSWORD`)
-- **DB tables**: `users`, `sessions`, `studies`
-- **Prompt progress**: Prompt 1 (auth/signup/admin) + Prompt 2 (study list + "New Research" button) done
+- **DB tables**: `users`, `sessions`, `studies`, `personas`, `admin_web_sources`, `grounding_traces`
+- **Prompt progress**: Prompts 1–6 complete
+  - P1: Auth/signup/admin approval
+  - P2: Study list + "New Research" button
+  - P3: Research Brief with 6 required anchors
+  - P4: Study type selector + limits
+  - P5: Personas — immutable, clone-as-new, no versioning, `persona_instance_id` model
+  - P6: Grounding Trace logging + Admin-Directed Web Sources
+- **Personas**: Each persona has a unique immutable `persona_instance_id` (e.g. `P-5EB8581A`). Clone creates a new persona. Delete auto-detaches from non-completed studies. Delete blocked if used in completed study.
+- **Grounding Traces**: Recorded on persona creation (and study execution when implemented). Schema follows `grounding_trace.schema.json`. Reason code required when `admin_sources_used_in_output` is false.
+- **Admin Web Sources**: Admin can add/toggle/delete web sources. Active sources set `admin_sources_configured=true` and `admin_sources_queried=true` in grounding traces.
 - **Study statuses**: draft, in_progress, qa_blocked, terminated_system, terminated_user, completed
+- **Study types**: synthetic_survey (max 12Q/400R), synthetic_idi (1-3 personas), synthetic_focus_group (4-6 personas)
 - **Run**: `python artifacts/brainstorm/app.py` (port from `PORT` env var, default 5000)
 
 ## TypeScript & Composite Projects

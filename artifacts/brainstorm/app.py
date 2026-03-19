@@ -1,5 +1,5 @@
 """
-app.py — Project Brainstorm V1 (PROMPT 1–5)
+app.py — Project Brainstorm V1 (PROMPT 1–6)
 
 Single-page Flask app with SQLite.
 Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
@@ -8,6 +8,7 @@ PROMPT 2: studies table, study list on dashboard, "New Research" button.
 PROMPT 3: Research Brief form with 6 required anchors; saving creates a draft study.
 PROMPT 4: Study type selector + limits enforcement.
 PROMPT 5: Personas — immutable once saved, clone-as-new, no versioning.
+PROMPT 6: Grounding Trace logging + Admin-Directed Web Sources.
 
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
@@ -46,6 +47,13 @@ STUDY_TYPE_LIMITS = {
     "synthetic_idi": {"min_personas": 1, "max_personas": 3},
     "synthetic_focus_group": {"min_personas": 4, "max_personas": 6},
 }
+
+GROUNDING_REASON_CODES = [
+    "ADMIN_SOURCE_NO_MATCH",
+    "ADMIN_SOURCE_OUT_OF_SCOPE",
+    "ADMIN_SOURCE_TEMP_UNAVAILABLE",
+    "ADMIN_SOURCE_NOT_RELEVANT",
+]
 
 PERSONA_DOSSIER_FIELDS = [
     ("persona_summary", "Persona Summary"),
@@ -124,6 +132,32 @@ def init_db():
             created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (user_id) REFERENCES users(id),
             UNIQUE(persona_id, version)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS admin_web_sources (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            url        TEXT    NOT NULL,
+            name       TEXT    NOT NULL,
+            city       TEXT,
+            country    TEXT,
+            language   TEXT    NOT NULL DEFAULT 'en',
+            status     TEXT    NOT NULL DEFAULT 'active',
+            created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS grounding_traces (
+            id                           INTEGER PRIMARY KEY AUTOINCREMENT,
+            study_id                     TEXT,
+            persona_id                   TEXT,
+            trigger_event                TEXT    NOT NULL,
+            admin_sources_configured     INTEGER NOT NULL DEFAULT 0,
+            admin_sources_queried        INTEGER NOT NULL DEFAULT 0,
+            admin_sources_matched        INTEGER NOT NULL DEFAULT 0,
+            admin_sources_used_in_output INTEGER NOT NULL DEFAULT 0,
+            admin_source_reason_code     TEXT,
+            timestamp_utc                TEXT    NOT NULL DEFAULT (datetime('now'))
         )
     """)
     migrate_db(conn)
@@ -215,6 +249,53 @@ def get_user_personas_list(conn, user_id):
     return [dict(r) for r in rows]
 
 
+def get_admin_web_sources(conn, status_filter=None):
+    if status_filter:
+        rows = conn.execute(
+            "SELECT * FROM admin_web_sources WHERE status = ? ORDER BY id DESC",
+            (status_filter,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM admin_web_sources ORDER BY id DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_grounding_trace(conn, trigger_event, study_id=None, persona_id=None):
+    active_sources = get_admin_web_sources(conn, status_filter="active")
+    has_active = len(active_sources) > 0
+
+    admin_sources_configured = has_active
+    admin_sources_queried = has_active
+    admin_sources_matched = False
+    admin_sources_used_in_output = False
+
+    reason_code = None
+    if not admin_sources_used_in_output:
+        if has_active:
+            reason_code = "ADMIN_SOURCE_NOT_RELEVANT"
+        else:
+            reason_code = "ADMIN_SOURCE_NO_MATCH"
+
+    conn.execute(
+        """INSERT INTO grounding_traces
+           (study_id, persona_id, trigger_event,
+            admin_sources_configured, admin_sources_queried,
+            admin_sources_matched, admin_sources_used_in_output,
+            admin_source_reason_code)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            study_id, persona_id, trigger_event,
+            1 if admin_sources_configured else 0,
+            1 if admin_sources_queried else 0,
+            1 if admin_sources_matched else 0,
+            1 if admin_sources_used_in_output else 0,
+            reason_code,
+        ),
+    )
+
+
 def normalize_personas_used(raw_json):
     try:
         data = json.loads(raw_json) if raw_json else []
@@ -287,6 +368,8 @@ def index():
     configure_study_personas = []
     available_personas = []
     clone_source = None
+    admin_web_sources = []
+    grounding_traces = []
 
     if is_admin:
         conn = get_db()
@@ -295,6 +378,10 @@ def index():
         ).fetchall()]
         all_users = [dict(r) for r in conn.execute(
             "SELECT id, email, username, state, created_at FROM users ORDER BY created_at DESC"
+        ).fetchall()]
+        admin_web_sources = get_admin_web_sources(conn)
+        grounding_traces = [dict(r) for r in conn.execute(
+            "SELECT * FROM grounding_traces ORDER BY id DESC LIMIT 50"
         ).fetchall()]
         conn.close()
 
@@ -372,6 +459,8 @@ def index():
         show_new_persona=request.args.get("new_persona") == "1",
         clone_source=clone_source,
         view_persona=view_persona,
+        admin_web_sources=admin_web_sources,
+        grounding_traces=grounding_traces,
     )
 
 
@@ -671,6 +760,7 @@ def create_persona():
             dossier["grounding_sources"], dossier["confidence_and_limits"],
         ),
     )
+    create_grounding_trace(conn, trigger_event="persona_created", persona_id=new_instance_id)
     conn.commit()
     conn.close()
     return redirect(url_for("index", token=token, view_persona=new_instance_id))
@@ -695,6 +785,63 @@ def delete_persona(instance_id):
         "DELETE FROM personas WHERE persona_instance_id = ? AND user_id = ?",
         (instance_id, user["id"]),
     )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/add-source", methods=["POST"])
+def admin_add_source():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    url = (request.form.get("url") or "").strip()
+    name = (request.form.get("source_name") or "").strip()
+    city = (request.form.get("city") or "").strip() or None
+    country = (request.form.get("country") or "").strip() or None
+    language = (request.form.get("language") or "").strip() or "en"
+
+    if not url or not name:
+        return render_error("URL and Source Name are required.")
+
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO admin_web_sources (url, name, city, country, language, status) VALUES (?, ?, ?, ?, ?, 'active')",
+        (url, name, city, country, language),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/toggle-source/<int:source_id>", methods=["POST"])
+def admin_toggle_source(source_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    conn = get_db()
+    row = conn.execute("SELECT status FROM admin_web_sources WHERE id = ?", (source_id,)).fetchone()
+    if row:
+        new_status = "disabled" if row["status"] == "active" else "active"
+        conn.execute("UPDATE admin_web_sources SET status = ? WHERE id = ?", (new_status, source_id))
+        conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/delete-source/<int:source_id>", methods=["POST"])
+def admin_delete_source(source_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    conn = get_db()
+    conn.execute("DELETE FROM admin_web_sources WHERE id = ?", (source_id,))
     conn.commit()
     conn.close()
     return redirect(url_for("index", token=token))
@@ -729,6 +876,15 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         show_new_research = request.args.get("new_research") == "1"
     if not show_new_persona:
         show_new_persona = request.args.get("new_persona") == "1"
+    admin_web_sources = []
+    grounding_traces = []
+    if is_admin:
+        conn2 = get_db()
+        admin_web_sources = get_admin_web_sources(conn2)
+        grounding_traces = [dict(r) for r in conn2.execute(
+            "SELECT * FROM grounding_traces ORDER BY id DESC LIMIT 50"
+        ).fetchall()]
+        conn2.close()
     return render_template(
         "index.html",
         user=user,
@@ -747,6 +903,8 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         show_new_persona=show_new_persona,
         clone_source=None,
         view_persona=None,
+        admin_web_sources=admin_web_sources,
+        grounding_traces=grounding_traces,
     )
 
 
