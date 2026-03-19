@@ -1,0 +1,20 @@
+version: v1-provisional
+study_budgets:
+  synthetic_survey:
+    max_tokens_total: 100000
+    max_questions: 12
+    max_respondents: 400
+    max_qa_retries: 2
+    followups_supported: false
+  synthetic_idi:
+    max_tokens_total: 150000
+    participants_min: 1
+    participants_max: 3
+    max_qa_retries: 2
+    max_followup_rounds: 2
+  synthetic_focus_group:
+    max_tokens_total: 300000
+    participants_min: 4
+    participants_max: 6
+    max_qa_retries: 2
+    max_followup_rounds: 2

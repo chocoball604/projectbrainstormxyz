@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GroundingTrace",
+  "type": "object",
+  "required": [
+    "study_id",
+    "admin_sources_configured",
+    "admin_sources_queried",
+    "admin_sources_matched",
+    "admin_sources_used_in_output"
+  ],
+  "properties": {
+    "study_id": {
+      "type": "string"
+    },
+    "persona_id": {
+      "type": "string"
+    },
+    "admin_sources_configured": {
+      "type": "boolean"
+    },
+    "admin_sources_queried": {
+      "type": "boolean"
+    },
+    "admin_sources_matched": {
+      "type": "boolean"
+    },
+    "admin_sources_used_in_output": {
+      "type": "boolean"
+    },
+    "admin_source_reason_code": {
+      "type": "string",
+      "enum": [
+        "ADMIN_SOURCE_NO_MATCH",
+        "ADMIN_SOURCE_OUT_OF_SCOPE",
+        "ADMIN_SOURCE_TEMP_UNAVAILABLE",
+        "ADMIN_SOURCE_NOT_RELEVANT"
+      ]
+    },
+    "timestamp_utc": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "admin_sources_used_in_output": {
+            "const": false
+          }
+        },
+        "required": [
+          "admin_sources_used_in_output"
+        ]
+      },
+      "then": {
+        "required": [
+          "admin_source_reason_code"
+        ]
+      }
+    }
+  ]
+}

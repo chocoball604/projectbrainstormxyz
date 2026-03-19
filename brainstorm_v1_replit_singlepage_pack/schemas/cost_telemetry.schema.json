@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CostTelemetry",
+  "type": "object",
+  "required": [
+    "study_id",
+    "study_type",
+    "tokens_mark",
+    "tokens_lisa",
+    "tokens_ben",
+    "tokens_total",
+    "model_call_count",
+    "qa_retry_count",
+    "followup_round_count",
+    "status"
+  ],
+  "properties": {
+    "study_id": {
+      "type": "string"
+    },
+    "study_type": {
+      "type": "string",
+      "enum": [
+        "synthetic_survey",
+        "synthetic_idi",
+        "synthetic_focus_group"
+      ]
+    },
+    "tokens_mark": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tokens_lisa": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tokens_ben": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tokens_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "model_call_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "qa_retry_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "followup_round_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "in_progress",
+        "qa_blocked",
+        "terminated_system",
+        "terminated_user",
+        "completed"
+      ]
+    },
+    "termination_reason": {
+      "type": "string"
+    },
+    "grounding_trace_id": {
+      "type": "string"
+    },
+    "timestamp_utc": {
+      "type": "string"
+    }
+  }
+}
