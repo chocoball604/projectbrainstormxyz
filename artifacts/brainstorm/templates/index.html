@@ -364,7 +364,6 @@
                 <tbody>
                     {% for cp in configure_study_personas %}
                     <tr>
-                        {% if cp.exists %}
                         <td>{{ cp.name }}</td>
                         <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ cp.id }}</code></td>
                         <td>
@@ -375,17 +374,6 @@
                             </form>
                             <a href="/?token={{ token }}&view_persona={{ cp.id }}" class="btn btn-primary btn-small">View</a>
                         </td>
-                        {% else %}
-                        <td style="color: #c0392b; font-style: italic;">Deleted persona</td>
-                        <td><code style="font-size: 12px; background: #fce4e4; padding: 2px 6px; border-radius: 3px; color: #c0392b;">{{ cp.id }}</code></td>
-                        <td>
-                            <form action="/detach-persona/{{ configure_study.id }}" method="POST" style="display:inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <input type="hidden" name="persona_instance_id" value="{{ cp.id }}">
-                                <button type="submit" class="btn btn-danger btn-small">Remove</button>
-                            </form>
-                        </td>
-                        {% endif %}
                     </tr>
                     {% endfor %}
                 </tbody>

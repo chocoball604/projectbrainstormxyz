@@ -1,0 +1,53 @@
+BUG FIX: persona deletion inconsistently detaches from uncompleted studies.
+
+Observed behavior:
+- Sometimes deleted persona disappears from “Attached Personas” (correct)
+- Sometimes it stays attached and shows as “Deleted persona (ID…)” (wrong for uncompleted studies)
+
+Requirement:
+If a persona is deleted, it MUST disappear from ALL uncompleted studies, every time.
+
+Likely root cause:
+The study field personas_used has inconsistent JSON formats across studies (string list vs legacy object list).
+Detachment sometimes fails because it tries to remove a string from a list that contains objects.
+
+Fix (must implement all parts):
+
+1) Add a normalization function:
+   normalize_personas_used(raw_json) -> list[str]
+   It must accept any of these and return a clean list of persona_instance_id strings:
+   - null / empty
+   - "[]"
+   - ["P-123", "P-456"]
+   - [{"persona_instance_id":"P-123"}]
+   - [{"persona_id":"X","version":1}]  -> convert to "X-v1" OR whatever legacy mapping you used previously
+   - mixed lists (strings + objects)
+   Also dedupe and remove empty values.
+
+2) Use normalization everywhere:
+   - In attach route: load -> normalize -> append string -> dedupe -> save
+   - In detach route: load -> normalize -> remove string -> save
+   - In delete persona route: for every study where status != 'completed':
+       load -> normalize -> remove -> save
+
+3) Add self-healing on study display:
+   - When rendering attached personas for a study:
+     load -> normalize
+     remove any persona IDs that do not exist in the personas table IF study is NOT completed
+     save the cleaned list back to DB
+   - For completed studies only: if a persona is missing, show “Deleted persona (ID…)” but do NOT auto-remove.
+
+4) After fix, remove the “Deleted persona” display for uncompleted studies.
+   It should never appear after auto-clean.
+
+Constraints:
+- Do NOT change product scope (budgets, QA rules, grounding trace).
+- Do NOT wipe/reset the database.
+- Keep token-based sessions working.
+
+Deliverables:
+- Files changed
+- Tests:
+  A) Create 2 personas, attach both to an uncompleted study, delete 1 persona -> it must vanish from attached list.
+  B) Create another study, attach persona, delete it -> same result.
+  C) Confirm no “Deleted persona” ever shows for uncompleted studies.

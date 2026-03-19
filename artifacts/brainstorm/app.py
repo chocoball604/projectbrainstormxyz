@@ -215,13 +215,43 @@ def get_user_personas_list(conn, user_id):
     return [dict(r) for r in rows]
 
 
+def normalize_personas_used(raw_json):
+    try:
+        data = json.loads(raw_json) if raw_json else []
+    except (json.JSONDecodeError, TypeError):
+        data = []
+    if not isinstance(data, list):
+        data = []
+    result = []
+    for item in data:
+        if isinstance(item, str) and item.strip():
+            result.append(item.strip())
+        elif isinstance(item, dict):
+            if "persona_instance_id" in item:
+                val = str(item["persona_instance_id"]).strip()
+                if val:
+                    result.append(val)
+            elif "persona_id" in item:
+                pid = str(item["persona_id"]).strip()
+                ver = item.get("version", 1)
+                if pid:
+                    result.append(f"{pid}-v{ver}")
+    seen = set()
+    deduped = []
+    for p in result:
+        if p not in seen:
+            seen.add(p)
+            deduped.append(p)
+    return deduped
+
+
 def persona_used_in_completed_study(conn, persona_instance_id, user_id):
     rows = conn.execute(
         "SELECT id, personas_used FROM studies WHERE user_id = ? AND status = 'completed'",
         (user_id,),
     ).fetchall()
     for row in rows:
-        used = json.loads(row["personas_used"] or "[]")
+        used = normalize_personas_used(row["personas_used"])
         if persona_instance_id in used:
             return True
     return False
@@ -233,13 +263,14 @@ def remove_persona_from_non_completed_studies(conn, user_id, persona_instance_id
         (user_id,),
     ).fetchall()
     for row in rows:
-        used = json.loads(row["personas_used"] or "[]")
+        used = normalize_personas_used(row["personas_used"])
         if persona_instance_id in used:
             used = [p for p in used if p != persona_instance_id]
             conn.execute(
                 "UPDATE studies SET personas_used = ? WHERE id = ?",
                 (json.dumps(used), row["id"]),
             )
+            print(f"Cleaned dangling persona references from study {row['id']}")
 
 
 @app.route("/")
@@ -281,7 +312,8 @@ def index():
             ).fetchone()
             if row:
                 configure_study = dict(row)
-                raw_ids = json.loads(configure_study.get("personas_used") or "[]")
+                raw_ids = normalize_personas_used(configure_study.get("personas_used"))
+                cleaned_ids = []
                 for pid in raw_ids:
                     p_row = conn.execute(
                         "SELECT name FROM personas WHERE persona_instance_id = ? AND user_id = ?",
@@ -289,8 +321,16 @@ def index():
                     ).fetchone()
                     if p_row:
                         configure_study_personas.append({"id": pid, "name": p_row["name"], "exists": True})
+                        cleaned_ids.append(pid)
                     else:
-                        configure_study_personas.append({"id": pid, "name": None, "exists": False})
+                        pass
+                if len(cleaned_ids) != len(raw_ids):
+                    conn.execute(
+                        "UPDATE studies SET personas_used = ? WHERE id = ?",
+                        (json.dumps(cleaned_ids), configure_study["id"]),
+                    )
+                    conn.commit()
+                    print(f"Cleaned dangling persona references from study {configure_study['id']}")
                 available_personas = get_user_personas_list(conn, user["id"])
 
         personas_list = get_user_personas_list(conn, user["id"])
@@ -548,7 +588,7 @@ def attach_persona(study_id):
         conn.close()
         return render_error("Persona not found.")
 
-    current = json.loads(study["personas_used"] or "[]")
+    current = normalize_personas_used(study["personas_used"])
     if instance_id in current:
         conn.close()
         return redirect(url_for("index", token=token, configure=study_id))
@@ -581,7 +621,7 @@ def detach_persona(study_id):
 
     instance_id = (request.form.get("persona_instance_id") or "").strip()
 
-    current = json.loads(study["personas_used"] or "[]")
+    current = normalize_personas_used(study["personas_used"])
     current = [p for p in current if p != instance_id]
     conn.execute(
         "UPDATE studies SET personas_used = ? WHERE id = ?",
