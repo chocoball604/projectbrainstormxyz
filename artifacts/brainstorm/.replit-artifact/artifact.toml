@@ -1,0 +1,20 @@
+kind = "web"
+previewPath = "/"
+title = "Brainstorm App"
+version = "1.0.0"
+id = "artifacts/brainstorm"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24634
+
+[services.development]
+run = "python /home/runner/workspace/artifacts/brainstorm/app.py"
+
+[services.env]
+PORT = "24634"

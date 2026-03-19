@@ -1,0 +1,16 @@
+kind = "web"
+previewPath = "/"
+title = "Brainstorm App"
+version = "1.0.0"
+id = "brainstorm-v1-app"
+
+[[services]]
+localPort = 5000
+name = "Brainstorm App"
+paths = ["/"]
+
+[services.development]
+run = "python app.py"
+
+[services.env]
+PORT = "5000"
