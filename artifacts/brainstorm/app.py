@@ -1,5 +1,5 @@
 """
-app.py — Project Brainstorm V1 (PROMPT 1–6)
+app.py — Project Brainstorm V1 (PROMPT 1–7)
 
 Single-page Flask app with SQLite.
 Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
@@ -9,6 +9,7 @@ PROMPT 3: Research Brief form with 6 required anchors; saving creates a draft st
 PROMPT 4: Study type selector + limits enforcement.
 PROMPT 5: Personas — immutable once saved, clone-as-new, no versioning.
 PROMPT 6: Grounding Trace logging + Admin-Directed Web Sources.
+PROMPT 7: Execute studies with placeholder outputs.
 
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
@@ -178,6 +179,8 @@ def migrate_db(conn):
     study_cols = [row[1] for row in conn.execute("PRAGMA table_info(studies)").fetchall()]
     if "personas_used" not in study_cols:
         conn.execute("ALTER TABLE studies ADD COLUMN personas_used TEXT NOT NULL DEFAULT '[]'")
+    if "study_output" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN study_output TEXT")
 
     rows = conn.execute(
         "SELECT id, persona_versions_used, personas_used FROM studies"
@@ -371,6 +374,7 @@ def index():
     configure_study_personas = []
     available_personas = []
     clone_source = None
+    view_study_output = None
     admin_web_sources = []
     grounding_traces = []
 
@@ -391,7 +395,7 @@ def index():
     if user and user["state"] == "active":
         conn = get_db()
         studies = [dict(r) for r in conn.execute(
-            "SELECT id, title, study_type, status, created_at FROM studies WHERE user_id = ? ORDER BY created_at DESC",
+            "SELECT id, title, study_type, status, created_at, study_output FROM studies WHERE user_id = ? ORDER BY created_at DESC",
             (user["id"],),
         ).fetchall()]
         configure_id = request.args.get("configure")
@@ -443,6 +447,15 @@ def index():
             if row:
                 clone_source = dict(row)
 
+        view_output_id = request.args.get("view_output")
+        if view_output_id:
+            row = conn.execute(
+                "SELECT * FROM studies WHERE id = ? AND user_id = ?",
+                (view_output_id, user["id"]),
+            ).fetchone()
+            if row and row["study_output"]:
+                view_study_output = dict(row)
+
         conn.close()
 
     return render_template(
@@ -462,6 +475,7 @@ def index():
         show_new_persona=request.args.get("new_persona") == "1",
         clone_source=clone_source,
         view_persona=view_persona,
+        view_study_output=view_study_output,
         admin_web_sources=admin_web_sources,
         grounding_traces=grounding_traces,
     )
@@ -649,6 +663,129 @@ def set_study_type(study_id):
     conn.commit()
     conn.close()
     return redirect(url_for("index", token=token))
+
+
+def generate_placeholder_output(study_type, study, persona_names):
+    header = "*** SIMULATED PLACEHOLDER — NOT REAL OUTPUT ***"
+    if study_type == "synthetic_survey":
+        return json.dumps({
+            "disclaimer": header,
+            "study_title": study["title"],
+            "study_type": "synthetic_survey",
+            "summary": "This is a placeholder aggregated survey result. No real respondents were surveyed.",
+            "sample_size": 200,
+            "questions": [
+                {
+                    "q": "How satisfied are you with the product?",
+                    "results": {"Very satisfied": "32%", "Satisfied": "41%", "Neutral": "15%", "Dissatisfied": "8%", "Very dissatisfied": "4%"},
+                },
+                {
+                    "q": "Would you recommend this product to a friend?",
+                    "results": {"Definitely yes": "28%", "Probably yes": "35%", "Not sure": "22%", "Probably not": "10%", "Definitely not": "5%"},
+                },
+                {
+                    "q": "What is your primary reason for using this product?",
+                    "results": {"Price": "25%", "Quality": "30%", "Convenience": "20%", "Brand trust": "15%", "Other": "10%"},
+                },
+            ],
+        }, indent=2)
+    elif study_type == "synthetic_idi":
+        speakers = persona_names if persona_names else ["Respondent"]
+        lines = [header, "", f"Study: {study['title']}", f"Type: Synthetic IDI", ""]
+        for speaker in speakers[:3]:
+            lines.extend([
+                f"--- Interview with {speaker} ---",
+                "",
+                f"Moderator: Thank you for joining, {speaker}. Can you tell me about your experience?",
+                f"{speaker}: Sure. I've been using the product for about 6 months now. Overall it's been positive.",
+                "",
+                f"Moderator: What stands out most to you?",
+                f"{speaker}: The ease of use is the biggest factor. I don't have to think about it.",
+                "",
+                f"Moderator: Are there any areas for improvement?",
+                f"{speaker}: The pricing could be more transparent. Sometimes I'm not sure what I'm paying for.",
+                "",
+            ])
+        return "\n".join(lines)
+    elif study_type == "synthetic_focus_group":
+        speakers = persona_names if len(persona_names) >= 4 else ["Participant A", "Participant B", "Participant C", "Participant D"]
+        lines = [header, "", f"Study: {study['title']}", f"Type: Synthetic Focus Group", ""]
+        lines.extend([
+            "Moderator: Welcome everyone. Let's start by discussing your first impressions.",
+            "",
+            f"{speakers[0]}: I was skeptical at first, but the onboarding was smooth.",
+            f"{speakers[1]}: Same here. Though I had some confusion with the navigation.",
+            f"{speakers[2]}: I actually found it intuitive from day one.",
+            f"{speakers[3] if len(speakers) > 3 else 'Participant D'}: The design is clean but I wish there were more customization options.",
+            "",
+            "Moderator: Interesting. How about ongoing usage?",
+            "",
+            f"{speakers[0]}: I use it daily now. It's become part of my routine.",
+            f"{speakers[1]}: Weekly for me. Mostly for the reporting features.",
+            f"{speakers[2]}: I've tried alternatives but keep coming back.",
+            f"{speakers[3] if len(speakers) > 3 else 'Participant D'}: The mobile experience could use work.",
+            "",
+            "Moderator: Any final thoughts?",
+            "",
+            f"{speakers[0]}: Keep improving the speed. That's my top ask.",
+            f"{speakers[1]}: More integrations with other tools would help.",
+            f"{speakers[2]}: Overall very satisfied.",
+            f"{speakers[3] if len(speakers) > 3 else 'Participant D'}: Agree with what's been said.",
+            "",
+        ])
+        return "\n".join(lines)
+    return json.dumps({"disclaimer": header, "error": "Unknown study type"})
+
+
+@app.route("/run-study/<int:study_id>", methods=["POST"])
+def run_study(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Draft study not found or already executed.")
+
+    study_type = study["study_type"]
+    if not study_type:
+        conn.close()
+        return render_error("You must select a study type before running the study.")
+
+    personas_used = normalize_personas_used(study["personas_used"])
+
+    if study_type in ("synthetic_idi", "synthetic_focus_group") and len(personas_used) == 0:
+        conn.close()
+        return render_error(
+            f"Study type '{study_type}' requires at least 1 attached persona. "
+            "Please attach personas in the Configure panel before running."
+        )
+
+    persona_names = []
+    for pid in personas_used:
+        p_row = conn.execute(
+            "SELECT name FROM personas WHERE persona_instance_id = ?", (pid,)
+        ).fetchone()
+        if p_row:
+            persona_names.append(p_row["name"])
+
+    output = generate_placeholder_output(study_type, dict(study), persona_names)
+
+    conn.execute(
+        "UPDATE studies SET status = 'in_progress', study_output = ? WHERE id = ?",
+        (output, study_id),
+    )
+
+    create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, view_output=study_id))
 
 
 @app.route("/attach-persona/<int:study_id>", methods=["POST"])
@@ -870,7 +1007,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
     if user and user["state"] == "active":
         conn = get_db()
         studies = [dict(r) for r in conn.execute(
-            "SELECT id, title, study_type, status, created_at FROM studies WHERE user_id = ? ORDER BY created_at DESC",
+            "SELECT id, title, study_type, status, created_at, study_output FROM studies WHERE user_id = ? ORDER BY created_at DESC",
             (user["id"],),
         ).fetchall()]
         personas_list = get_user_personas_list(conn, user["id"])
@@ -906,6 +1043,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         show_new_persona=show_new_persona,
         clone_source=None,
         view_persona=None,
+        view_study_output=None,
         admin_web_sources=admin_web_sources,
         grounding_traces=grounding_traces,
     )

@@ -294,6 +294,9 @@
                             {% if s.status == 'draft' %}
                             <a href="/?token={{ token }}&configure={{ s.id }}" class="btn btn-primary btn-small">Configure</a>
                             {% endif %}
+                            {% if s.status != 'draft' and s.study_output %}
+                            <a href="/?token={{ token }}&view_output={{ s.id }}" class="btn btn-primary btn-small">View Output</a>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -398,6 +401,45 @@
             </form>
             {% else %}
             <p style="color: #999; font-size: 13px;">Create personas first to attach them to studies.</p>
+            {% endif %}
+
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Run Study</h3>
+            {% if configure_study.study_type %}
+            <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
+                Execute this study to generate placeholder output. Status will change from "draft" to "in_progress".
+            </p>
+            <form action="/run-study/{{ configure_study.id }}" method="POST">
+                <input type="hidden" name="token" value="{{ token }}">
+                <button type="submit" class="btn btn-success" onclick="return confirm('Run this study? Status will change to in_progress.');">Run Study</button>
+            </form>
+            {% else %}
+            <p style="color: #e74c3c; font-size: 13px;">
+                You must select a study type above before running the study.
+            </p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if view_study_output %}
+        <div class="card" id="view-output-section">
+            <div class="card-header">
+                <h2>Study Output: {{ view_study_output.title }}</h2>
+                <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <span class="badge badge-{{ view_study_output.status }}">{{ view_study_output.status }}</span>
+                <span style="font-size: 13px; color: #777; margin-left: 8px;">Type: {{ view_study_output.study_type or '—' }}</span>
+            </div>
+            <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 13px; color: #856404;">
+                <strong>SIMULATED PLACEHOLDER — NOT REAL OUTPUT</strong><br>
+                This output is for development/testing purposes only. It does not represent real research data.
+            </div>
+            {% if view_study_output.study_type == 'synthetic_survey' %}
+            <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; line-height: 1.6;">{{ view_study_output.study_output }}</pre>
+            {% else %}
+            <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.8; font-family: 'Georgia', serif;">{{ view_study_output.study_output }}</pre>
             {% endif %}
         </div>
         {% endif %}
