@@ -765,22 +765,23 @@
                 <table style="font-size: 12px;">
                     <thead>
                         <tr>
-                            <th>ID</th>
+                            <th style="white-space: nowrap;">Trace ID</th>
+                            <th>Timestamp (UTC)</th>
                             <th>Trigger</th>
                             <th>Study ID</th>
                             <th>Persona ID</th>
-                            <th>Sources Configured</th>
+                            <th style="white-space: nowrap;">Sources Configured</th>
                             <th>Queried</th>
                             <th>Matched</th>
-                            <th>Used in Output</th>
+                            <th style="white-space: nowrap;">Used in Output</th>
                             <th>Reason Code</th>
-                            <th>Timestamp</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for gt in grounding_traces %}
                         <tr>
-                            <td>{{ gt.id }}</td>
+                            <td style="font-weight: 600; color: #1a1a2e;">#{{ gt.id }}</td>
+                            <td style="white-space: nowrap; font-family: monospace; font-size: 11px;">{{ gt.timestamp_utc }}</td>
                             <td><code>{{ gt.trigger_event }}</code></td>
                             <td>{{ gt.study_id or '—' }}</td>
                             <td>{{ gt.persona_id or '—' }}</td>
@@ -789,7 +790,6 @@
                             <td>{{ 'Yes' if gt.admin_sources_matched else 'No' }}</td>
                             <td>{{ 'Yes' if gt.admin_sources_used_in_output else 'No' }}</td>
                             <td><code style="color: #c0392b;">{{ gt.admin_source_reason_code or '—' }}</code></td>
-                            <td>{{ gt.timestamp_utc }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

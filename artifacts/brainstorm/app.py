@@ -278,13 +278,15 @@ def create_grounding_trace(conn, trigger_event, study_id=None, persona_id=None):
         else:
             reason_code = "ADMIN_SOURCE_NO_MATCH"
 
+    now = datetime.utcnow()
+    ts = now.strftime("%Y-%m-%d %H:%M:%S.") + f"{now.microsecond:06d}"
     conn.execute(
         """INSERT INTO grounding_traces
            (study_id, persona_id, trigger_event,
             admin_sources_configured, admin_sources_queried,
             admin_sources_matched, admin_sources_used_in_output,
-            admin_source_reason_code)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            admin_source_reason_code, timestamp_utc)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             study_id, persona_id, trigger_event,
             1 if admin_sources_configured else 0,
@@ -292,6 +294,7 @@ def create_grounding_trace(conn, trigger_event, study_id=None, persona_id=None):
             1 if admin_sources_matched else 0,
             1 if admin_sources_used_in_output else 0,
             reason_code,
+            ts,
         ),
     )
 
