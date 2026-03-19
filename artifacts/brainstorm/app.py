@@ -1,5 +1,5 @@
 """
-app.py — Project Brainstorm V1 (PROMPT 1–7)
+app.py — Project Brainstorm V1 (PROMPT 1–7 + PRD alignment fix)
 
 Single-page Flask app with SQLite.
 Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
@@ -10,6 +10,7 @@ PROMPT 4: Study type selector + limits enforcement.
 PROMPT 5: Personas — immutable once saved, clone-as-new, no versioning.
 PROMPT 6: Grounding Trace logging + Admin-Directed Web Sources.
 PROMPT 7: Execute studies with placeholder outputs.
+PRD FIX: Survey no personas (respondent/question config), IDI 1-3 personas, FG 4-6 personas.
 
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
@@ -181,6 +182,10 @@ def migrate_db(conn):
         conn.execute("ALTER TABLE studies ADD COLUMN personas_used TEXT NOT NULL DEFAULT '[]'")
     if "study_output" not in study_cols:
         conn.execute("ALTER TABLE studies ADD COLUMN study_output TEXT")
+    if "respondent_count" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN respondent_count INTEGER DEFAULT 100")
+    if "question_count" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN question_count INTEGER DEFAULT 8")
 
     rows = conn.execute(
         "SELECT id, persona_versions_used, personas_used FROM studies"
@@ -656,13 +661,19 @@ def set_study_type(study_id):
         conn.close()
         return render_error("Invalid study type. Choose survey, IDI, or focus group.")
 
-    conn.execute(
-        "UPDATE studies SET study_type = ? WHERE id = ?",
-        (study_type, study_id),
-    )
+    if study_type == "synthetic_survey":
+        conn.execute(
+            "UPDATE studies SET study_type = ?, personas_used = '[]' WHERE id = ?",
+            (study_type, study_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE studies SET study_type = ? WHERE id = ?",
+            (study_type, study_id),
+        )
     conn.commit()
     conn.close()
-    return redirect(url_for("index", token=token))
+    return redirect(url_for("index", token=token, configure=study_id))
 
 
 def generate_placeholder_output(study_type, study, persona_names):
@@ -759,13 +770,31 @@ def run_study(study_id):
         return render_error("You must select a study type before running the study.")
 
     personas_used = normalize_personas_used(study["personas_used"])
+    persona_count = len(personas_used)
 
-    if study_type in ("synthetic_idi", "synthetic_focus_group") and len(personas_used) == 0:
-        conn.close()
-        return render_error(
-            f"Study type '{study_type}' requires at least 1 attached persona. "
-            "Please attach personas in the Configure panel before running."
-        )
+    if study_type == "synthetic_survey":
+        r_count = study["respondent_count"] or 100
+        q_count = study["question_count"] or 8
+        if r_count < 1 or r_count > 400:
+            conn.close()
+            return render_error("Survey respondent count must be between 1 and 400.")
+        if q_count < 1 or q_count > 12:
+            conn.close()
+            return render_error("Survey question count must be between 1 and 12.")
+    elif study_type == "synthetic_idi":
+        if persona_count < 1:
+            conn.close()
+            return render_error("IDI requires at least 1 persona.")
+        if persona_count > 3:
+            conn.close()
+            return render_error("IDI allows max 3 personas.")
+    elif study_type == "synthetic_focus_group":
+        if persona_count < 4:
+            conn.close()
+            return render_error("Focus Group requires at least 4 personas.")
+        if persona_count > 6:
+            conn.close()
+            return render_error("Focus Group allows max 6 personas.")
 
     persona_names = []
     for pid in personas_used:
@@ -788,6 +817,46 @@ def run_study(study_id):
     return redirect(url_for("index", token=token, view_output=study_id))
 
 
+@app.route("/save-survey-config/<int:study_id>", methods=["POST"])
+def save_survey_config(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Draft study not found.")
+    if study["study_type"] != "synthetic_survey":
+        conn.close()
+        return render_error("Survey config only applies to synthetic survey studies.")
+
+    try:
+        r_count = int(request.form.get("respondent_count", 100))
+    except (ValueError, TypeError):
+        r_count = 100
+    try:
+        q_count = int(request.form.get("question_count", 8))
+    except (ValueError, TypeError):
+        q_count = 8
+
+    r_count = max(1, min(400, r_count))
+    q_count = max(1, min(12, q_count))
+
+    conn.execute(
+        "UPDATE studies SET respondent_count = ?, question_count = ? WHERE id = ?",
+        (r_count, q_count, study_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
 @app.route("/attach-persona/<int:study_id>", methods=["POST"])
 def attach_persona(study_id):
     token = get_token()
@@ -803,6 +872,11 @@ def attach_persona(study_id):
     if not study:
         conn.close()
         return render_error("Draft study not found.")
+
+    study_type = study["study_type"] or ""
+    if study_type == "synthetic_survey":
+        conn.close()
+        return render_error("Surveys do not use inspectable personas.")
 
     instance_id = (request.form.get("persona_instance_id") or "").strip()
     if not instance_id:
@@ -821,6 +895,13 @@ def attach_persona(study_id):
     if instance_id in current:
         conn.close()
         return redirect(url_for("index", token=token, configure=study_id))
+
+    max_personas = {"synthetic_idi": 3, "synthetic_focus_group": 6}
+    limit = max_personas.get(study_type)
+    if limit and len(current) >= limit:
+        conn.close()
+        label = "IDI" if study_type == "synthetic_idi" else "Focus Group"
+        return render_error(f"{label} allows max {limit} personas.")
 
     current.append(instance_id)
     conn.execute(

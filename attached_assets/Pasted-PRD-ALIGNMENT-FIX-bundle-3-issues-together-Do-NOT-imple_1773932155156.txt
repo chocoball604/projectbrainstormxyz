@@ -1,0 +1,87 @@
+PRD ALIGNMENT FIX (bundle 3 issues together). Do NOT implement Prompt 8/9 yet. Fix only validation + configure UI.
+
+PRD requirements:
+1) Synthetic Survey:
+   - NO attachable personas / no persona dossiers (personas are implicit)
+   - max respondents = 400
+   - max questions = 12
+
+2) Synthetic IDI:
+   - min personas = 1
+   - max personas = 3
+
+3) Synthetic Focus Group:
+   - min personas = 4
+   - max personas = 6
+
+Current problems to fix:
+A) Survey is asking for attached personas (should not).
+B) Focus Group validation message says “requires at least 1 persona” (should be min 4).
+C) IDI currently allows 4 personas (should cap at 3).
+
+What to change (must do all):
+
+PART 1 — Configure Study UI
+- If study_type == synthetic_survey:
+  * Hide the “Attached Personas” section entirely OR show a note: “Surveys do not use inspectable personas.”
+  * Show two numeric inputs:
+    - respondent_count (default 100, min 1, max 400)
+    - question_count (default 8, min 1, max 12)
+  * Save these to the study.
+
+- If study_type == synthetic_idi:
+  * Show attached personas.
+  * Show a helper line: “IDI requires 1–3 personas.”
+
+- If study_type == synthetic_focus_group:
+  * Show attached personas.
+  * Show a helper line: “Focus Group requires 4–6 personas.”
+
+PART 2 — Database / storage (migration only, no DB reset)
+- Ensure studies table has:
+  respondent_count INTEGER
+  question_count INTEGER
+(If already added, just reuse.)
+
+PART 3 — Attach/detach enforcement (IMPORTANT)
+- When attaching a persona to a study:
+  * If study_type is IDI and attached count would exceed 3 => block attach with clear error.
+  * If study_type is Focus Group and attached count would exceed 6 => block attach with clear error.
+  * If study_type is Survey => block attach entirely (should not be possible in UI anyway).
+
+- Optional but recommended:
+  * If a user changes study_type after attaching personas:
+    - If new type is Survey: auto-detach all personas from that study.
+    - If new type is IDI: if >3 personas attached, show error and require user to remove extras before running.
+    - If new type is Focus Group: if >6 personas attached, show error and require user to remove extras before running.
+
+PART 4 — Run Study validation (must be correct)
+In /run-study/<study_id> validation:
+- If synthetic_survey:
+  * DO NOT require attached personas.
+  * Require respondent_count <= 400 and question_count <= 12 (defaults allowed).
+- If synthetic_idi:
+  * Require attached personas count between 1 and 3 (inclusive).
+  * If 0 => block with message “IDI requires at least 1 persona.”
+  * If >3 => block with message “IDI allows max 3 personas.”
+- If synthetic_focus_group:
+  * Require attached personas count between 4 and 6 (inclusive).
+  * If <4 => block with message “Focus Group requires at least 4 personas.”
+  * If >6 => block with message “Focus Group allows max 6 personas.”
+
+PART 5 — Update messages (so user sees correct guidance)
+- Replace any “requires at least 1 persona” message for focus group with “requires at least 4 personas.”
+- Add max-limit messages for IDI and Focus Group when exceeded.
+- Add survey message if someone tries to attach personas: “Surveys do not use inspectable personas.”
+
+Constraints:
+- Do NOT change budgets, QA rules, grounding trace logic, cost telemetry logic.
+- Do NOT reset/delete the database.
+- Keep token-based sessions working.
+
+Deliverables:
+- List files changed.
+- How to test:
+  1) Survey runs with 0 personas and respects respondent_count/question_count limits.
+  2) IDI blocks if 0 personas, blocks if 4 personas, runs if 1–3.
+  3) Focus Group blocks if fewer than 4 personas, runs at 4–6, blocks above 6.
