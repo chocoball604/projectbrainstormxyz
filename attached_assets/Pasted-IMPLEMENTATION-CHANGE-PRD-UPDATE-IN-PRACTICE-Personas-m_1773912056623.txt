@@ -1,0 +1,60 @@
+IMPLEMENTATION CHANGE (PRD UPDATE IN PRACTICE): Personas must NOT have versions.
+
+Important: Do NOT implement Prompt 6 yet. This is a corrective change to Prompt 5 work.
+
+New rule (plain English):
+- Any change to a persona = create a NEW persona with a NEW persona_id.
+- Old personas never change.
+- There is no v1/v2/v3.
+- “New Version” must be removed and replaced with “Clone as New Persona”.
+
+Hard requirements:
+1) Personas must be immutable once saved (read-only forever).
+2) Studies must keep provenance: a study must still point to exactly the persona(s) used at the time.
+3) Keep token-based sessions working: every form submit includes token.
+
+Specific tasks:
+A) Database changes (keep it minimal, avoid deleting DB if possible):
+   - Stop using persona_id + version as a grouped concept.
+   - Each saved persona row must represent one immutable persona.
+   - Preferred approach to minimize migration:
+     * Keep the existing personas table but treat each (persona_id, version) row as a SEPARATE persona instance.
+     * Create a NEW field called persona_instance_id (or new_persona_id) as the true unique ID.
+     * Populate persona_instance_id for existing rows as: persona_id || '-v' || version
+     * Going forward, create personas with persona_instance_id as a new random ID (like P-XXXX).
+   - Update all persona references in the app to use persona_instance_id only.
+
+B) UI changes:
+   - Remove “New Version” button.
+   - Add “Clone” button instead:
+     * Clone opens the New Persona form pre-filled with the old persona’s fields
+     * Saving creates a NEW persona_instance_id and does NOT modify the old persona
+   - Persona detail view should show ONE persona (no version history bar).
+
+C) Study attachment changes:
+   - Replace persona_versions_used with personas_used (JSON list of persona_instance_id strings).
+   - Update attach/detach UI:
+     * dropdown lists personas by (persona name + persona_instance_id)
+     * attach stores persona_instance_id only
+   - For backward compatibility (if old JSON objects exist like {"persona_id":"X","version":1}):
+     * When reading old records, map them to persona_instance_id = persona_id + '-v' + version.
+
+D) Deletion rules:
+   - You must block deletion of any persona_instance_id that is referenced by a completed study (same principle as before).
+   - Allow deletion of personas not used in completed studies.
+
+E) Do NOT change anything else:
+   - Do NOT touch budgets, QA rules, grounding trace, study types.
+   - Do NOT implement execution, grounding, or telemetry in this change.
+
+Deliverables:
+1) App still runs.
+2) You can:
+   - Create a persona
+   - Clone a persona (creates a new persona, old stays unchanged)
+   - Attach personas to a draft study (stores persona_instance_id)
+3) Show me:
+   - What files changed
+   - How to test each bullet above
+
+Do NOT delete the DB unless absolutely necessary. If you must, clearly warn “DATA LOSS” and explain why.

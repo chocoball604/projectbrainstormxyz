@@ -7,7 +7,7 @@ Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
 PROMPT 2: studies table, study list on dashboard, "New Research" button.
 PROMPT 3: Research Brief form with 6 required anchors; saving creates a draft study.
 PROMPT 4: Study type selector + limits enforcement.
-PROMPT 5: Personas — create, save, version (v1, v2…), view (read-only), delete.
+PROMPT 5: Personas — immutable once saved, clone-as-new, no versioning.
 
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
@@ -100,6 +100,7 @@ def init_db():
             study_fit               TEXT,
             definition_useful_insight TEXT,
             persona_versions_used   TEXT    NOT NULL DEFAULT '[]',
+            personas_used           TEXT    NOT NULL DEFAULT '[]',
             created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
@@ -110,6 +111,7 @@ def init_db():
             user_id                 INTEGER NOT NULL,
             persona_id              TEXT    NOT NULL,
             version                 INTEGER NOT NULL DEFAULT 1,
+            persona_instance_id     TEXT,
             name                    TEXT    NOT NULL,
             persona_summary         TEXT    NOT NULL,
             demographic_frame       TEXT    NOT NULL,
@@ -124,8 +126,44 @@ def init_db():
             UNIQUE(persona_id, version)
         )
     """)
+    migrate_db(conn)
     conn.commit()
     conn.close()
+
+
+def migrate_db(conn):
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(personas)").fetchall()]
+    if "persona_instance_id" not in cols:
+        conn.execute("ALTER TABLE personas ADD COLUMN persona_instance_id TEXT")
+
+    conn.execute("""
+        UPDATE personas SET persona_instance_id = persona_id || '-v' || version
+        WHERE persona_instance_id IS NULL
+    """)
+
+    study_cols = [row[1] for row in conn.execute("PRAGMA table_info(studies)").fetchall()]
+    if "personas_used" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN personas_used TEXT NOT NULL DEFAULT '[]'")
+
+    rows = conn.execute(
+        "SELECT id, persona_versions_used, personas_used FROM studies"
+    ).fetchall()
+    for row in rows:
+        old_data = json.loads(row["persona_versions_used"] or "[]")
+        new_data = json.loads(row["personas_used"] or "[]")
+        if old_data and not new_data:
+            migrated = []
+            for entry in old_data:
+                if isinstance(entry, dict):
+                    pid = entry.get("persona_id", "")
+                    ver = entry.get("version", 1)
+                    migrated.append(f"{pid}-v{ver}")
+                elif isinstance(entry, str):
+                    migrated.append(entry)
+            conn.execute(
+                "UPDATE studies SET personas_used = ? WHERE id = ?",
+                (json.dumps(migrated), row["id"]),
+            )
 
 
 def create_session(user_id=None, is_admin=False):
@@ -169,34 +207,23 @@ def get_token():
     return request.args.get("token") or request.form.get("token") or ""
 
 
-def get_user_personas_summary(conn, user_id):
+def get_user_personas_list(conn, user_id):
     rows = conn.execute(
-        """SELECT persona_id, name, MAX(version) as latest_version, created_at
-           FROM personas WHERE user_id = ?
-           GROUP BY persona_id ORDER BY MAX(id) DESC""",
+        "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? ORDER BY id DESC",
         (user_id,),
     ).fetchall()
     return [dict(r) for r in rows]
 
 
-def get_user_all_persona_versions(conn, user_id):
+def persona_used_in_completed_study(conn, persona_instance_id, user_id):
     rows = conn.execute(
-        "SELECT persona_id, version, name FROM personas WHERE user_id = ? ORDER BY persona_id, version",
-        (user_id,),
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def persona_used_in_completed_study(conn, persona_id, version, user_id):
-    rows = conn.execute(
-        "SELECT id, persona_versions_used FROM studies WHERE user_id = ? AND status = 'completed'",
+        "SELECT id, personas_used FROM studies WHERE user_id = ? AND status = 'completed'",
         (user_id,),
     ).fetchall()
     for row in rows:
-        used = json.loads(row["persona_versions_used"] or "[]")
-        for entry in used:
-            if entry.get("persona_id") == persona_id and entry.get("version") == version:
-                return True
+        used = json.loads(row["personas_used"] or "[]")
+        if persona_instance_id in used:
+            return True
     return False
 
 
@@ -208,11 +235,12 @@ def index():
     pending_users = []
     all_users = []
     studies = []
-    personas_summary = []
+    personas_list = []
     view_persona = None
     configure_study = None
     configure_study_personas = []
-    available_persona_versions = []
+    available_personas = []
+    clone_source = None
 
     if is_admin:
         conn = get_db()
@@ -238,31 +266,28 @@ def index():
             ).fetchone()
             if row:
                 configure_study = dict(row)
-                configure_study_personas = json.loads(configure_study.get("persona_versions_used") or "[]")
-                available_persona_versions = get_user_all_persona_versions(conn, user["id"])
+                configure_study_personas = json.loads(configure_study.get("personas_used") or "[]")
+                available_personas = get_user_personas_list(conn, user["id"])
 
-        personas_summary = get_user_personas_summary(conn, user["id"])
+        personas_list = get_user_personas_list(conn, user["id"])
 
         view_pid = request.args.get("view_persona")
-        view_ver = request.args.get("ver")
         if view_pid:
-            if view_ver:
-                row = conn.execute(
-                    "SELECT * FROM personas WHERE persona_id = ? AND version = ? AND user_id = ?",
-                    (view_pid, view_ver, user["id"]),
-                ).fetchone()
-            else:
-                row = conn.execute(
-                    "SELECT * FROM personas WHERE persona_id = ? AND user_id = ? ORDER BY version DESC LIMIT 1",
-                    (view_pid, user["id"]),
-                ).fetchone()
+            row = conn.execute(
+                "SELECT * FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+                (view_pid, user["id"]),
+            ).fetchone()
             if row:
                 view_persona = dict(row)
-                all_versions = conn.execute(
-                    "SELECT version, created_at FROM personas WHERE persona_id = ? AND user_id = ? ORDER BY version DESC",
-                    (view_pid, user["id"]),
-                ).fetchall()
-                view_persona["all_versions"] = [dict(v) for v in all_versions]
+
+        clone_from = request.args.get("clone_from")
+        if clone_from:
+            row = conn.execute(
+                "SELECT * FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+                (clone_from, user["id"]),
+            ).fetchone()
+            if row:
+                clone_source = dict(row)
 
         conn.close()
 
@@ -277,11 +302,11 @@ def index():
         show_new_research=request.args.get("new_research") == "1",
         configure_study=configure_study,
         configure_study_personas=configure_study_personas,
-        available_persona_versions=available_persona_versions,
+        available_personas=available_personas,
         study_type_limits=STUDY_TYPE_LIMITS,
-        personas_summary=personas_summary,
+        personas_list=personas_list,
         show_new_persona=request.args.get("new_persona") == "1",
-        new_version_of=request.args.get("new_version_of"),
+        clone_source=clone_source,
         view_persona=view_persona,
     )
 
@@ -486,29 +511,27 @@ def attach_persona(study_id):
         conn.close()
         return render_error("Draft study not found.")
 
-    pid = (request.form.get("persona_id") or "").strip()
-    ver = request.form.get("version", "").strip()
-    if not pid or not ver:
+    instance_id = (request.form.get("persona_instance_id") or "").strip()
+    if not instance_id:
         conn.close()
-        return render_error("Persona ID and version are required.")
+        return render_error("Persona is required.")
 
     persona_row = conn.execute(
-        "SELECT id FROM personas WHERE persona_id = ? AND version = ? AND user_id = ?",
-        (pid, int(ver), user["id"]),
+        "SELECT id FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+        (instance_id, user["id"]),
     ).fetchone()
     if not persona_row:
         conn.close()
-        return render_error("Persona version not found.")
+        return render_error("Persona not found.")
 
-    current = json.loads(study["persona_versions_used"] or "[]")
-    for entry in current:
-        if entry["persona_id"] == pid and entry["version"] == int(ver):
-            conn.close()
-            return redirect(url_for("index", token=token, configure=study_id))
+    current = json.loads(study["personas_used"] or "[]")
+    if instance_id in current:
+        conn.close()
+        return redirect(url_for("index", token=token, configure=study_id))
 
-    current.append({"persona_id": pid, "version": int(ver)})
+    current.append(instance_id)
     conn.execute(
-        "UPDATE studies SET persona_versions_used = ? WHERE id = ?",
+        "UPDATE studies SET personas_used = ? WHERE id = ?",
         (json.dumps(current), study_id),
     )
     conn.commit()
@@ -532,13 +555,12 @@ def detach_persona(study_id):
         conn.close()
         return render_error("Draft study not found.")
 
-    pid = (request.form.get("persona_id") or "").strip()
-    ver = request.form.get("version", "").strip()
+    instance_id = (request.form.get("persona_instance_id") or "").strip()
 
-    current = json.loads(study["persona_versions_used"] or "[]")
-    current = [e for e in current if not (e["persona_id"] == pid and e["version"] == int(ver))]
+    current = json.loads(study["personas_used"] or "[]")
+    current = [p for p in current if p != instance_id]
     conn.execute(
-        "UPDATE studies SET persona_versions_used = ? WHERE id = ?",
+        "UPDATE studies SET personas_used = ? WHERE id = ?",
         (json.dumps(current), study_id),
     )
     conn.commit()
@@ -567,32 +589,18 @@ def create_persona():
             )
         dossier[field_key] = val
 
-    new_version_of = (request.form.get("new_version_of") or "").strip()
+    new_instance_id = f"P-{secrets.token_hex(4).upper()}"
 
     conn = get_db()
-    if new_version_of:
-        existing = conn.execute(
-            "SELECT MAX(version) as max_ver FROM personas WHERE persona_id = ? AND user_id = ?",
-            (new_version_of, user["id"]),
-        ).fetchone()
-        if not existing or existing["max_ver"] is None:
-            conn.close()
-            return render_error("Original persona not found.")
-        next_version = existing["max_ver"] + 1
-        persona_id = new_version_of
-    else:
-        persona_id = f"P-{secrets.token_hex(4).upper()}"
-        next_version = 1
-
     conn.execute(
         """INSERT INTO personas
-           (user_id, persona_id, version, name,
+           (user_id, persona_id, version, persona_instance_id, name,
             persona_summary, demographic_frame, psychographic_profile,
             contextual_constraints, behavioural_tendencies,
             ai_model_provenance, grounding_sources, confidence_and_limits)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            user["id"], persona_id, next_version, name,
+            user["id"], new_instance_id, new_instance_id, name,
             dossier["persona_summary"], dossier["demographic_frame"],
             dossier["psychographic_profile"], dossier["contextual_constraints"],
             dossier["behavioural_tendencies"], dossier["ai_model_provenance"],
@@ -601,31 +609,26 @@ def create_persona():
     )
     conn.commit()
     conn.close()
-    return redirect(url_for("index", token=token, view_persona=persona_id, ver=next_version))
+    return redirect(url_for("index", token=token, view_persona=new_instance_id))
 
 
-@app.route("/delete-persona/<persona_id>", methods=["POST"])
-def delete_persona(persona_id):
+@app.route("/delete-persona/<path:instance_id>", methods=["POST"])
+def delete_persona(instance_id):
     token = get_token()
     user, _ = get_session_data(token)
     if not user or user["state"] != "active":
         return render_error("You must be an active user.")
 
     conn = get_db()
-    versions = conn.execute(
-        "SELECT version FROM personas WHERE persona_id = ? AND user_id = ?",
-        (persona_id, user["id"]),
-    ).fetchall()
-    for v in versions:
-        if persona_used_in_completed_study(conn, persona_id, v["version"], user["id"]):
-            conn.close()
-            return render_error(
-                f'Cannot delete persona {persona_id}: version {v["version"]} is used in a completed study and is immutable.'
-            )
+    if persona_used_in_completed_study(conn, instance_id, user["id"]):
+        conn.close()
+        return render_error(
+            f"Cannot delete persona {instance_id}: it is used in a completed study and is immutable."
+        )
 
     conn.execute(
-        "DELETE FROM personas WHERE persona_id = ? AND user_id = ?",
-        (persona_id, user["id"]),
+        "DELETE FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+        (instance_id, user["id"]),
     )
     conn.commit()
     conn.close()
@@ -638,7 +641,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
     pending_users = []
     all_users = []
     studies = []
-    personas_summary = []
+    personas_list = []
     configure_study = None
     if is_admin:
         conn = get_db()
@@ -655,7 +658,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
             "SELECT id, title, study_type, status, created_at FROM studies WHERE user_id = ? ORDER BY created_at DESC",
             (user["id"],),
         ).fetchall()]
-        personas_summary = get_user_personas_summary(conn, user["id"])
+        personas_list = get_user_personas_list(conn, user["id"])
         conn.close()
     if not show_new_research:
         show_new_research = request.args.get("new_research") == "1"
@@ -673,11 +676,11 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         show_new_research=show_new_research,
         configure_study=configure_study,
         configure_study_personas=[],
-        available_persona_versions=[],
+        available_personas=[],
         study_type_limits=STUDY_TYPE_LIMITS,
-        personas_summary=personas_summary,
+        personas_list=personas_list,
         show_new_persona=show_new_persona,
-        new_version_of=request.args.get("new_version_of"),
+        clone_source=None,
         view_persona=None,
     )
 

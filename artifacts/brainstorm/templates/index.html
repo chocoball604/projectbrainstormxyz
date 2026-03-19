@@ -347,9 +347,9 @@
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
 
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Persona Versions</h3>
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Personas</h3>
             <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                Attach specific persona versions to this study. Reuse is version-specific for traceability.
+                Attach personas to this study. Each persona is immutable and uniquely identified for provenance.
             </p>
 
             {% if configure_study_personas %}
@@ -357,23 +357,20 @@
                 <thead>
                     <tr>
                         <th>Persona ID</th>
-                        <th>Version</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for cp in configure_study_personas %}
                     <tr>
-                        <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ cp.persona_id }}</code></td>
-                        <td><span class="badge badge-active">v{{ cp.version }}</span></td>
+                        <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ cp }}</code></td>
                         <td>
                             <form action="/detach-persona/{{ configure_study.id }}" method="POST" style="display:inline;">
                                 <input type="hidden" name="token" value="{{ token }}">
-                                <input type="hidden" name="persona_id" value="{{ cp.persona_id }}">
-                                <input type="hidden" name="version" value="{{ cp.version }}">
+                                <input type="hidden" name="persona_instance_id" value="{{ cp }}">
                                 <button type="submit" class="btn btn-danger btn-small">Remove</button>
                             </form>
-                            <a href="/?token={{ token }}&view_persona={{ cp.persona_id }}&ver={{ cp.version }}" class="btn btn-primary btn-small">View</a>
+                            <a href="/?token={{ token }}&view_persona={{ cp }}" class="btn btn-primary btn-small">View</a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -383,20 +380,18 @@
             <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No personas attached yet.</p>
             {% endif %}
 
-            {% if available_persona_versions %}
+            {% if available_personas %}
             <form action="/attach-persona/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
                 <input type="hidden" name="token" value="{{ token }}">
                 <div style="flex: 1;">
-                    <label style="font-size: 13px; font-weight: 500; color: #555; display: block; margin-bottom: 4px;">Select persona version to attach</label>
-                    <select name="persona_version_combo" required onchange="var parts=this.value.split('::'); document.getElementById('attach-pid').value=parts[0]; document.getElementById('attach-ver').value=parts[1];" style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff;">
+                    <label style="font-size: 13px; font-weight: 500; color: #555; display: block; margin-bottom: 4px;">Select persona to attach</label>
+                    <select name="persona_instance_id" required style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff;">
                         <option value="">— Choose —</option>
-                        {% for pv in available_persona_versions %}
-                        <option value="{{ pv.persona_id }}::{{ pv.version }}">{{ pv.name }} ({{ pv.persona_id }} v{{ pv.version }})</option>
+                        {% for p in available_personas %}
+                        <option value="{{ p.persona_instance_id }}">{{ p.name }} ({{ p.persona_instance_id }})</option>
                         {% endfor %}
                     </select>
                 </div>
-                <input type="hidden" id="attach-pid" name="persona_id" value="">
-                <input type="hidden" id="attach-ver" name="version" value="">
                 <button type="submit" class="btn btn-success btn-small" style="white-space: nowrap;">Attach</button>
             </form>
             {% else %}
@@ -455,26 +450,24 @@
                 <a href="/?token={{ token }}&new_persona=1" class="btn btn-primary">New Persona</a>
             </div>
 
-            {% if personas_summary %}
+            {% if personas_list %}
             <table>
                 <thead>
                     <tr>
                         <th>Name</th>
                         <th>Persona ID</th>
-                        <th>Latest Ver.</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for p in personas_summary %}
+                    {% for p in personas_list %}
                     <tr>
                         <td>{{ p.name }}</td>
-                        <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ p.persona_id }}</code></td>
-                        <td><span class="badge badge-active">v{{ p.latest_version }}</span></td>
+                        <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ p.persona_instance_id }}</code></td>
                         <td>
-                            <a href="/?token={{ token }}&view_persona={{ p.persona_id }}" class="btn btn-primary btn-small">View</a>
-                            <a href="/?token={{ token }}&new_persona=1&new_version_of={{ p.persona_id }}" class="btn btn-success btn-small">New Version</a>
-                            <form action="/delete-persona/{{ p.persona_id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete all versions of this persona?');">
+                            <a href="/?token={{ token }}&view_persona={{ p.persona_instance_id }}" class="btn btn-primary btn-small">View</a>
+                            <a href="/?token={{ token }}&new_persona=1&clone_from={{ p.persona_instance_id }}" class="btn btn-success btn-small">Clone</a>
+                            <form action="/delete-persona/{{ p.persona_instance_id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this persona?');">
                                 <input type="hidden" name="token" value="{{ token }}">
                                 <button type="submit" class="btn btn-danger btn-small">Delete</button>
                             </form>
@@ -493,27 +486,12 @@
         {% if view_persona %}
         <div class="card" id="view-persona-section">
             <div class="card-header">
-                <h2>{{ view_persona.name }} <span class="badge badge-active" style="font-size: 14px;">v{{ view_persona.version }}</span></h2>
+                <h2>{{ view_persona.name }}</h2>
                 <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back</a>
             </div>
             <p style="font-size: 13px; color: #999; margin-bottom: 16px;">
-                Persona ID: <code>{{ view_persona.persona_id }}</code> | Created: {{ view_persona.created_at }}
+                Persona ID: <code>{{ view_persona.persona_instance_id }}</code> | Created: {{ view_persona.created_at }}
             </p>
-
-            {% if view_persona.all_versions | length > 1 %}
-            <div style="margin-bottom: 20px;">
-                <strong style="font-size: 13px; color: #555;">Version History:</strong>
-                <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
-                    {% for v in view_persona.all_versions %}
-                    <a href="/?token={{ token }}&view_persona={{ view_persona.persona_id }}&ver={{ v.version }}"
-                       class="btn btn-small {% if v.version == view_persona.version %}btn-primary{% else %}btn-secondary{% endif %}"
-                       style="padding: 4px 10px; font-size: 12px;">
-                        v{{ v.version }}
-                    </a>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
 
             <div style="background: #f8f9fa; border-radius: 6px; padding: 20px; font-size: 14px; line-height: 1.6;">
                 <div style="margin-bottom: 16px;">
@@ -551,60 +529,59 @@
             </div>
 
             <div class="info-msg" style="margin-top: 16px;">
-                This version is read-only. To make changes, create a new version.
+                This persona is immutable (read-only). To make changes, clone it as a new persona.
             </div>
         </div>
         {% endif %}
 
         {% if show_new_persona %}
         <div class="card" id="new-persona-section">
-            <h2>{% if new_version_of %}New Version of Persona{% else %}Create New Persona{% endif %}</h2>
+            <h2>{% if clone_source %}Clone Persona as New{% else %}Create New Persona{% endif %}</h2>
             <p style="font-size: 14px; color: #777; margin-bottom: 20px;">
-                Fill in all 8 dossier sections below. All fields are required.
+                Fill in all 8 dossier sections below. All fields are required. Saving creates a new immutable persona.
             </p>
             <form action="/create-persona" method="POST">
                 <input type="hidden" name="token" value="{{ token }}">
-                {% if new_version_of %}
-                <input type="hidden" name="new_version_of" value="{{ new_version_of }}">
+                {% if clone_source %}
                 <div class="info-msg" style="margin-bottom: 16px;">
-                    Creating a new version of persona <code>{{ new_version_of }}</code>.
+                    Cloning from <code>{{ clone_source.persona_instance_id }}</code> ({{ clone_source.name }}). This will create a brand new persona with its own ID.
                 </div>
                 {% endif %}
                 <div class="form-group">
                     <label for="persona-name">Persona Name</label>
-                    <input type="text" id="persona-name" name="name" required>
+                    <input type="text" id="persona-name" name="name" required value="{{ clone_source.name if clone_source else '' }}">
                 </div>
                 <div class="form-group">
                     <label for="p-summary">1. Persona Summary</label>
-                    <textarea id="p-summary" name="persona_summary" rows="3" required></textarea>
+                    <textarea id="p-summary" name="persona_summary" rows="3" required>{{ clone_source.persona_summary if clone_source else '' }}</textarea>
                 </div>
                 <div class="form-group">
                     <label for="p-demo">2. Demographic Frame (coarse attributes only)</label>
-                    <textarea id="p-demo" name="demographic_frame" rows="3" required></textarea>
+                    <textarea id="p-demo" name="demographic_frame" rows="3" required>{{ clone_source.demographic_frame if clone_source else '' }}</textarea>
                 </div>
                 <div class="form-group">
                     <label for="p-psycho">3. Psychographic Profile</label>
-                    <textarea id="p-psycho" name="psychographic_profile" rows="3" required></textarea>
+                    <textarea id="p-psycho" name="psychographic_profile" rows="3" required>{{ clone_source.psychographic_profile if clone_source else '' }}</textarea>
                 </div>
                 <div class="form-group">
                     <label for="p-context">4. Contextual Constraints</label>
-                    <textarea id="p-context" name="contextual_constraints" rows="3" required></textarea>
+                    <textarea id="p-context" name="contextual_constraints" rows="3" required>{{ clone_source.contextual_constraints if clone_source else '' }}</textarea>
                 </div>
                 <div class="form-group">
                     <label for="p-behav">5. Behavioural Tendencies</label>
-                    <textarea id="p-behav" name="behavioural_tendencies" rows="3" required></textarea>
+                    <textarea id="p-behav" name="behavioural_tendencies" rows="3" required>{{ clone_source.behavioural_tendencies if clone_source else '' }}</textarea>
                 </div>
                 <div class="form-group">
                     <label for="p-ai">6. AI Model Provenance (provider family + model id + selection method)</label>
-                    <textarea id="p-ai" name="ai_model_provenance" rows="3" required></textarea>
+                    <textarea id="p-ai" name="ai_model_provenance" rows="3" required>{{ clone_source.ai_model_provenance if clone_source else '' }}</textarea>
                 </div>
                 <div class="form-group">
                     <label for="p-ground">7. Grounding Sources (list)</label>
-                    <textarea id="p-ground" name="grounding_sources" rows="3" required></textarea>
+                    <textarea id="p-ground" name="grounding_sources" rows="3" required>{{ clone_source.grounding_sources if clone_source else '' }}</textarea>
                 </div>
                 <div class="form-group">
                     <label for="p-conf">8. Confidence and Limits</label>
-                    <textarea id="p-conf" name="confidence_and_limits" rows="3" required></textarea>
+                    <textarea id="p-conf" name="confidence_and_limits" rows="3" required>{{ clone_source.confidence_and_limits if clone_source else '' }}</textarea>
                 </div>
                 <div style="display: flex; gap: 12px; margin-top: 8px;">
                     <button type="submit" class="btn btn-primary">Save Persona</button>
