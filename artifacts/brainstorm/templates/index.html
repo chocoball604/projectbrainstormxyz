@@ -303,12 +303,44 @@
         {% if show_new_research %}
         <div class="card" id="new-research-section">
             <h2>New Research Brief</h2>
-            <p style="font-size: 14px; color: #777; margin-bottom: 16px;">
-                Research brief fields will be added in the next step. For now, enter a title to create a draft study.
+            <p style="font-size: 14px; color: #777; margin-bottom: 20px;">
+                Complete all 6 required anchors below to create a draft study.
             </p>
-            <div class="info-msg">
-                Full research brief with 6 required anchors coming in Prompt 3.
-            </div>
+            <form action="/create-study" method="POST">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div class="form-group">
+                    <label for="brief-title">Study Title</label>
+                    <input type="text" id="brief-title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="brief-bp">1. Business Problem</label>
+                    <textarea id="brief-bp" name="business_problem" rows="3" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="brief-ds">2. Decision to Support</label>
+                    <textarea id="brief-ds" name="decision_to_support" rows="3" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="brief-ku">3. Known vs Unknown</label>
+                    <textarea id="brief-ku" name="known_vs_unknown" rows="3" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="brief-ta">4. Target Audience</label>
+                    <textarea id="brief-ta" name="target_audience" rows="3" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="brief-sf">5. Study Fit (why this study + what it cannot answer)</label>
+                    <textarea id="brief-sf" name="study_fit" rows="3" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="brief-dui">6. Definition of Useful Insight</label>
+                    <textarea id="brief-dui" name="definition_useful_insight" rows="3" required></textarea>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 8px;">
+                    <button type="submit" class="btn btn-primary">Save Draft Study</button>
+                    <a href="/?token={{ token }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
         </div>
         {% endif %}
     </div>

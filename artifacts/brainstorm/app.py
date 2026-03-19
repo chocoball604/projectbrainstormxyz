@@ -1,10 +1,11 @@
 """
-app.py — Project Brainstorm V1 (PROMPT 1 + PROMPT 2)
+app.py — Project Brainstorm V1 (PROMPT 1 + PROMPT 2 + PROMPT 3)
 
 Single-page Flask app with SQLite.
 Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
 
-PROMPT 2 additions: studies table, study list on dashboard, "New Research" button.
+PROMPT 2: studies table, study list on dashboard, "New Research" button.
+PROMPT 3: Research Brief form with 6 required anchors; saving creates a draft study.
 
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
@@ -65,12 +66,18 @@ def init_db():
     """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS studies (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id     INTEGER NOT NULL,
-            title       TEXT    NOT NULL,
-            study_type  TEXT,
-            status      TEXT    NOT NULL DEFAULT 'draft',
-            created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            title                   TEXT    NOT NULL,
+            study_type              TEXT,
+            status                  TEXT    NOT NULL DEFAULT 'draft',
+            business_problem        TEXT,
+            decision_to_support     TEXT,
+            known_vs_unknown        TEXT,
+            target_audience         TEXT,
+            study_fit               TEXT,
+            definition_useful_insight TEXT,
+            created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
@@ -260,7 +267,56 @@ def admin_disable(user_id):
     return redirect(url_for("index", token=token))
 
 
-def render_error(message):
+RESEARCH_BRIEF_FIELDS = [
+    ("business_problem", "Business Problem"),
+    ("decision_to_support", "Decision to Support"),
+    ("known_vs_unknown", "Known vs Unknown"),
+    ("target_audience", "Target Audience"),
+    ("study_fit", "Study Fit"),
+    ("definition_useful_insight", "Definition of Useful Insight"),
+]
+
+
+@app.route("/create-study", methods=["POST"])
+def create_study():
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user to create a study.")
+
+    title = (request.form.get("title") or "").strip()
+    if not title:
+        return render_error("Title is required.", show_new_research=True)
+
+    brief = {}
+    for field_key, field_label in RESEARCH_BRIEF_FIELDS:
+        val = (request.form.get(field_key) or "").strip()
+        if not val:
+            return render_error(
+                f'"{field_label}" is required. All 6 anchors must be filled.',
+                show_new_research=True,
+            )
+        brief[field_key] = val
+
+    conn = get_db()
+    conn.execute(
+        """INSERT INTO studies
+           (user_id, title, status, business_problem, decision_to_support,
+            known_vs_unknown, target_audience, study_fit, definition_useful_insight)
+           VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)""",
+        (
+            user["id"], title,
+            brief["business_problem"], brief["decision_to_support"],
+            brief["known_vs_unknown"], brief["target_audience"],
+            brief["study_fit"], brief["definition_useful_insight"],
+        ),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+def render_error(message, show_new_research=False):
     token = get_token()
     user, is_admin = get_session_data(token)
     pending_users = []
@@ -282,6 +338,8 @@ def render_error(message):
             (user["id"],),
         ).fetchall()]
         conn.close()
+    if not show_new_research:
+        show_new_research = request.args.get("new_research") == "1"
     return render_template(
         "index.html",
         user=user,
@@ -291,7 +349,7 @@ def render_error(message):
         studies=studies,
         token=token,
         error=message,
-        show_new_research=request.args.get("new_research") == "1",
+        show_new_research=show_new_research,
     )
 
 
