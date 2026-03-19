@@ -12,6 +12,7 @@ PROMPT 5: Personas — create, save, version (v1, v2…), view (read-only), dele
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
 
+import json
 import os
 import secrets
 import sqlite3
@@ -98,6 +99,7 @@ def init_db():
             target_audience         TEXT,
             study_fit               TEXT,
             definition_useful_insight TEXT,
+            persona_versions_used   TEXT    NOT NULL DEFAULT '[]',
             created_at              TEXT    NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
@@ -177,6 +179,27 @@ def get_user_personas_summary(conn, user_id):
     return [dict(r) for r in rows]
 
 
+def get_user_all_persona_versions(conn, user_id):
+    rows = conn.execute(
+        "SELECT persona_id, version, name FROM personas WHERE user_id = ? ORDER BY persona_id, version",
+        (user_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def persona_used_in_completed_study(conn, persona_id, version, user_id):
+    rows = conn.execute(
+        "SELECT id, persona_versions_used FROM studies WHERE user_id = ? AND status = 'completed'",
+        (user_id,),
+    ).fetchall()
+    for row in rows:
+        used = json.loads(row["persona_versions_used"] or "[]")
+        for entry in used:
+            if entry.get("persona_id") == persona_id and entry.get("version") == version:
+                return True
+    return False
+
+
 @app.route("/")
 def index():
     token = get_token()
@@ -188,6 +211,8 @@ def index():
     personas_summary = []
     view_persona = None
     configure_study = None
+    configure_study_personas = []
+    available_persona_versions = []
 
     if is_admin:
         conn = get_db()
@@ -213,6 +238,8 @@ def index():
             ).fetchone()
             if row:
                 configure_study = dict(row)
+                configure_study_personas = json.loads(configure_study.get("persona_versions_used") or "[]")
+                available_persona_versions = get_user_all_persona_versions(conn, user["id"])
 
         personas_summary = get_user_personas_summary(conn, user["id"])
 
@@ -249,6 +276,8 @@ def index():
         token=token,
         show_new_research=request.args.get("new_research") == "1",
         configure_study=configure_study,
+        configure_study_personas=configure_study_personas,
+        available_persona_versions=available_persona_versions,
         study_type_limits=STUDY_TYPE_LIMITS,
         personas_summary=personas_summary,
         show_new_persona=request.args.get("new_persona") == "1",
@@ -441,6 +470,82 @@ def set_study_type(study_id):
     return redirect(url_for("index", token=token))
 
 
+@app.route("/attach-persona/<int:study_id>", methods=["POST"])
+def attach_persona(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Draft study not found.")
+
+    pid = (request.form.get("persona_id") or "").strip()
+    ver = request.form.get("version", "").strip()
+    if not pid or not ver:
+        conn.close()
+        return render_error("Persona ID and version are required.")
+
+    persona_row = conn.execute(
+        "SELECT id FROM personas WHERE persona_id = ? AND version = ? AND user_id = ?",
+        (pid, int(ver), user["id"]),
+    ).fetchone()
+    if not persona_row:
+        conn.close()
+        return render_error("Persona version not found.")
+
+    current = json.loads(study["persona_versions_used"] or "[]")
+    for entry in current:
+        if entry["persona_id"] == pid and entry["version"] == int(ver):
+            conn.close()
+            return redirect(url_for("index", token=token, configure=study_id))
+
+    current.append({"persona_id": pid, "version": int(ver)})
+    conn.execute(
+        "UPDATE studies SET persona_versions_used = ? WHERE id = ?",
+        (json.dumps(current), study_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
+@app.route("/detach-persona/<int:study_id>", methods=["POST"])
+def detach_persona(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Draft study not found.")
+
+    pid = (request.form.get("persona_id") or "").strip()
+    ver = request.form.get("version", "").strip()
+
+    current = json.loads(study["persona_versions_used"] or "[]")
+    current = [e for e in current if not (e["persona_id"] == pid and e["version"] == int(ver))]
+    conn.execute(
+        "UPDATE studies SET persona_versions_used = ? WHERE id = ?",
+        (json.dumps(current), study_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
 @app.route("/create-persona", methods=["POST"])
 def create_persona():
     token = get_token()
@@ -507,6 +612,17 @@ def delete_persona(persona_id):
         return render_error("You must be an active user.")
 
     conn = get_db()
+    versions = conn.execute(
+        "SELECT version FROM personas WHERE persona_id = ? AND user_id = ?",
+        (persona_id, user["id"]),
+    ).fetchall()
+    for v in versions:
+        if persona_used_in_completed_study(conn, persona_id, v["version"], user["id"]):
+            conn.close()
+            return render_error(
+                f'Cannot delete persona {persona_id}: version {v["version"]} is used in a completed study and is immutable.'
+            )
+
     conn.execute(
         "DELETE FROM personas WHERE persona_id = ? AND user_id = ?",
         (persona_id, user["id"]),
@@ -556,6 +672,8 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         error=message,
         show_new_research=show_new_research,
         configure_study=configure_study,
+        configure_study_personas=[],
+        available_persona_versions=[],
         study_type_limits=STUDY_TYPE_LIMITS,
         personas_summary=personas_summary,
         show_new_persona=show_new_persona,

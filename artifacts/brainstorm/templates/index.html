@@ -344,6 +344,64 @@
                     <a href="/?token={{ token }}" class="btn btn-secondary">Back to Dashboard</a>
                 </div>
             </form>
+
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Persona Versions</h3>
+            <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
+                Attach specific persona versions to this study. Reuse is version-specific for traceability.
+            </p>
+
+            {% if configure_study_personas %}
+            <table style="margin-bottom: 16px;">
+                <thead>
+                    <tr>
+                        <th>Persona ID</th>
+                        <th>Version</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cp in configure_study_personas %}
+                    <tr>
+                        <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ cp.persona_id }}</code></td>
+                        <td><span class="badge badge-active">v{{ cp.version }}</span></td>
+                        <td>
+                            <form action="/detach-persona/{{ configure_study.id }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <input type="hidden" name="persona_id" value="{{ cp.persona_id }}">
+                                <input type="hidden" name="version" value="{{ cp.version }}">
+                                <button type="submit" class="btn btn-danger btn-small">Remove</button>
+                            </form>
+                            <a href="/?token={{ token }}&view_persona={{ cp.persona_id }}&ver={{ cp.version }}" class="btn btn-primary btn-small">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No personas attached yet.</p>
+            {% endif %}
+
+            {% if available_persona_versions %}
+            <form action="/attach-persona/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="flex: 1;">
+                    <label style="font-size: 13px; font-weight: 500; color: #555; display: block; margin-bottom: 4px;">Select persona version to attach</label>
+                    <select name="persona_version_combo" required onchange="var parts=this.value.split('::'); document.getElementById('attach-pid').value=parts[0]; document.getElementById('attach-ver').value=parts[1];" style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff;">
+                        <option value="">— Choose —</option>
+                        {% for pv in available_persona_versions %}
+                        <option value="{{ pv.persona_id }}::{{ pv.version }}">{{ pv.name }} ({{ pv.persona_id }} v{{ pv.version }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <input type="hidden" id="attach-pid" name="persona_id" value="">
+                <input type="hidden" id="attach-ver" name="version" value="">
+                <button type="submit" class="btn btn-success btn-small" style="white-space: nowrap;">Attach</button>
+            </form>
+            {% else %}
+            <p style="color: #999; font-size: 13px;">Create personas first to attach them to studies.</p>
+            {% endif %}
         </div>
         {% endif %}
 
