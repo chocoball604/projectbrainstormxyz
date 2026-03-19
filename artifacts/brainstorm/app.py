@@ -1,11 +1,12 @@
 """
-app.py — Project Brainstorm V1 (PROMPT 1 + PROMPT 2 + PROMPT 3)
+app.py — Project Brainstorm V1 (PROMPT 1–4)
 
 Single-page Flask app with SQLite.
 Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
 
 PROMPT 2: studies table, study list on dashboard, "New Research" button.
 PROMPT 3: Research Brief form with 6 required anchors; saving creates a draft study.
+PROMPT 4: Study type selector + limits enforcement.
 
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
@@ -35,6 +36,14 @@ VALID_STUDY_STATUSES = [
     "draft", "in_progress", "qa_blocked",
     "terminated_system", "terminated_user", "completed",
 ]
+
+VALID_STUDY_TYPES = ["synthetic_survey", "synthetic_idi", "synthetic_focus_group"]
+
+STUDY_TYPE_LIMITS = {
+    "synthetic_survey": {"max_questions": 12, "max_respondents": 400},
+    "synthetic_idi": {"min_personas": 1, "max_personas": 3},
+    "synthetic_focus_group": {"min_personas": 4, "max_personas": 6},
+}
 
 
 def get_db():
@@ -145,12 +154,21 @@ def index():
         ).fetchall()]
         conn.close()
 
+    configure_study = None
     if user and user["state"] == "active":
         conn = get_db()
         studies = [dict(r) for r in conn.execute(
             "SELECT id, title, study_type, status, created_at FROM studies WHERE user_id = ? ORDER BY created_at DESC",
             (user["id"],),
         ).fetchall()]
+        configure_id = request.args.get("configure")
+        if configure_id:
+            row = conn.execute(
+                "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+                (configure_id, user["id"]),
+            ).fetchone()
+            if row:
+                configure_study = dict(row)
         conn.close()
 
     return render_template(
@@ -162,6 +180,8 @@ def index():
         studies=studies,
         token=token,
         show_new_research=request.args.get("new_research") == "1",
+        configure_study=configure_study,
+        study_type_limits=STUDY_TYPE_LIMITS,
     )
 
 
@@ -316,12 +336,46 @@ def create_study():
     return redirect(url_for("index", token=token))
 
 
+@app.route("/set-study-type/<int:study_id>", methods=["POST"])
+def set_study_type(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Study not found.")
+    if study["status"] != "draft":
+        conn.close()
+        return render_error("Study type can only be set for draft studies.")
+
+    study_type = request.form.get("study_type", "").strip()
+    if study_type not in VALID_STUDY_TYPES:
+        conn.close()
+        return render_error("Invalid study type. Choose survey, IDI, or focus group.")
+
+    conn.execute(
+        "UPDATE studies SET study_type = ? WHERE id = ?",
+        (study_type, study_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
 def render_error(message, show_new_research=False):
     token = get_token()
     user, is_admin = get_session_data(token)
     pending_users = []
     all_users = []
     studies = []
+    configure_study = None
     if is_admin:
         conn = get_db()
         pending_users = [dict(r) for r in conn.execute(
@@ -350,6 +404,8 @@ def render_error(message, show_new_research=False):
         token=token,
         error=message,
         show_new_research=show_new_research,
+        configure_study=configure_study,
+        study_type_limits=STUDY_TYPE_LIMITS,
     )
 
 

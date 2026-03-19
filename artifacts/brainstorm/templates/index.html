@@ -280,6 +280,7 @@
                         <th>Type</th>
                         <th>Status</th>
                         <th>Created</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -289,6 +290,11 @@
                         <td>{{ s.study_type or '—' }}</td>
                         <td><span class="badge badge-{{ s.status }}">{{ s.status }}</span></td>
                         <td>{{ s.created_at }}</td>
+                        <td>
+                            {% if s.status == 'draft' %}
+                            <a href="/?token={{ token }}&configure={{ s.id }}" class="btn btn-primary btn-small">Configure</a>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -299,6 +305,47 @@
             </div>
             {% endif %}
         </div>
+
+        {% if configure_study %}
+        <div class="card" id="configure-study-section">
+            <h2>Configure Study: {{ configure_study.title }}</h2>
+            <p style="font-size: 14px; color: #777; margin-bottom: 20px;">
+                Select a study type for this draft study. Each type has specific limits.
+            </p>
+
+            <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin-bottom: 20px; font-size: 13px;">
+                <strong>Study Type Limits:</strong>
+                <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
+                    <li><strong>Synthetic Survey:</strong> max 12 questions, max 400 respondents</li>
+                    <li><strong>Synthetic IDI:</strong> 1–3 personas</li>
+                    <li><strong>Synthetic Focus Group:</strong> 4–6 personas</li>
+                </ul>
+            </div>
+
+            {% if configure_study.study_type %}
+            <div class="info-msg" style="margin-bottom: 16px;">
+                Current type: <strong>{{ configure_study.study_type }}</strong>
+            </div>
+            {% endif %}
+
+            <form action="/set-study-type/{{ configure_study.id }}" method="POST">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div class="form-group">
+                    <label for="study-type-select">Study Type</label>
+                    <select id="study-type-select" name="study_type" required style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: #fff;">
+                        <option value="">— Select a type —</option>
+                        <option value="synthetic_survey" {% if configure_study.study_type == 'synthetic_survey' %}selected{% endif %}>Synthetic Survey</option>
+                        <option value="synthetic_idi" {% if configure_study.study_type == 'synthetic_idi' %}selected{% endif %}>Synthetic IDI</option>
+                        <option value="synthetic_focus_group" {% if configure_study.study_type == 'synthetic_focus_group' %}selected{% endif %}>Synthetic Focus Group</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 8px;">
+                    <button type="submit" class="btn btn-primary">Save Study Type</button>
+                    <a href="/?token={{ token }}" class="btn btn-secondary">Back to Dashboard</a>
+                </div>
+            </form>
+        </div>
+        {% endif %}
 
         {% if show_new_research %}
         <div class="card" id="new-research-section">
