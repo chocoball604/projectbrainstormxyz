@@ -227,6 +227,21 @@ def persona_used_in_completed_study(conn, persona_instance_id, user_id):
     return False
 
 
+def remove_persona_from_non_completed_studies(conn, user_id, persona_instance_id):
+    rows = conn.execute(
+        "SELECT id, personas_used FROM studies WHERE user_id = ? AND status != 'completed'",
+        (user_id,),
+    ).fetchall()
+    for row in rows:
+        used = json.loads(row["personas_used"] or "[]")
+        if persona_instance_id in used:
+            used = [p for p in used if p != persona_instance_id]
+            conn.execute(
+                "UPDATE studies SET personas_used = ? WHERE id = ?",
+                (json.dumps(used), row["id"]),
+            )
+
+
 @app.route("/")
 def index():
     token = get_token()
@@ -266,7 +281,16 @@ def index():
             ).fetchone()
             if row:
                 configure_study = dict(row)
-                configure_study_personas = json.loads(configure_study.get("personas_used") or "[]")
+                raw_ids = json.loads(configure_study.get("personas_used") or "[]")
+                for pid in raw_ids:
+                    p_row = conn.execute(
+                        "SELECT name FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+                        (pid, user["id"]),
+                    ).fetchone()
+                    if p_row:
+                        configure_study_personas.append({"id": pid, "name": p_row["name"], "exists": True})
+                    else:
+                        configure_study_personas.append({"id": pid, "name": None, "exists": False})
                 available_personas = get_user_personas_list(conn, user["id"])
 
         personas_list = get_user_personas_list(conn, user["id"])
@@ -626,6 +650,7 @@ def delete_persona(instance_id):
             f"Cannot delete persona {instance_id}: it is used in a completed study and is immutable."
         )
 
+    remove_persona_from_non_completed_studies(conn, user["id"], instance_id)
     conn.execute(
         "DELETE FROM personas WHERE persona_instance_id = ? AND user_id = ?",
         (instance_id, user["id"]),
