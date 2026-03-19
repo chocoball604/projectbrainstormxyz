@@ -1,45 +1,42 @@
 """
-app.py — Project Brainstorm V1 (PROMPT 1: Simplest runnable app)
+app.py — Project Brainstorm V1 (PROMPT 1 + PROMPT 2)
 
 Single-page Flask app with SQLite.
 Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
+
+PROMPT 2 additions: studies table, study list on dashboard, "New Research" button.
 
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
 
 import os
+import secrets
 import sqlite3
 from datetime import datetime
-from functools import wraps
 
 from flask import (
     Flask,
-    jsonify,
     redirect,
     render_template,
     request,
-    session,
     url_for,
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
-# ── App setup ────────────────────────────────────────────────────────────────
-
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-fallback-key")
-app.config["SESSION_COOKIE_SAMESITE"] = "None"
-app.config["SESSION_COOKIE_SECURE"] = True
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "brainstorm.db")
 
-# Admin password from environment variable (hardcoded in .env for V1)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
-# ── Database helpers ─────────────────────────────────────────────────────────
+VALID_STUDY_STATUSES = [
+    "draft", "in_progress", "qa_blocked",
+    "terminated_system", "terminated_user", "completed",
+]
 
 
 def get_db():
-    """Open a database connection. Rows behave like dicts."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -47,48 +44,90 @@ def get_db():
 
 
 def init_db():
-    """Create the users table if it does not exist."""
     conn = get_db()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            email        TEXT    UNIQUE NOT NULL,
-            username     TEXT    NOT NULL,
-            password_hash TEXT   NOT NULL,
-            state        TEXT    NOT NULL DEFAULT 'pending',
-            created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            email         TEXT    UNIQUE NOT NULL,
+            username      TEXT    NOT NULL,
+            password_hash TEXT    NOT NULL,
+            state         TEXT    NOT NULL DEFAULT 'pending',
+            created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            token      TEXT PRIMARY KEY,
+            user_id    INTEGER,
+            is_admin   INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS studies (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            title       TEXT    NOT NULL,
+            study_type  TEXT,
+            status      TEXT    NOT NULL DEFAULT 'draft',
+            created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
     conn.commit()
     conn.close()
 
 
-def get_current_user():
-    """Return the current logged-in user dict, or None."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return None
+def create_session(user_id=None, is_admin=False):
+    token = secrets.token_urlsafe(32)
     conn = get_db()
-    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    conn.execute(
+        "INSERT INTO sessions (token, user_id, is_admin) VALUES (?, ?, ?)",
+        (token, user_id, 1 if is_admin else 0),
+    )
+    conn.commit()
     conn.close()
-    if row is None:
-        session.clear()
-        return None
-    return dict(row)
+    return token
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+def get_session_data(token):
+    if not token:
+        return None, False
+    conn = get_db()
+    row = conn.execute("SELECT * FROM sessions WHERE token = ?", (token,)).fetchone()
+    if not row:
+        conn.close()
+        return None, False
+    user = None
+    if row["user_id"]:
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],)).fetchone()
+        if user:
+            user = dict(user)
+    conn.close()
+    return user, bool(row["is_admin"])
+
+
+def delete_session(token):
+    if token:
+        conn = get_db()
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+        conn.close()
+
+
+def get_token():
+    return request.args.get("token") or request.form.get("token") or ""
 
 
 @app.route("/")
 def index():
-    """Serve the single-page app. All state switching happens in the template."""
-    user = get_current_user()
-    is_admin = session.get("is_admin", False)
+    token = get_token()
+    user, is_admin = get_session_data(token)
 
-    # If admin is logged in, fetch pending users
     pending_users = []
     all_users = []
+    studies = []
+
     if is_admin:
         conn = get_db()
         pending_users = [dict(r) for r in conn.execute(
@@ -99,18 +138,28 @@ def index():
         ).fetchall()]
         conn.close()
 
+    if user and user["state"] == "active":
+        conn = get_db()
+        studies = [dict(r) for r in conn.execute(
+            "SELECT id, title, study_type, status, created_at FROM studies WHERE user_id = ? ORDER BY created_at DESC",
+            (user["id"],),
+        ).fetchall()]
+        conn.close()
+
     return render_template(
         "index.html",
         user=user,
         is_admin=is_admin,
         pending_users=pending_users,
         all_users=all_users,
+        studies=studies,
+        token=token,
+        show_new_research=request.args.get("new_research") == "1",
     )
 
 
 @app.route("/signup", methods=["POST"])
 def signup():
-    """Register a new user. New users start as state=pending."""
     email = (request.form.get("email") or "").strip().lower()
     username = (request.form.get("username") or "").strip()
     password = request.form.get("password") or ""
@@ -133,17 +182,15 @@ def signup():
     )
     conn.commit()
 
-    # Log the user in immediately after signup
     user_row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
     conn.close()
-    session["user_id"] = user_row["id"]
-    session["is_admin"] = False
-    return redirect(url_for("index"))
+
+    token = create_session(user_id=user_row["id"])
+    return redirect(url_for("index", token=token))
 
 
 @app.route("/login", methods=["POST"])
 def login():
-    """Log in an existing user."""
     email = (request.form.get("email") or "").strip().lower()
     password = request.form.get("password") or ""
 
@@ -157,35 +204,31 @@ def login():
     if not user or not check_password_hash(user["password_hash"], password):
         return render_error("Invalid email or password.")
 
-    session["user_id"] = user["id"]
-    session["is_admin"] = False
-    return redirect(url_for("index"))
+    token = create_session(user_id=user["id"])
+    return redirect(url_for("index", token=token))
 
 
 @app.route("/admin-login", methods=["POST"])
 def admin_login():
-    """Log in as Admin using the hardcoded password from .env."""
     password = request.form.get("admin_password") or ""
     if password != ADMIN_PASSWORD:
         return render_error("Invalid admin password.")
 
-    # Clear any user session, set admin flag
-    session.clear()
-    session["is_admin"] = True
-    return redirect(url_for("index"))
+    token = create_session(is_admin=True)
+    return redirect(url_for("index", token=token))
 
 
 @app.route("/logout", methods=["POST"])
 def logout():
-    """Log out the current user or admin."""
-    session.clear()
+    delete_session(get_token())
     return redirect(url_for("index"))
 
 
 @app.route("/admin/approve/<int:user_id>", methods=["POST"])
 def admin_approve(user_id):
-    """Admin action: approve a pending user (pending -> active)."""
-    if not session.get("is_admin"):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
         return render_error("Admin access required.")
 
     conn = get_db()
@@ -200,28 +243,29 @@ def admin_approve(user_id):
     conn.execute("UPDATE users SET state = 'active' WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
-    return redirect(url_for("index"))
+    return redirect(url_for("index", token=token))
 
 
 @app.route("/admin/disable/<int:user_id>", methods=["POST"])
 def admin_disable(user_id):
-    """Admin action: disable a user."""
-    if not session.get("is_admin"):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
         return render_error("Admin access required.")
 
     conn = get_db()
     conn.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
-    return redirect(url_for("index"))
+    return redirect(url_for("index", token=token))
 
 
 def render_error(message):
-    """Render the index page with an error message."""
-    user = get_current_user()
-    is_admin = session.get("is_admin", False)
+    token = get_token()
+    user, is_admin = get_session_data(token)
     pending_users = []
     all_users = []
+    studies = []
     if is_admin:
         conn = get_db()
         pending_users = [dict(r) for r in conn.execute(
@@ -231,17 +275,25 @@ def render_error(message):
             "SELECT id, email, username, state, created_at FROM users ORDER BY created_at DESC"
         ).fetchall()]
         conn.close()
+    if user and user["state"] == "active":
+        conn = get_db()
+        studies = [dict(r) for r in conn.execute(
+            "SELECT id, title, study_type, status, created_at FROM studies WHERE user_id = ? ORDER BY created_at DESC",
+            (user["id"],),
+        ).fetchall()]
+        conn.close()
     return render_template(
         "index.html",
         user=user,
         is_admin=is_admin,
         pending_users=pending_users,
         all_users=all_users,
+        studies=studies,
+        token=token,
         error=message,
+        show_new_research=request.args.get("new_research") == "1",
     )
 
-
-# ── Startup ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     init_db()

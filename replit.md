@@ -21,19 +21,40 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ```text
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
+│   ├── api-server/         # Express API server
+│   └── brainstorm/         # Project Brainstorm V1 — Flask + SQLite single-page app
+│       ├── app.py          # Flask backend (token-based auth, studies, admin)
+│       ├── templates/
+│       │   └── index.html  # Single-page template with section switching
+│       └── brainstorm.db   # SQLite database (auto-created)
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
 │   └── db/                 # Drizzle ORM schema + DB connection
 ├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+│   └── src/                # Individual .ts scripts
+├── brainstorm_v1_replit_singlepage_pack/  # Frozen rules, schemas, task files
+│   ├── 00_FROZEN_RULES_FROM_PRD.md
+│   ├── PROMPT_SEQUENCE_SINGLE_PAGE.md
+│   ├── budget_limits.yaml
+│   └── schemas/
+├── pnpm-workspace.yaml
+├── tsconfig.base.json
+├── tsconfig.json
+└── package.json
 ```
+
+## Brainstorm App (artifacts/brainstorm)
+
+Python Flask + SQLite single-page app for AI-Native Market Research.
+
+- **Auth**: Token-based (URL query param `?token=xxx`) — needed because Replit preview iframe blocks cookies. Sessions stored in `sessions` table.
+- **Admin password**: `admin123` (env var `ADMIN_PASSWORD`)
+- **DB tables**: `users`, `sessions`, `studies`
+- **Prompt progress**: Prompt 1 (auth/signup/admin) + Prompt 2 (study list + "New Research" button) done
+- **Study statuses**: draft, in_progress, qa_blocked, terminated_system, terminated_user, completed
+- **Run**: `python artifacts/brainstorm/app.py` (port from `PORT` env var, default 5000)
 
 ## TypeScript & Composite Projects
 
