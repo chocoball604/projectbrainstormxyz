@@ -1,0 +1,64 @@
+DOUBLE-CHECK BUG: Grounding Traces show “Sources Configured = Yes / Queried = Yes” for a persona that was created BEFORE Admin-Directed Web Sources existed.
+
+Goal:
+Find out exactly why this trace shows configured/queried = Yes and fix it if it’s wrong.
+
+Rules:
+- Do NOT change product scope.
+- Do NOT delete/reset the database.
+- Do NOT change the grounding trace schema.
+- Only fix the logic that creates or displays grounding traces.
+
+Step-by-step investigation (must do in this order):
+
+1) Identify the specific persona and trace row:
+   - In grounding_traces table, find the row where persona_id = 2 (or the persona_instance_id that corresponds).
+   - Print/log the full row values:
+     study_id, persona_id, trigger_event, admin_sources_configured, admin_sources_queried,
+     admin_sources_matched, admin_sources_used_in_output, reason_code, timestamp_utc.
+
+2) Determine WHEN the persona was created:
+   - Query the personas table for that persona record and print/log:
+     persona_id/persona_instance_id and created_at (or whatever timestamp exists).
+   - If personas table lacks created_at, add it (migration, default now, and keep existing rows as NULL if unknown).
+
+3) Determine WHEN admin web sources were created/activated:
+   - Query admin_web_sources table and print/log:
+     id, url, status, created_at/updated_at (if fields exist).
+   - If admin_web_sources lacks created_at, add it (migration), default NULL for existing rows.
+
+4) Explain the mismatch:
+   - If the grounding trace timestamp_utc is AFTER admin sources became active, then it is not an “old persona trace” — it was created later.
+   - If the grounding trace was created at persona creation time but flags still show Yes, then create_grounding_trace() is incorrectly setting flags.
+   - If the trace row was created during a DB migration or on page render (not at persona creation), identify that code path.
+
+Fix requirements (apply ONLY the correct one):
+
+A) If traces are being generated at page render:
+   - STOP doing that. Traces must only be created on explicit events:
+     persona_created and study_executed.
+   - The admin table must be read-only display of stored rows only.
+
+B) If migration retroactively created traces for existing personas:
+   - Mark those rows clearly and conservatively:
+     trigger_event = "migrated"
+     admin_sources_configured = false
+     admin_sources_queried = false
+     reason_code = ADMIN_SOURCE_NO_MATCH
+   - Do NOT fabricate that sources were configured/queried at the earlier time.
+
+C) If create_grounding_trace() always sets configured/queried=true whenever there is at least one active admin source NOW:
+   - That is correct only for traces created NOW.
+   - But ensure this function is called only at event time (persona created / study executed) and never re-run for old personas.
+
+D) If persona_id is being reused or incorrectly mapped:
+   - Ensure the trace links to the correct persona identifier (persona_instance_id).
+   - Fix any mapping so old personas don’t inherit new persona IDs.
+
+Deliverables:
+- A short explanation: “Root cause was X.”
+- The minimal code change.
+- A proof test:
+  1) Create persona when there are ZERO active admin sources => trace must show configured=false, queried=false, reason=ADMIN_SOURCE_NO_MATCH.
+  2) Add one active admin source, create a new persona => trace must show configured=true, queried=true (and reason code present if not used).
+  3) Confirm old persona rows do NOT change after admin sources are added.
