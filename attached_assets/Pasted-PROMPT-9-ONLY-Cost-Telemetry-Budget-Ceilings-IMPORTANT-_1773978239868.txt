@@ -1,0 +1,81 @@
+PROMPT 9 ONLY — Cost Telemetry + Budget Ceilings
+
+IMPORTANT:
+- Implement ONLY Prompt 9. Do NOT implement Prompt 10 or anything else.
+- Do NOT reset/delete the database.
+- Do NOT change existing study logic, QA logic, grounding trace logic, or UI flows except where needed to display telemetry.
+- Keep token-based sessions working.
+
+Goal (plain English):
+Every time a study is executed (Run Study), write a “cost telemetry” record (a receipt).
+Also enforce the token budget ceilings per study type:
+- Survey: 100,000
+- IDI: 150,000
+- Focus Group: 300,000
+If a study exceeds the ceiling, terminate it (terminated_system) and record the termination reason.
+
+What to implement:
+
+A) Database: add a cost_telemetry table (migration)
+Add a new SQLite table cost_telemetry with columns:
+- id (primary key)
+- study_id
+- study_type
+- tokens_mark
+- tokens_lisa
+- tokens_ben
+- tokens_total
+- model_call_count
+- qa_retry_count
+- followup_round_count
+- status (draft/in_progress/qa_blocked/terminated_system/terminated_user/completed)
+- termination_reason (nullable)
+- timestamp_utc
+
+B) Logging: create telemetry on every run
+When /run-study/<study_id> is called and execution happens:
+- increment model_call_count for:
+  * placeholder generation
+  * Ben QA evaluation
+  * grounding trace creation (if you count it as a “call” — if unclear, at least count execution + QA)
+- set qa_retry_count from existing retry tracking if present, else 0
+- followup_round_count = 0 for now
+- tokens_*:
+  If real token counts are not available, do NOT leave blank.
+  Use a simple placeholder estimate so we can test budget ceilings:
+    tokens_total_estimate = max(1, len(study_output_text) // 4)
+    tokens_mark/tokens_lisa/tokens_ben can be split proportionally (e.g., 10/80/10) OR set to 0 and keep only tokens_total.
+  IMPORTANT: This is just for prototype measurement; store the values consistently.
+
+C) Budget ceiling enforcement
+Before finalizing the run:
+- determine ceiling based on study_type
+- if tokens_total > ceiling:
+   * set study status = terminated_system
+   * set termination_reason = "budget_exhaustion"
+   * still write a telemetry row reflecting termination
+
+D) Admin view (minimal)
+Add an admin-only table “Recent Cost Telemetry (last 50)” showing:
+- study_id
+- study_type
+- tokens_total
+- model_call_count
+- qa_retry_count
+- status
+- termination_reason
+- timestamp
+
+E) Testing hook (dev-only, minimal, admin-only)
+Because token estimates may be small, add an admin-only “Force token total override” for a single run:
+- optional query param or hidden admin-only form field like force_tokens_total
+- if set, replace tokens_total with that number for budget testing
+This allows us to test termination without giant outputs.
+This must be admin-only.
+
+Deliverables you must provide:
+1) Files changed
+2) How to test (step-by-step):
+   - Run a survey and confirm telemetry row exists
+   - Force tokens_total above ceiling and confirm terminated_system + budget_exhaustion
+   - Confirm admin telemetry table shows the row

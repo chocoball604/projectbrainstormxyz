@@ -52,6 +52,12 @@ STUDY_TYPE_LIMITS = {
     "synthetic_focus_group": {"min_personas": 4, "max_personas": 6},
 }
 
+BUDGET_CEILINGS = {
+    "synthetic_survey": 100_000,
+    "synthetic_idi": 150_000,
+    "synthetic_focus_group": 300_000,
+}
+
 GROUNDING_REASON_CODES = [
     "ADMIN_SOURCE_NO_MATCH",
     "ADMIN_SOURCE_OUT_OF_SCOPE",
@@ -162,6 +168,23 @@ def init_db():
             admin_sources_used_in_output INTEGER NOT NULL DEFAULT 0,
             admin_source_reason_code     TEXT,
             timestamp_utc                TEXT    NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS cost_telemetry (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            study_id             INTEGER,
+            study_type           TEXT,
+            tokens_mark          INTEGER DEFAULT 0,
+            tokens_lisa          INTEGER DEFAULT 0,
+            tokens_ben           INTEGER DEFAULT 0,
+            tokens_total         INTEGER DEFAULT 0,
+            model_call_count     INTEGER DEFAULT 0,
+            qa_retry_count       INTEGER DEFAULT 0,
+            followup_round_count INTEGER DEFAULT 0,
+            status               TEXT,
+            termination_reason   TEXT,
+            timestamp_utc        TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
     migrate_db(conn)
@@ -396,6 +419,7 @@ def index():
     view_study_output = None
     admin_web_sources = []
     grounding_traces = []
+    cost_telemetry_rows = []
 
     if is_admin:
         conn = get_db()
@@ -408,6 +432,9 @@ def index():
         admin_web_sources = get_admin_web_sources(conn)
         grounding_traces = [dict(r) for r in conn.execute(
             "SELECT * FROM grounding_traces ORDER BY id DESC LIMIT 50"
+        ).fetchall()]
+        cost_telemetry_rows = [dict(r) for r in conn.execute(
+            "SELECT * FROM cost_telemetry ORDER BY id DESC LIMIT 50"
         ).fetchall()]
         conn.close()
 
@@ -524,6 +551,7 @@ def index():
         view_study_output=view_study_output,
         admin_web_sources=admin_web_sources,
         grounding_traces=grounding_traces,
+        cost_telemetry_rows=cost_telemetry_rows,
     )
 
 
@@ -1067,10 +1095,34 @@ def run_study(study_id):
             f"{output}"
         )
 
+    model_call_count = 2
+    tokens_total = max(1, len(output) // 4)
+    tokens_mark = int(tokens_total * 0.10)
+    tokens_lisa = int(tokens_total * 0.80)
+    tokens_ben = tokens_total - tokens_mark - tokens_lisa
+
+    ceiling = BUDGET_CEILINGS.get(study_type, 300_000)
+    termination_reason = None
+    if tokens_total > ceiling:
+        final_status = "terminated_system"
+        termination_reason = "budget_exhaustion"
+        final_report = None
+        qa_decision = "FAIL"
+        qa_notes = f"Budget ceiling exceeded: {tokens_total} tokens > {ceiling} ceiling."
+
     conn.execute(
         """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
            confidence_summary = ?, final_report = ? WHERE id = ?""",
         (final_status, output, qa_decision.lower(), qa_notes, confidence_summary, final_report, study_id),
+    )
+
+    conn.execute(
+        """INSERT INTO cost_telemetry
+           (study_id, study_type, tokens_mark, tokens_lisa, tokens_ben, tokens_total,
+            model_call_count, qa_retry_count, followup_round_count, status, termination_reason)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)""",
+        (study_id, study_type, tokens_mark, tokens_lisa, tokens_ben, tokens_total,
+         model_call_count, final_status, termination_reason),
     )
 
     create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
@@ -1359,11 +1411,15 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         show_new_persona = request.args.get("new_persona") == "1"
     admin_web_sources = []
     grounding_traces = []
+    cost_telemetry_rows = []
     if is_admin:
         conn2 = get_db()
         admin_web_sources = get_admin_web_sources(conn2)
         grounding_traces = [dict(r) for r in conn2.execute(
             "SELECT * FROM grounding_traces ORDER BY id DESC LIMIT 50"
+        ).fetchall()]
+        cost_telemetry_rows = [dict(r) for r in conn2.execute(
+            "SELECT * FROM cost_telemetry ORDER BY id DESC LIMIT 50"
         ).fetchall()]
         conn2.close()
     return render_template(
@@ -1388,6 +1444,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         view_study_output=None,
         admin_web_sources=admin_web_sources,
         grounding_traces=grounding_traces,
+        cost_telemetry_rows=cost_telemetry_rows,
     )
 
 
@@ -1428,11 +1485,43 @@ def admin_dev_run_study(study_id):
             f"{output}"
         )
 
+    study_type = study["study_type"] or ""
+    model_call_count = 2
+    tokens_total = max(1, len(output) // 4)
+    force_tokens = request.form.get("force_tokens_total")
+    if force_tokens:
+        try:
+            tokens_total = int(force_tokens)
+        except (ValueError, TypeError):
+            pass
+    tokens_mark = int(tokens_total * 0.10)
+    tokens_lisa = int(tokens_total * 0.80)
+    tokens_ben = tokens_total - tokens_mark - tokens_lisa
+
+    ceiling = BUDGET_CEILINGS.get(study_type, 300_000)
+    termination_reason = None
+    if tokens_total > ceiling:
+        final_status = "terminated_system"
+        termination_reason = "budget_exhaustion"
+        final_report = None
+        qa_decision = "FAIL"
+        qa_notes = f"Budget ceiling exceeded: {tokens_total} tokens > {ceiling} ceiling."
+
     conn.execute(
         """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
            confidence_summary = ?, final_report = ? WHERE id = ?""",
         (final_status, output, qa_decision.lower(), qa_notes, confidence_summary, final_report, study_id),
     )
+
+    conn.execute(
+        """INSERT INTO cost_telemetry
+           (study_id, study_type, tokens_mark, tokens_lisa, tokens_ben, tokens_total,
+            model_call_count, qa_retry_count, followup_round_count, status, termination_reason)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)""",
+        (study_id, study_type, tokens_mark, tokens_lisa, tokens_ben, tokens_total,
+         model_call_count, final_status, termination_reason),
+    )
+
     create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
     conn.commit()
     conn.close()

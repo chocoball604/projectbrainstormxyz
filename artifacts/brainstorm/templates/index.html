@@ -1084,6 +1084,52 @@
             <p style="color: #999; font-size: 13px;">No grounding traces recorded yet.</p>
             {% endif %}
         </div>
+
+        <div class="card">
+            <h2>Recent Cost Telemetry (Last 50)</h2>
+            {% if cost_telemetry_rows %}
+            <div style="overflow-x: auto;">
+                <table style="font-size: 12px;">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Study ID</th>
+                            <th>Type</th>
+                            <th>Tokens Total</th>
+                            <th>Mark</th>
+                            <th>Lisa</th>
+                            <th>Ben</th>
+                            <th>Model Calls</th>
+                            <th>QA Retries</th>
+                            <th>Status</th>
+                            <th>Termination</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ct in cost_telemetry_rows %}
+                        <tr>
+                            <td style="font-weight: 600;">#{{ ct.id }}</td>
+                            <td>{{ ct.study_id }}</td>
+                            <td>{{ ct.study_type or '—' }}</td>
+                            <td style="font-weight: 600;">{{ ct.tokens_total }}</td>
+                            <td>{{ ct.tokens_mark }}</td>
+                            <td>{{ ct.tokens_lisa }}</td>
+                            <td>{{ ct.tokens_ben }}</td>
+                            <td>{{ ct.model_call_count }}</td>
+                            <td>{{ ct.qa_retry_count }}</td>
+                            <td><span class="badge badge-{{ ct.status }}">{{ ct.status }}</span></td>
+                            <td><code style="color: #c0392b;">{{ ct.termination_reason or '—' }}</code></td>
+                            <td style="white-space: nowrap; font-family: monospace; font-size: 11px;">{{ ct.timestamp_utc }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color: #999; font-size: 13px;">No cost telemetry records yet.</p>
+            {% endif %}
+        </div>
     </div>
     {% endif %}
 
