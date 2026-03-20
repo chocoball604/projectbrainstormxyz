@@ -192,6 +192,14 @@ def migrate_db(conn):
         conn.execute("ALTER TABLE studies ADD COLUMN survey_brief TEXT")
     if "survey_questions" not in study_cols:
         conn.execute("ALTER TABLE studies ADD COLUMN survey_questions TEXT")
+    if "qa_status" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN qa_status TEXT")
+    if "qa_notes" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN qa_notes TEXT")
+    if "confidence_summary" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN confidence_summary TEXT")
+    if "final_report" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN final_report TEXT")
 
     rows = conn.execute(
         "SELECT id, persona_versions_used, personas_used FROM studies"
@@ -406,7 +414,7 @@ def index():
     if user and user["state"] == "active":
         conn = get_db()
         studies = [dict(r) for r in conn.execute(
-            "SELECT id, title, study_type, status, created_at, study_output FROM studies WHERE user_id = ? ORDER BY created_at DESC",
+            "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? ORDER BY created_at DESC",
             (user["id"],),
         ).fetchall()]
         configure_id = request.args.get("configure")
@@ -480,8 +488,15 @@ def index():
                 "SELECT * FROM studies WHERE id = ? AND user_id = ?",
                 (view_output_id, user["id"]),
             ).fetchone()
-            if row and row["study_output"]:
+            if row and (row["study_output"] or row["status"] == "qa_blocked"):
                 view_study_output = dict(row)
+                if view_study_output.get("confidence_summary"):
+                    try:
+                        view_study_output["confidence_parsed"] = json.loads(view_study_output["confidence_summary"])
+                    except (json.JSONDecodeError, TypeError):
+                        view_study_output["confidence_parsed"] = None
+                else:
+                    view_study_output["confidence_parsed"] = None
 
         conn.close()
 
@@ -827,6 +842,82 @@ def generate_placeholder_output(study_type, study, persona_names):
     return json.dumps({"disclaimer": header, "error": "Unknown study type"})
 
 
+def run_ben_qa(study_dict):
+    output = study_dict.get("study_output") or ""
+    study_type = study_dict.get("study_type") or ""
+
+    if not output or not study_type:
+        return {
+            "decision": "FAIL",
+            "notes": "Missing required fields: no output or no study_type.",
+            "confidence_labels": {"Strong": 0, "Indicative": 0, "Exploratory": 0},
+        }
+
+    if study_type == "synthetic_survey":
+        sq = json.loads(study_dict.get("survey_questions") or "[]")
+        if len(sq) < 1:
+            return {
+                "decision": "FAIL",
+                "notes": "Survey has no questions defined.",
+                "confidence_labels": {"Strong": 0, "Indicative": 0, "Exploratory": 0},
+            }
+    elif study_type == "synthetic_idi":
+        personas = normalize_personas_used(study_dict.get("personas_used"))
+        if len(personas) < 1:
+            return {
+                "decision": "FAIL",
+                "notes": "IDI has no attached personas.",
+                "confidence_labels": {"Strong": 0, "Indicative": 0, "Exploratory": 0},
+            }
+    elif study_type == "synthetic_focus_group":
+        personas = normalize_personas_used(study_dict.get("personas_used"))
+        if len(personas) < 4:
+            return {
+                "decision": "FAIL",
+                "notes": f"Focus Group requires at least 4 personas, found {len(personas)}.",
+                "confidence_labels": {"Strong": 0, "Indicative": 0, "Exploratory": 0},
+            }
+
+    if "SIMULATED PLACEHOLDER" in output:
+        if study_type == "synthetic_survey":
+            try:
+                parsed = json.loads(output)
+                n_insights = len(parsed.get("questions", []))
+            except (json.JSONDecodeError, TypeError):
+                n_insights = 3
+        elif study_type == "synthetic_idi":
+            n_insights = output.count("--- Interview with")
+            if n_insights == 0:
+                n_insights = 1
+        elif study_type == "synthetic_focus_group":
+            n_insights = output.count("Moderator:")
+            if n_insights == 0:
+                n_insights = 1
+        else:
+            n_insights = 3
+
+        return {
+            "decision": "DOWNGRADE",
+            "notes": "Output contains simulated placeholder data. Confidence downgraded — no insights rated Strong.",
+            "confidence_labels": {"Strong": 0, "Indicative": min(n_insights, 2), "Exploratory": max(0, n_insights - 2)},
+        }
+
+    if study_type == "synthetic_survey":
+        try:
+            parsed = json.loads(output)
+            n_insights = len(parsed.get("questions", []))
+        except (json.JSONDecodeError, TypeError):
+            n_insights = 3
+    else:
+        n_insights = 3
+
+    return {
+        "decision": "PASS",
+        "notes": "All checks passed. Output meets quality standards.",
+        "confidence_labels": {"Strong": max(1, n_insights // 2), "Indicative": n_insights - max(1, n_insights // 2), "Exploratory": 0},
+    }
+
+
 @app.route("/run-study/<int:study_id>", methods=["POST"])
 def run_study(study_id):
     token = get_token()
@@ -892,9 +983,42 @@ def run_study(study_id):
 
     output = generate_placeholder_output(study_type, dict(study), persona_names)
 
+    study_data = dict(study)
+    study_data["study_output"] = output
+
+    qa_result = run_ben_qa(study_data)
+    qa_decision = qa_result["decision"]
+    qa_notes = qa_result["notes"]
+    confidence_summary = json.dumps(qa_result["confidence_labels"])
+
+    if qa_decision == "FAIL":
+        final_status = "qa_blocked"
+        final_report = None
+    elif qa_decision == "DOWNGRADE":
+        final_status = "completed"
+        cl = qa_result["confidence_labels"]
+        final_report = (
+            f"=== QA REVIEW: DOWNGRADE ===\n"
+            f"Confidence Labels — Strong: {cl['Strong']}, Indicative: {cl['Indicative']}, Exploratory: {cl['Exploratory']}\n"
+            f"Note: {qa_notes}\n"
+            f"{'=' * 40}\n\n"
+            f"{output}"
+        )
+    else:
+        final_status = "completed"
+        cl = qa_result["confidence_labels"]
+        final_report = (
+            f"=== QA REVIEW: PASS ===\n"
+            f"Confidence Labels — Strong: {cl['Strong']}, Indicative: {cl['Indicative']}, Exploratory: {cl['Exploratory']}\n"
+            f"Note: {qa_notes}\n"
+            f"{'=' * 40}\n\n"
+            f"{output}"
+        )
+
     conn.execute(
-        "UPDATE studies SET status = 'in_progress', study_output = ? WHERE id = ?",
-        (output, study_id),
+        """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
+           confidence_summary = ?, final_report = ? WHERE id = ?""",
+        (final_status, output, qa_decision.lower(), qa_notes, confidence_summary, final_report, study_id),
     )
 
     create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
@@ -1174,7 +1298,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
     if user and user["state"] == "active":
         conn = get_db()
         studies = [dict(r) for r in conn.execute(
-            "SELECT id, title, study_type, status, created_at, study_output FROM studies WHERE user_id = ? ORDER BY created_at DESC",
+            "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? ORDER BY created_at DESC",
             (user["id"],),
         ).fetchall()]
         personas_list = get_user_personas_list(conn, user["id"])
@@ -1213,6 +1337,58 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         admin_web_sources=admin_web_sources,
         grounding_traces=grounding_traces,
     )
+
+
+@app.route("/admin/dev-run-study/<int:study_id>", methods=["POST"])
+def admin_dev_run_study(study_id):
+    token = get_token()
+    admin_token = request.form.get("admin_token")
+    if admin_token != os.environ.get("ADMIN_PASSWORD", "admin123"):
+        return render_error("Admin access required.")
+
+    conn = get_db()
+    study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Study not found.")
+
+    output = "NON_PLACEHOLDER_OUTPUT\n\nThis is a real research output for QA PASS testing.\n\nInsight 1: Users prefer mobile experiences.\nInsight 2: Price sensitivity varies by age group.\nInsight 3: Brand loyalty is declining."
+
+    study_data = dict(study)
+    study_data["study_output"] = output
+
+    qa_result = run_ben_qa(study_data)
+    qa_decision = qa_result["decision"]
+    qa_notes = qa_result["notes"]
+    confidence_summary = json.dumps(qa_result["confidence_labels"])
+
+    if qa_decision == "FAIL":
+        final_status = "qa_blocked"
+        final_report = None
+    else:
+        final_status = "completed"
+        cl = qa_result["confidence_labels"]
+        final_report = (
+            f"=== QA REVIEW: {qa_decision} ===\n"
+            f"Confidence Labels — Strong: {cl['Strong']}, Indicative: {cl['Indicative']}, Exploratory: {cl['Exploratory']}\n"
+            f"Note: {qa_notes}\n"
+            f"{'=' * 40}\n\n"
+            f"{output}"
+        )
+
+    conn.execute(
+        """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
+           confidence_summary = ?, final_report = ? WHERE id = ?""",
+        (final_status, output, qa_decision.lower(), qa_notes, confidence_summary, final_report, study_id),
+    )
+    create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
+    conn.commit()
+    conn.close()
+
+    user, _ = get_session_data(token)
+    if user:
+        return redirect(url_for("index", token=token, view_output=study_id))
+    return f"Study {study_id} executed with QA result: {qa_decision}"
 
 
 if __name__ == "__main__":

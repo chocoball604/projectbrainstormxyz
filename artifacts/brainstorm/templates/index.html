@@ -139,6 +139,9 @@
         .badge-terminated_system { background: #f4ecf7; color: #6c3483; }
         .badge-terminated_user { background: #f4ecf7; color: #6c3483; }
         .badge-completed { background: #eafaf1; color: #1e8449; }
+        .badge-qa-pass { background: #d4edda; color: #155724; }
+        .badge-qa-fail { background: #f8d7da; color: #721c24; }
+        .badge-qa-downgrade { background: #fff3cd; color: #856404; }
         .section { display: none; }
         .section.visible { display: block; }
         .logout-form { display: inline; }
@@ -288,13 +291,20 @@
                     <tr>
                         <td>{{ s.title }}</td>
                         <td>{{ s.study_type or '—' }}</td>
-                        <td><span class="badge badge-{{ s.status }}">{{ s.status }}</span></td>
+                        <td>
+                            <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
+                            {% if s.qa_status %}
+                            <span class="badge badge-qa-{{ s.qa_status }}" style="margin-left: 4px;">QA: {{ s.qa_status|upper }}</span>
+                            {% endif %}
+                        </td>
                         <td>{{ s.created_at }}</td>
                         <td>
                             {% if s.status == 'draft' %}
                             <a href="/?token={{ token }}&configure={{ s.id }}" class="btn btn-primary btn-small">Configure</a>
                             {% endif %}
-                            {% if s.status != 'draft' and s.study_output %}
+                            {% if s.status == 'qa_blocked' %}
+                            <a href="/?token={{ token }}&view_output={{ s.id }}" class="btn btn-small" style="background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">View QA Report</a>
+                            {% elif s.status != 'draft' and s.study_output %}
                             <a href="/?token={{ token }}&view_output={{ s.id }}" class="btn btn-primary btn-small">View Output</a>
                             {% endif %}
                         </td>
@@ -476,18 +486,49 @@
                 <h2>Study Output: {{ view_study_output.title }}</h2>
                 <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
             </div>
-            <div style="margin-bottom: 12px;">
+            <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                 <span class="badge badge-{{ view_study_output.status }}">{{ view_study_output.status }}</span>
-                <span style="font-size: 13px; color: #777; margin-left: 8px;">Type: {{ view_study_output.study_type or '—' }}</span>
+                <span style="font-size: 13px; color: #777;">Type: {{ view_study_output.study_type or '—' }}</span>
+                {% if view_study_output.qa_status %}
+                <span class="badge badge-qa-{{ view_study_output.qa_status }}">QA: {{ view_study_output.qa_status|upper }}</span>
+                {% endif %}
             </div>
+
+            {% if view_study_output.confidence_parsed %}
+            <div style="background: #e8f4fd; border: 1px solid #b8daff; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 13px; color: #004085; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                <strong>Confidence Labels:</strong>
+                <span style="background: #d4edda; color: #155724; padding: 3px 10px; border-radius: 4px; font-weight: 600;">Strong: {{ view_study_output.confidence_parsed.Strong }}</span>
+                <span style="background: #fff3cd; color: #856404; padding: 3px 10px; border-radius: 4px; font-weight: 600;">Indicative: {{ view_study_output.confidence_parsed.Indicative }}</span>
+                <span style="background: #f8d7da; color: #721c24; padding: 3px 10px; border-radius: 4px; font-weight: 600;">Exploratory: {{ view_study_output.confidence_parsed.Exploratory }}</span>
+            </div>
+            {% endif %}
+
+            {% if view_study_output.status == 'qa_blocked' %}
+            <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 14px; color: #721c24;">
+                <strong>QA BLOCKED</strong><br>
+                This study's output has been blocked by the QA gate (Ben).<br>
+                <strong>Reason:</strong> {{ view_study_output.qa_notes or 'No notes provided.' }}
+            </div>
+            {% else %}
+            {% if view_study_output.study_output and 'SIMULATED PLACEHOLDER' in view_study_output.study_output %}
             <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 13px; color: #856404;">
                 <strong>SIMULATED PLACEHOLDER — NOT REAL OUTPUT</strong><br>
                 This output is for development/testing purposes only. It does not represent real research data.
             </div>
+            {% endif %}
+            {% if view_study_output.final_report %}
+            {% if view_study_output.study_type == 'synthetic_survey' %}
+            <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; line-height: 1.6;">{{ view_study_output.final_report }}</pre>
+            {% else %}
+            <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.8; font-family: 'Georgia', serif;">{{ view_study_output.final_report }}</pre>
+            {% endif %}
+            {% else %}
             {% if view_study_output.study_type == 'synthetic_survey' %}
             <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; line-height: 1.6;">{{ view_study_output.study_output }}</pre>
             {% else %}
             <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.8; font-family: 'Georgia', serif;">{{ view_study_output.study_output }}</pre>
+            {% endif %}
+            {% endif %}
             {% endif %}
         </div>
         {% endif %}

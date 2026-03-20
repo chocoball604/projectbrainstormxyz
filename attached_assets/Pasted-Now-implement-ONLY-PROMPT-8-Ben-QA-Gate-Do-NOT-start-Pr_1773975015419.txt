@@ -1,0 +1,57 @@
+Now implement ONLY PROMPT 8 (Ben QA Gate). Do NOT start Prompt 9.
+
+Goal (plain English):
+After a study is run and produces an output (currently placeholder), Ben must review it and decide:
+- PASS  -> study becomes completed
+- FAIL  -> study becomes qa_blocked
+- DOWNGRADE -> study becomes completed but confidence labels must be more conservative
+
+Hard rules (from PRD):
+1) Ben is the single QA gate before users receive outputs.
+2) Every insight must have a confidence label: Strong / Indicative / Exploratory.
+3) If QA fails, output must be blocked and the study must clearly show “QA Blocked”.
+4) Ben does NOT do independent web searching. Ben only checks what the system produced.
+5) Keep everything single-page, keep token-based sessions working.
+6) Do NOT change study type rules, budgets, grounding trace, or cost telemetry.
+
+Implementation requirements (minimal but correct):
+
+A) Data fields
+- Add these columns to the studies table (migration, no DB reset):
+  - qa_status TEXT (pending/pass/fail/downgrade)
+  - qa_notes TEXT
+  - confidence_summary TEXT or JSON (store confidence labels or counts)
+  - final_report TEXT (the QA-approved report shown to user)
+
+B) QA logic
+- Create a function run_ben_qa(study) that returns:
+  - decision: PASS / FAIL / DOWNGRADE
+  - notes: short explanation
+  - confidence_labels: list or summary for insights (Strong/Indicative/Exploratory)
+
+Because outputs are placeholders right now, use simple deterministic rules:
+- If required fields are missing (no output, no study_type, missing survey_questions for survey, missing personas for idi/fg) => FAIL
+- If output contains the label “SIMULATED PLACEHOLDER” => DOWNGRADE (not Strong)
+- Otherwise => PASS
+
+C) State transitions
+- When Run Study finishes, it must call Ben QA immediately:
+  - FAIL => status = qa_blocked
+  - PASS => status = completed
+  - DOWNGRADE => status = completed
+- Store qa_status, qa_notes, and final_report
+
+D) UI changes
+- In Study List and Study Output Viewer:
+  - show QA status badge (PASS/FAIL/DOWNGRADE)
+  - if qa_blocked: show a clear message that output is blocked and why
+  - if completed: show final_report plus confidence labels
+  - show confidence label counts (e.g. Strong:0 Indicative:2 Exploratory:3) or list labels per insight
+
+Deliverables:
+- Tell me which files changed.
+- Tell me how to test all three paths:
+  1) DOWNGRADE path: run any placeholder study output -> should complete with downgraded confidence labels
+  2) FAIL path: attempt to run a study with missing prerequisites -> should QA-block
+  3) PASS path: create a simple non-placeholder output (you can allow an admin dev switch to generate “NON_PLACEHOLDER_OUTPUT” for test only) -> should complete with PASS
+Do not implement Prompt 9.
