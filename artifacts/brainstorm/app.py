@@ -855,24 +855,34 @@ def run_ben_qa(study_dict):
         }
 
     if study_type == "synthetic_survey":
-        try:
-            sq = json.loads(study_dict.get("survey_questions") or "[]")
-        except (json.JSONDecodeError, TypeError):
+        raw_sq = study_dict.get("survey_questions") or "[]"
+        if isinstance(raw_sq, str):
+            try:
+                sq = json.loads(raw_sq)
+            except (json.JSONDecodeError, TypeError):
+                sq = []
+        elif isinstance(raw_sq, list):
+            sq = raw_sq
+        else:
             sq = []
+        sq = [q for q in sq if isinstance(q, str) and q.strip()]
         r_count = study_dict.get("respondent_count")
         q_count = study_dict.get("question_count")
         failures = []
-        if len(sq) < 1:
-            failures.append("survey has no questions defined")
-        if len(sq) > 12:
-            failures.append(f"survey has {len(sq)} questions (max 12)")
         if q_count is None or not (1 <= int(q_count) <= 12):
             failures.append(f"question_count invalid ({q_count})")
         if r_count is None or not (1 <= int(r_count) <= 400):
             failures.append(f"respondent_count invalid ({r_count})")
+        if not failures and len(sq) != int(q_count):
+            failures.append(f"survey has {len(sq)} questions but question_count is {q_count}")
+        if len(sq) < 1 and not failures:
+            failures.append("survey has no questions defined")
+        study_id_debug = study_dict.get("id", "?")
         if failures:
+            decision = "FAIL"
+            print(f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision={decision}")
             return {
-                "decision": "FAIL",
+                "decision": decision,
                 "notes": f"QA failed: {'; '.join(failures)}.",
                 "confidence_labels": fail_zero,
             }
@@ -895,6 +905,9 @@ def run_ben_qa(study_dict):
                 "confidence_labels": fail_zero,
             }
 
+    if study_type == "synthetic_survey":
+        study_id_debug = study_dict.get("id", "?")
+
     if "SIMULATED PLACEHOLDER" in output:
         if study_type == "synthetic_survey":
             try:
@@ -902,6 +915,7 @@ def run_ben_qa(study_dict):
                 n_insights = len(parsed.get("questions", []))
             except (json.JSONDecodeError, TypeError):
                 n_insights = 3
+            print(f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision=DOWNGRADE")
         elif study_type == "synthetic_idi":
             n_insights = output.count("--- Interview with")
             if n_insights == 0:
@@ -925,6 +939,7 @@ def run_ben_qa(study_dict):
             n_insights = len(parsed.get("questions", []))
         except (json.JSONDecodeError, TypeError):
             n_insights = 3
+        print(f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision=PASS")
     else:
         n_insights = 3
 
