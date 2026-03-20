@@ -1130,6 +1130,16 @@
             <p style="color: #999; font-size: 13px;">No cost telemetry records yet.</p>
             {% endif %}
         </div>
+
+        <div class="card">
+            <h2>Export Data (CSV)</h2>
+            <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Download full database tables as CSV files.</p>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <a href="/admin/export/studies.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Studies CSV</a>
+                <a href="/admin/export/cost_telemetry.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Cost Telemetry CSV</a>
+                <a href="/admin/export/grounding_traces.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Grounding Traces CSV</a>
+            </div>
+        </div>
     </div>
     {% endif %}
 

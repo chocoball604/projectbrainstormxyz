@@ -62,6 +62,7 @@ Python Flask + SQLite single-page app for AI-Native Market Research.
   - P7: Execute studies with placeholder outputs, branching new research flow, UX fixes
   - P8: Ben QA Gate — PASS/FAIL/DOWNGRADE decisions, confidence labels (Strong/Indicative/Exploratory), qa_blocked status, final_report
   - P9: Cost telemetry + budget ceilings (100K survey, 150K IDI, 300K FG). `cost_telemetry` table. Admin telemetry view.
+  - P10: Admin-only CSV export — 3 routes for studies, cost_telemetry, grounding_traces.
 - **Personas**: Each persona has a unique immutable `persona_instance_id` (e.g. `P-5EB8581A`). Clone creates a new persona. Delete auto-detaches from non-completed studies. Delete blocked if used in completed study.
 - **Grounding Traces**: Recorded on persona creation (and study execution when implemented). Schema follows `grounding_trace.schema.json`. Reason code required when `admin_sources_used_in_output` is false.
 - **Admin Web Sources**: Admin can add/toggle/delete web sources. Active sources set `admin_sources_configured=true` and `admin_sources_queried=true` in grounding traces.

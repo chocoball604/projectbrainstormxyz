@@ -1578,6 +1578,75 @@ def admin_dev_inject_invalid_qual_study():
     return f"DEV ONLY: Created invalid {study_type} study id={study_id} with blank field '{blank_field}'. Use /admin/dev-run-study/{study_id} to test QA."
 
 
+@app.route("/admin/export/studies.csv")
+def admin_export_studies_csv():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    if not is_admin:
+        return "Admin access required.", 403
+    import csv, io
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM studies ORDER BY id").fetchall()
+    cols = [desc[0] for desc in conn.execute("SELECT * FROM studies LIMIT 1").description] if rows else []
+    conn.close()
+    si = io.StringIO()
+    w = csv.writer(si)
+    if cols:
+        w.writerow(cols)
+    for r in rows:
+        w.writerow([r[c] for c in cols])
+    resp = app.make_response(si.getvalue())
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = "attachment; filename=studies.csv"
+    return resp
+
+
+@app.route("/admin/export/cost_telemetry.csv")
+def admin_export_cost_telemetry_csv():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    if not is_admin:
+        return "Admin access required.", 403
+    import csv, io
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM cost_telemetry ORDER BY id").fetchall()
+    cols = [desc[0] for desc in conn.execute("SELECT * FROM cost_telemetry LIMIT 1").description] if rows else []
+    conn.close()
+    si = io.StringIO()
+    w = csv.writer(si)
+    if cols:
+        w.writerow(cols)
+    for r in rows:
+        w.writerow([r[c] for c in cols])
+    resp = app.make_response(si.getvalue())
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = "attachment; filename=cost_telemetry.csv"
+    return resp
+
+
+@app.route("/admin/export/grounding_traces.csv")
+def admin_export_grounding_traces_csv():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    if not is_admin:
+        return "Admin access required.", 403
+    import csv, io
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM grounding_traces ORDER BY id").fetchall()
+    cols = [desc[0] for desc in conn.execute("SELECT * FROM grounding_traces LIMIT 1").description] if rows else []
+    conn.close()
+    si = io.StringIO()
+    w = csv.writer(si)
+    if cols:
+        w.writerow(cols)
+    for r in rows:
+        w.writerow([r[c] for c in cols])
+    resp = app.make_response(si.getvalue())
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = "attachment; filename=grounding_traces.csv"
+    return resp
+
+
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", 5000))
