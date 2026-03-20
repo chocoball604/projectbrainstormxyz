@@ -1,0 +1,58 @@
+DEFENSE-IN-DEPTH QA FIX: Enforce IDI/FG Research Brief anchors in Ben QA (server-side), even if UI already blocks saving.
+
+Why:
+Right now, IDI/FG can’t be saved unless all anchor fields are filled. But if UI changes later, incomplete studies could slip through. Ben QA must still FAIL those.
+
+Scope:
+- Implement ONLY QA validity enforcement + a dev-only way to test it.
+- Do NOT change the user UI flow or add new product features.
+- Do NOT reset/delete the database.
+
+Part A — QA enforcement (IDI/FG anchors)
+In Ben QA logic (run_ben_qa or equivalent), add “hard FAIL validity checks” for IDI/FG:
+
+If study_type == synthetic_idi OR synthetic_focus_group:
+- Require all required IDI/FG anchor fields are present AND non-empty after trimming whitespace:
+  1) Business Problem
+  2) Decision to Support
+  3) Known vs Unknown
+  4) Target Audience
+  5) Study Fit
+  6) Definition of Useful Insight
+
+If any are missing/blank:
+- QA decision = FAIL
+- status = qa_blocked
+- qa_notes must name the missing field(s)
+- Add console log line:
+  QA_DEBUG qual study=<id> missing_anchors=[...] decision=FAIL
+
+Then (optional but fine): keep persona count validity checks too (even if UI blocks):
+- IDI requires 1–3 attached personas
+- Focus Group requires 4–6 attached personas
+If out of range => FAIL (qa_blocked) with clear message.
+
+Part B — How to test (because UI blocks saving invalid IDI/FG)
+Add a DEV-only test mechanism that does NOT change normal UI behavior:
+
+Option 1 (preferred, minimal):
+- Add an admin-only route: /admin/dev-inject-invalid-qual-study
+  - This creates a draft IDI (or FG) study with one anchor field intentionally blank
+  - It should be clearly marked DEV ONLY and only visible to admin users
+  - It should return the created study_id for testing
+
+Option 2 (acceptable if you already have a test runner):
+- Add a small internal function test_ben_qa_invalid_qual() that constructs a fake study object with a missing anchor and prints the QA decision to the console when called from an admin-only button.
+
+Pick ONE option and implement it simply and safely.
+
+Test steps you must provide:
+1) Use the DEV mechanism to create an invalid IDI/FG with missing anchor(s)
+2) Try to run the study -> Ben QA must FAIL -> qa_blocked
+3) Confirm qa_notes shows which anchor was missing
+4) Confirm QA_DEBUG qual line appears in server logs
+
+Deliverables:
+- Files changed
+- Exact test instructions (click-by-click)
+- Example QA_DEBUG log output showing missing anchors and FAIL

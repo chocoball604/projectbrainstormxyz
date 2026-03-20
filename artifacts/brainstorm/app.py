@@ -886,19 +886,39 @@ def run_ben_qa(study_dict):
                 "notes": f"QA failed: {'; '.join(failures)}.",
                 "confidence_labels": fail_zero,
             }
-    elif study_type == "synthetic_idi":
+    elif study_type in ("synthetic_idi", "synthetic_focus_group"):
+        study_id_debug = study_dict.get("id", "?")
+        anchor_fields = {
+            "business_problem": "Business Problem",
+            "decision_to_support": "Decision to Support",
+            "known_vs_unknown": "Known vs Unknown",
+            "target_audience": "Target Audience",
+            "study_fit": "Study Fit",
+            "definition_useful_insight": "Definition of Useful Insight",
+        }
+        missing_anchors = []
+        for field_key, field_label in anchor_fields.items():
+            val = study_dict.get(field_key)
+            if not val or not str(val).strip():
+                missing_anchors.append(field_label)
+        if missing_anchors:
+            print(f"QA_DEBUG qual study={study_id_debug} missing_anchors={missing_anchors} decision=FAIL")
+            return {
+                "decision": "FAIL",
+                "notes": f"QA failed: missing research brief anchors: {', '.join(missing_anchors)}.",
+                "confidence_labels": fail_zero,
+            }
         personas = normalize_personas_used(study_dict.get("personas_used"))
         pc = len(personas)
-        if pc < 1 or pc > 3:
+        if study_type == "synthetic_idi" and (pc < 1 or pc > 3):
+            print(f"QA_DEBUG qual study={study_id_debug} missing_anchors=[] persona_count={pc} decision=FAIL")
             return {
                 "decision": "FAIL",
                 "notes": f"QA failed: IDI requires 1–3 personas, found {pc}.",
                 "confidence_labels": fail_zero,
             }
-    elif study_type == "synthetic_focus_group":
-        personas = normalize_personas_used(study_dict.get("personas_used"))
-        pc = len(personas)
-        if pc < 4 or pc > 6:
+        if study_type == "synthetic_focus_group" and (pc < 4 or pc > 6):
+            print(f"QA_DEBUG qual study={study_id_debug} missing_anchors=[] persona_count={pc} decision=FAIL")
             return {
                 "decision": "FAIL",
                 "notes": f"QA failed: Focus Group requires 4–6 personas, found {pc}.",
@@ -1421,6 +1441,52 @@ def admin_dev_run_study(study_id):
     if user:
         return redirect(url_for("index", token=token, view_output=study_id))
     return f"Study {study_id} executed with QA result: {qa_decision}"
+
+
+@app.route("/admin/dev-inject-invalid-qual-study", methods=["POST"])
+def admin_dev_inject_invalid_qual_study():
+    admin_token = request.form.get("admin_token")
+    if admin_token != os.environ.get("ADMIN_PASSWORD", "admin123"):
+        return render_error("Admin access required.")
+
+    study_type = request.form.get("study_type", "synthetic_idi")
+    blank_field = request.form.get("blank_field", "business_problem")
+
+    if study_type not in ("synthetic_idi", "synthetic_focus_group"):
+        return render_error("Only synthetic_idi or synthetic_focus_group allowed.")
+
+    anchors = {
+        "business_problem": "Test BP",
+        "decision_to_support": "Test DS",
+        "known_vs_unknown": "Test KU",
+        "target_audience": "Test TA",
+        "study_fit": "Test SF",
+        "definition_useful_insight": "Test DUI",
+    }
+    if blank_field in anchors:
+        anchors[blank_field] = ""
+
+    conn = get_db()
+    admin_user = conn.execute("SELECT id FROM users LIMIT 1").fetchone()
+    if not admin_user:
+        conn.close()
+        return render_error("No users in database.")
+
+    conn.execute(
+        """INSERT INTO studies (user_id, title, study_type, status,
+           business_problem, decision_to_support, known_vs_unknown,
+           target_audience, study_fit, definition_useful_insight, personas_used)
+           VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, '[]')""",
+        (admin_user["id"], f"DEV_INVALID_{study_type}_{blank_field}",
+         study_type,
+         anchors["business_problem"], anchors["decision_to_support"],
+         anchors["known_vs_unknown"], anchors["target_audience"],
+         anchors["study_fit"], anchors["definition_useful_insight"]),
+    )
+    conn.commit()
+    study_id = conn.execute("SELECT id FROM studies ORDER BY id DESC LIMIT 1").fetchone()["id"]
+    conn.close()
+    return f"DEV ONLY: Created invalid {study_type} study id={study_id} with blank field '{blank_field}'. Use /admin/dev-run-study/{study_id} to test QA."
 
 
 if __name__ == "__main__":
