@@ -450,7 +450,9 @@ def index():
                     )
                     conn.commit()
                     print(f"Cleaned dangling persona references from study {configure_study['id']}")
-                available_personas = get_user_personas_list(conn, user["id"])
+                all_personas = get_user_personas_list(conn, user["id"])
+                attached_ids = set(cleaned_ids)
+                available_personas = [p for p in all_personas if p["persona_instance_id"] not in attached_ids]
 
         personas_list = get_user_personas_list(conn, user["id"])
 
@@ -978,7 +980,7 @@ def attach_persona(study_id):
     current = normalize_personas_used(study["personas_used"])
     if instance_id in current:
         conn.close()
-        return redirect(url_for("index", token=token, configure=study_id))
+        return render_error("Persona is already attached to this study.")
 
     max_personas = {"synthetic_idi": 3, "synthetic_focus_group": 6}
     limit = max_personas.get(study_type)

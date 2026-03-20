@@ -1,0 +1,45 @@
+SMALL UX FIX ONLY (no new features): In Configure Study (IDI/FG), the “Select persona to attach” dropdown should NOT show personas that are already attached to that study.
+
+Current issue:
+- The dropdown lists all personas, even ones already attached. This confuses users.
+
+Required behavior:
+1) When rendering the dropdown for attaching personas to a study:
+   - Filter out personas whose persona_instance_id is already in the study’s attached personas list (personas_used).
+   - Only show personas that are NOT attached yet.
+
+2) Backend safety (must add even if UI is fixed):
+   - In the /attach-persona/<study_id> route:
+     - If the selected persona_instance_id is already attached, do NOT add it again.
+     - Return a clear message like: “Persona is already attached to this study.”
+
+Constraints:
+- Do NOT change study types, budgets, QA rules, grounding trace logic, or cost telemetry.
+- Do NOT reset/delete the database.
+- Keep token-based sessions working (token must still be included on form submits).
+- Keep it single-page.
+
+Implementation guidance (simple):
+A) In your index() / configure study view logic:
+   - You already compute:
+     - attached_personas (list of persona_instance_id strings)
+     - available_personas (list of all personas for the user)
+   - Create a new list:
+     - attachable_personas = [p for p in available_personas if p.persona_instance_id NOT IN attached_personas]
+   - Pass attachable_personas to the template (instead of available_personas).
+
+B) In templates/index.html:
+   - Build the dropdown from attachable_personas only.
+   - If attachable_personas is empty, show a small message:
+     “All personas are already attached.”
+
+C) Keep the Remove/Detach buttons unchanged.
+
+Deliverables:
+- Tell me what files changed.
+- How to test:
+  1) Create 2 personas.
+  2) Attach both to an IDI study.
+  3) Re-open Configure Study: dropdown should be empty (or show “All personas are already attached”).
+  4) Detach one persona: dropdown should now show that persona again.
+  5) Try attaching the same persona twice by manually repeating the request (or UI): backend must block duplicates.

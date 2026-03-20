@@ -440,6 +440,8 @@
                 </div>
                 <button type="submit" class="btn btn-success btn-small" style="white-space: nowrap;">Attach</button>
             </form>
+            {% elif personas_list %}
+            <p style="color: #999; font-size: 13px;">All personas are already attached.</p>
             {% else %}
             <p style="color: #999; font-size: 13px;">Create personas first to attach them to studies.</p>
             {% endif %}
