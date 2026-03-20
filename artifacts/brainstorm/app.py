@@ -845,37 +845,54 @@ def generate_placeholder_output(study_type, study, persona_names):
 def run_ben_qa(study_dict):
     output = study_dict.get("study_output") or ""
     study_type = study_dict.get("study_type") or ""
+    fail_zero = {"Strong": 0, "Indicative": 0, "Exploratory": 0}
 
     if not output or not study_type:
         return {
             "decision": "FAIL",
             "notes": "Missing required fields: no output or no study_type.",
-            "confidence_labels": {"Strong": 0, "Indicative": 0, "Exploratory": 0},
+            "confidence_labels": fail_zero,
         }
 
     if study_type == "synthetic_survey":
-        sq = json.loads(study_dict.get("survey_questions") or "[]")
+        try:
+            sq = json.loads(study_dict.get("survey_questions") or "[]")
+        except (json.JSONDecodeError, TypeError):
+            sq = []
+        r_count = study_dict.get("respondent_count")
+        q_count = study_dict.get("question_count")
+        failures = []
         if len(sq) < 1:
+            failures.append("survey has no questions defined")
+        if len(sq) > 12:
+            failures.append(f"survey has {len(sq)} questions (max 12)")
+        if q_count is None or not (1 <= int(q_count) <= 12):
+            failures.append(f"question_count invalid ({q_count})")
+        if r_count is None or not (1 <= int(r_count) <= 400):
+            failures.append(f"respondent_count invalid ({r_count})")
+        if failures:
             return {
                 "decision": "FAIL",
-                "notes": "Survey has no questions defined.",
-                "confidence_labels": {"Strong": 0, "Indicative": 0, "Exploratory": 0},
+                "notes": f"QA failed: {'; '.join(failures)}.",
+                "confidence_labels": fail_zero,
             }
     elif study_type == "synthetic_idi":
         personas = normalize_personas_used(study_dict.get("personas_used"))
-        if len(personas) < 1:
+        pc = len(personas)
+        if pc < 1 or pc > 3:
             return {
                 "decision": "FAIL",
-                "notes": "IDI has no attached personas.",
-                "confidence_labels": {"Strong": 0, "Indicative": 0, "Exploratory": 0},
+                "notes": f"QA failed: IDI requires 1–3 personas, found {pc}.",
+                "confidence_labels": fail_zero,
             }
     elif study_type == "synthetic_focus_group":
         personas = normalize_personas_used(study_dict.get("personas_used"))
-        if len(personas) < 4:
+        pc = len(personas)
+        if pc < 4 or pc > 6:
             return {
                 "decision": "FAIL",
-                "notes": f"Focus Group requires at least 4 personas, found {len(personas)}.",
-                "confidence_labels": {"Strong": 0, "Indicative": 0, "Exploratory": 0},
+                "notes": f"QA failed: Focus Group requires 4–6 personas, found {pc}.",
+                "confidence_labels": fail_zero,
             }
 
     if "SIMULATED PLACEHOLDER" in output:
@@ -898,7 +915,7 @@ def run_ben_qa(study_dict):
 
         return {
             "decision": "DOWNGRADE",
-            "notes": "Output contains simulated placeholder data. Confidence downgraded — no insights rated Strong.",
+            "notes": "Output is placeholder; confidence downgraded.",
             "confidence_labels": {"Strong": 0, "Indicative": min(n_insights, 2), "Exploratory": max(0, n_insights - 2)},
         }
 
