@@ -427,6 +427,7 @@ def index():
     clone_source = None
     view_study_output = None
     chat_messages = []
+    chat_save_buttons = []
     mark_recommendation = ""
     mark_recommendation_label = ""
     mark_recommendation_reason = ""
@@ -507,6 +508,8 @@ def index():
                     (configure_study["id"],),
                 ).fetchall()]
 
+                chat_save_buttons = get_save_buttons(configure_study)
+
                 if not configure_study.get("study_type"):
                     bp = configure_study.get("business_problem") or ""
                     ds = configure_study.get("decision_to_support") or ""
@@ -580,6 +583,7 @@ def index():
         mark_recommendation_label=mark_recommendation_label,
         mark_recommendation_reason=mark_recommendation_reason,
         chat_messages=chat_messages,
+        chat_save_buttons=chat_save_buttons,
     )
 
 
@@ -1163,6 +1167,51 @@ def ready_for_qa(study_id):
     return redirect(f"/?token={token}&configure={study_id}")
 
 
+def get_save_buttons(study):
+    st = study["study_type"] or ""
+    buttons = []
+
+    if not st:
+        bp = (study["business_problem"] or "").strip()
+        ds = (study["decision_to_support"] or "").strip()
+        if not bp:
+            buttons.append(("business_problem", "Save as Business Problem"))
+        if not ds:
+            buttons.append(("decision_to_support", "Save as Decision to Support"))
+        return buttons[:2]
+
+    if st == "synthetic_survey":
+        qc = study["question_count"] or 0
+        sq = []
+        if study["survey_questions"]:
+            try:
+                sq = json.loads(study["survey_questions"])
+            except (json.JSONDecodeError, TypeError):
+                sq = []
+        if len(sq) < qc:
+            buttons.append(("survey_question_append", "Save as Survey Question"))
+        return buttons[:1]
+
+    if st in ("synthetic_idi", "synthetic_focus_group"):
+        anchor_fields = [
+            ("business_problem", "Save as Business Problem"),
+            ("decision_to_support", "Save as Decision to Support"),
+            ("known_vs_unknown", "Save as Known vs Unknown"),
+            ("target_audience", "Save as Target Audience"),
+            ("study_fit", "Save as Study Fit"),
+            ("definition_useful_insight", "Save as Definition of Useful Insight"),
+        ]
+        for field, label in anchor_fields:
+            val = (study[field] or "").strip()
+            if not val:
+                buttons.append((field, label))
+                if len(buttons) >= 3:
+                    break
+        return buttons
+
+    return []
+
+
 def get_coaching_nudge(study, persona_count):
     st = study["study_type"] or ""
 
@@ -1214,6 +1263,70 @@ def get_coaching_nudge(study, persona_count):
         return "Everything looks complete! You can click 'Ready for QA Review' in the side panel when you're ready."
 
     return "Thanks for your message! I've noted your input — we'll use this as we shape the study together."
+
+
+@app.route("/save-chat-field/<int:study_id>", methods=["POST"])
+def save_chat_field(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("Unauthorized.")
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Study not found or not in draft status.")
+
+    field = (request.form.get("field") or "").strip()
+    last_user_msg = conn.execute(
+        "SELECT message_text FROM chat_messages WHERE study_id = ? AND sender = 'user' ORDER BY id DESC LIMIT 1",
+        (study_id,),
+    ).fetchone()
+    if not last_user_msg:
+        conn.close()
+        return render_error("No user message to save.")
+    value = last_user_msg["message_text"]
+
+    valid_fields = {"business_problem", "decision_to_support", "known_vs_unknown",
+                    "target_audience", "study_fit", "definition_useful_insight", "survey_question_append"}
+    if field not in valid_fields:
+        conn.close()
+        return render_error("Invalid field.")
+
+    if field == "survey_question_append":
+        sq = []
+        if study["survey_questions"]:
+            try:
+                sq = json.loads(study["survey_questions"])
+            except (json.JSONDecodeError, TypeError):
+                sq = []
+        qc = study["question_count"] or 0
+        if len(sq) >= qc:
+            conn.close()
+            return render_error(f"Already have {len(sq)}/{qc} questions. Cannot add more.")
+        sq.append(value)
+        conn.execute(
+            "UPDATE studies SET survey_questions = ? WHERE id = ?",
+            (json.dumps(sq), study_id),
+        )
+        save_label = f"Survey Question #{len(sq)}"
+    else:
+        conn.execute(
+            f"UPDATE studies SET {field} = ? WHERE id = ?",
+            (value, study_id),
+        )
+        save_label = field.replace("_", " ").title()
+
+    conn.execute(
+        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+        (study_id, f"Saved your message as {save_label}."),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(f"/?token={token}&configure={study_id}")
 
 
 @app.route("/send-chat/<int:study_id>", methods=["POST"])

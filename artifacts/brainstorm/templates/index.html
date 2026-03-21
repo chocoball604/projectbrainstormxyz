@@ -744,6 +744,26 @@
                         <div style="font-size: 11px; color: #999; margin-top: 2px; padding: 0 4px;">
                             {{ msg.sender|capitalize }} &middot; {{ msg.timestamp_utc }}
                         </div>
+                        {% if loop.last and msg.sender == 'mark' and chat_save_buttons %}
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
+                            {% for field_key, btn_label in chat_save_buttons %}
+                            <form action="/save-chat-field/{{ configure_study.id }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <input type="hidden" name="field" value="{{ field_key }}">
+                                <button type="submit" style="
+                                    padding: 5px 12px;
+                                    font-size: 12px;
+                                    border: 1px solid #4361ee;
+                                    background: #fff;
+                                    color: #4361ee;
+                                    border-radius: 16px;
+                                    cursor: pointer;
+                                    white-space: nowrap;
+                                ">{{ btn_label }}</button>
+                            </form>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                     </div>
                     {% endfor %}
                 {% else %}
