@@ -64,6 +64,7 @@ Python Flask + SQLite single-page app for AI-Native Market Research.
   - P9: Cost telemetry + budget ceilings (100K survey, 150K IDI, 300K FG). `cost_telemetry` table. Admin telemetry view.
   - P10: Admin-only CSV export — 3 routes for studies, cost_telemetry, grounding_traces.
   - Flow Change: New Research now offers "Let Mark recommend" (creates TBD study → discovery → recommendation) or "I already know" (existing flow).
+  - Bug Fix: Survey branch now requires entering exactly `question_count` questions via `/save-survey-questions`. IDI/FG branch now requires completing all 6 Research Brief anchors via `/save-remaining-anchors`. Run Study gated on completeness in both UI and server-side.
 - **Personas**: Each persona has a unique immutable `persona_instance_id` (e.g. `P-5EB8581A`). Clone creates a new persona. Delete auto-detaches from non-completed studies. Delete blocked if used in completed study.
 - **Grounding Traces**: Recorded on persona creation (and study execution when implemented). Schema follows `grounding_trace.schema.json`. Reason code required when `admin_sources_used_in_output` is false.
 - **Admin Web Sources**: Admin can add/toggle/delete web sources. Active sources set `admin_sources_configured=true` and `admin_sources_queried=true` in grounding traces.

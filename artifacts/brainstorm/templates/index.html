@@ -423,44 +423,30 @@
 
             {% if configure_study.study_type == 'synthetic_survey' %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Survey Summary</h3>
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Survey Setup</h3>
             <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                Surveys do not use inspectable personas.
+                Surveys do not use inspectable personas. Configure counts, then enter your survey questions.
             </p>
-            <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
-                <p style="margin: 0 0 8px;"><strong>Respondents:</strong> {{ configure_study.respondent_count or 100 }}</p>
-                <p style="margin: 0 0 8px;"><strong>Questions:</strong> {{ configure_study.question_count or 8 }}</p>
-                {% if configure_study.survey_brief_data %}
-                <p style="margin: 8px 0 4px;"><strong>Survey Brief:</strong></p>
-                <ul style="margin: 4px 0 8px 20px; line-height: 1.6;">
-                    {% for k, v in configure_study.survey_brief_data.items() %}
-                    <li><strong>{{ k | replace('_', ' ') | title }}:</strong> {{ v }}</li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-                {% if configure_study.survey_questions_list %}
-                <p style="margin: 8px 0 4px;"><strong>Survey Questions:</strong></p>
-                <ol style="margin: 4px 0 0 20px; line-height: 1.8;">
-                    {% for q in configure_study.survey_questions_list %}
-                    <li>{{ q }}</li>
-                    {% endfor %}
-                </ol>
-                {% endif %}
-            </div>
+
+            {% set sq_list = configure_study.survey_questions_list or [] %}
+            {% set q_count = configure_study.question_count or 8 %}
+            {% set r_count = configure_study.respondent_count or 100 %}
+            {% set survey_questions_ready = (sq_list|length == q_count) and q_count >= 1 %}
+
             <form action="/save-survey-config/{{ configure_study.id }}" method="POST" style="margin-bottom: 16px;">
                 <input type="hidden" name="token" value="{{ token }}">
                 <div style="display: flex; gap: 16px; margin-bottom: 12px;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="respondent-count">Respondent Count (1–400)</label>
                         <input type="number" id="respondent-count" name="respondent_count"
-                               value="{{ configure_study.respondent_count or 100 }}"
+                               value="{{ r_count }}"
                                min="1" max="400" required
                                style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
                     </div>
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label for="question-count">Question Count (1–12)</label>
                         <input type="number" id="question-count" name="question_count"
-                               value="{{ configure_study.question_count or 8 }}"
+                               value="{{ q_count }}"
                                min="1" max="12" required
                                style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
                     </div>
@@ -468,7 +454,106 @@
                 <button type="submit" class="btn btn-primary btn-small">Update Survey Config</button>
             </form>
 
+            {% if sq_list %}
+            <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
+                <p style="margin: 0 0 8px;"><strong>Current Survey Questions ({{ sq_list|length }}/{{ q_count }}):</strong>
+                {% if sq_list|length != q_count %}
+                <span style="color: #e74c3c; font-weight: 600;">Mismatch — need exactly {{ q_count }}</span>
+                {% else %}
+                <span style="color: #27ae60; font-weight: 600;">Complete</span>
+                {% endif %}
+                </p>
+                <ol style="margin: 4px 0 0 20px; line-height: 1.8;">
+                    {% for q in sq_list %}
+                    <li>{{ q }}</li>
+                    {% endfor %}
+                </ol>
+            </div>
+            {% endif %}
+
+            <div style="background: #f0f4ff; border-radius: 8px; padding: 20px; margin-bottom: 16px; border: 1px solid #d0d9f5;">
+                <h4 style="margin: 0 0 12px; font-size: 15px; color: #1a1a2e;">
+                    {% if sq_list %}Update{% else %}Enter{% endif %} Survey Questions ({{ q_count }} required)
+                </h4>
+                <form action="/save-survey-questions/{{ configure_study.id }}" method="POST">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div id="survey-q-builder">
+                        {% for i in range(1, q_count + 1) %}
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label style="font-size: 13px; font-weight: 500;">Question {{ i }}</label>
+                            <input type="text" name="survey_q_{{ i }}" required
+                                   value="{{ sq_list[i-1] if i <= sq_list|length else '' }}"
+                                   placeholder="Enter question {{ i }}"
+                                   style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Save Questions</button>
+                </form>
+            </div>
+
+            {% if configure_study.survey_brief_data %}
+            <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
+                <p style="margin: 0 0 4px;"><strong>Survey Brief:</strong></p>
+                <ul style="margin: 4px 0 0 20px; line-height: 1.6;">
+                    {% for k, v in configure_study.survey_brief_data.items() %}
+                    <li><strong>{{ k | replace('_', ' ') | title }}:</strong> {{ v }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
             {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
+
+            {% set has_ku = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
+            {% set has_ta = configure_study.target_audience and configure_study.target_audience|trim|length > 0 %}
+            {% set has_sf = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
+            {% set has_dui = configure_study.definition_useful_insight and configure_study.definition_useful_insight|trim|length > 0 %}
+            {% set all_anchors_complete = has_ku and has_ta and has_sf and has_dui %}
+
+            {% if not all_anchors_complete %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <div style="background: #fff3cd; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ffc107;">
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Complete Research Brief (Required)</h3>
+                <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
+                    Business Problem and Decision to Support were collected during discovery. Please complete the remaining 4 anchors below.
+                </p>
+                <form action="/save-remaining-anchors/{{ configure_study.id }}" method="POST">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div class="form-group">
+                        <label>3. Known vs Unknown</label>
+                        <textarea name="known_vs_unknown" rows="2" required placeholder="What do you already know, and what remains unknown?">{{ configure_study.known_vs_unknown or '' }}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>4. Target Audience</label>
+                        <textarea name="target_audience" rows="2" required placeholder="Who is the target audience for this research?">{{ configure_study.target_audience or '' }}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>5. Study Fit (why this study + what it cannot answer)</label>
+                        <textarea name="study_fit" rows="2" required placeholder="Why is this study type appropriate? What can it NOT answer?">{{ configure_study.study_fit or '' }}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>6. Definition of Useful Insight</label>
+                        <textarea name="definition_useful_insight" rows="2" required placeholder="What would a useful insight look like for this study?">{{ configure_study.definition_useful_insight or '' }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Remaining Anchors</button>
+                </form>
+            </div>
+            {% else %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <div style="background: #e8f5e9; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
+                <p style="margin: 0; font-weight: 600; color: #27ae60;">Research Brief Complete (all 6 anchors filled)</p>
+                <ul style="margin: 8px 0 0 20px; line-height: 1.6;">
+                    <li><strong>Business Problem:</strong> {{ configure_study.business_problem }}</li>
+                    <li><strong>Decision to Support:</strong> {{ configure_study.decision_to_support }}</li>
+                    <li><strong>Known vs Unknown:</strong> {{ configure_study.known_vs_unknown }}</li>
+                    <li><strong>Target Audience:</strong> {{ configure_study.target_audience }}</li>
+                    <li><strong>Study Fit:</strong> {{ configure_study.study_fit }}</li>
+                    <li><strong>Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}</li>
+                </ul>
+            </div>
+            {% endif %}
+
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Personas</h3>
             {% if configure_study.study_type == 'synthetic_idi' %}
             <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
@@ -530,6 +615,13 @@
             <p style="color: #999; font-size: 13px;">Create personas first to attach them to studies.</p>
             {% endif %}
 
+            {% set persona_count = configure_study_personas|length %}
+            {% if configure_study.study_type == 'synthetic_idi' %}
+                {% set personas_valid = persona_count >= 1 and persona_count <= 3 %}
+            {% else %}
+                {% set personas_valid = persona_count >= 4 and persona_count <= 6 %}
+            {% endif %}
+
             {% else %}
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Personas</h3>
             <p style="font-size: 13px; color: #999;">Select a study type above to configure personas or survey settings.</p>
@@ -538,14 +630,47 @@
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
 
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Run Study</h3>
-            {% if configure_study.study_type %}
-            <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                Execute this study to generate placeholder output. Status will change from "draft" to "in_progress".
-            </p>
-            <form action="/run-study/{{ configure_study.id }}" method="POST">
-                <input type="hidden" name="token" value="{{ token }}">
-                <button type="submit" class="btn btn-success" onclick="return confirm('Run this study? Status will change to in_progress.');">Run Study</button>
-            </form>
+            {% if configure_study.study_type == 'synthetic_survey' %}
+                {% if survey_questions_ready %}
+                <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
+                    Survey is configured and questions are set. Ready to run.
+                </p>
+                <form action="/run-study/{{ configure_study.id }}" method="POST">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <button type="submit" class="btn btn-success" onclick="return confirm('Run this study?');">Run Study</button>
+                </form>
+                {% else %}
+                <p style="color: #e74c3c; font-size: 13px;">
+                    Cannot run yet. You need exactly {{ q_count }} survey question{{ 's' if q_count != 1 else '' }} (currently {{ sq_list|length }}).
+                </p>
+                {% endif %}
+            {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
+                {% if all_anchors_complete and personas_valid %}
+                <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
+                    Research Brief is complete and personas are attached. Ready to run.
+                </p>
+                <form action="/run-study/{{ configure_study.id }}" method="POST">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <button type="submit" class="btn btn-success" onclick="return confirm('Run this study?');">Run Study</button>
+                </form>
+                {% else %}
+                <p style="color: #e74c3c; font-size: 13px;">
+                    Cannot run yet.
+                    {% if not all_anchors_complete %} Complete all 6 Research Brief anchors.{% endif %}
+                    {% if not personas_valid %}
+                        {% if configure_study.study_type == 'synthetic_idi' %}
+                        Attach 1–3 personas (currently {{ configure_study_personas|length }}).
+                        {% else %}
+                        Attach 4–6 personas (currently {{ configure_study_personas|length }}).
+                        {% endif %}
+                    {% endif %}
+                </p>
+                {% endif %}
+            {% elif configure_study.study_type %}
+                <form action="/run-study/{{ configure_study.id }}" method="POST">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <button type="submit" class="btn btn-success" onclick="return confirm('Run this study?');">Run Study</button>
+                </form>
             {% else %}
             <p style="color: #e74c3c; font-size: 13px;">
                 You must select a study type above before running the study.

@@ -1158,26 +1158,39 @@ def run_study(study_id):
             conn.close()
             return render_error("Survey question count must be between 1 and 12.")
         sq = json.loads(study["survey_questions"] or "[]")
-        if len(sq) < 1:
+        if len(sq) != q_count:
             conn.close()
-            return render_error("Survey must have at least 1 question.")
-        if len(sq) > 12:
+            return render_error(f"Survey must have exactly {q_count} questions (currently {len(sq)}). Save your questions first.")
+    elif study_type in ("synthetic_idi", "synthetic_focus_group"):
+        anchor_missing = []
+        for col, label in [
+            ("business_problem", "Business Problem"),
+            ("decision_to_support", "Decision to Support"),
+            ("known_vs_unknown", "Known vs Unknown"),
+            ("target_audience", "Target Audience"),
+            ("study_fit", "Study Fit"),
+            ("definition_useful_insight", "Definition of Useful Insight"),
+        ]:
+            val = (study[col] or "").strip()
+            if not val:
+                anchor_missing.append(label)
+        if anchor_missing:
             conn.close()
-            return render_error("Survey allows max 12 questions.")
-    elif study_type == "synthetic_idi":
-        if persona_count < 1:
-            conn.close()
-            return render_error("IDI requires at least 1 persona.")
-        if persona_count > 3:
-            conn.close()
-            return render_error("IDI allows max 3 personas.")
-    elif study_type == "synthetic_focus_group":
-        if persona_count < 4:
-            conn.close()
-            return render_error("Focus Group requires at least 4 personas.")
-        if persona_count > 6:
-            conn.close()
-            return render_error("Focus Group allows max 6 personas.")
+            return render_error(f"Cannot run: the following Research Brief anchors are missing: {', '.join(anchor_missing)}")
+        if study_type == "synthetic_idi":
+            if persona_count < 1:
+                conn.close()
+                return render_error("IDI requires at least 1 persona.")
+            if persona_count > 3:
+                conn.close()
+                return render_error("IDI allows max 3 personas.")
+        elif study_type == "synthetic_focus_group":
+            if persona_count < 4:
+                conn.close()
+                return render_error("Focus Group requires at least 4 personas.")
+            if persona_count > 6:
+                conn.close()
+                return render_error("Focus Group allows max 6 personas.")
 
     persona_names = []
     for pid in personas_used:
@@ -1291,6 +1304,93 @@ def save_survey_config(study_id):
     conn.execute(
         "UPDATE studies SET respondent_count = ?, question_count = ? WHERE id = ?",
         (r_count, q_count, study_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
+@app.route("/save-survey-questions/<int:study_id>", methods=["POST"])
+def save_survey_questions(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Draft study not found.")
+    if study["study_type"] != "synthetic_survey":
+        conn.close()
+        return render_error("Survey questions only apply to synthetic survey studies.")
+
+    q_count = study["question_count"] or 8
+    questions = []
+    for i in range(1, q_count + 1):
+        q = (request.form.get(f"survey_q_{i}") or "").strip()
+        if q:
+            questions.append(q)
+
+    if len(questions) != q_count:
+        conn.close()
+        return render_error(f"You must provide exactly {q_count} questions (got {len(questions)}).")
+
+    conn.execute(
+        "UPDATE studies SET survey_questions = ? WHERE id = ?",
+        (json.dumps(questions), study_id),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
+@app.route("/save-remaining-anchors/<int:study_id>", methods=["POST"])
+def save_remaining_anchors(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Draft study not found.")
+    if study["study_type"] not in ("synthetic_idi", "synthetic_focus_group"):
+        conn.close()
+        return render_error("Remaining anchors only apply to IDI or Focus Group studies.")
+
+    ku = (request.form.get("known_vs_unknown") or "").strip()
+    ta = (request.form.get("target_audience") or "").strip()
+    sf = (request.form.get("study_fit") or "").strip()
+    dui = (request.form.get("definition_useful_insight") or "").strip()
+
+    missing = []
+    if not ku:
+        missing.append("Known vs Unknown")
+    if not ta:
+        missing.append("Target Audience")
+    if not sf:
+        missing.append("Study Fit")
+    if not dui:
+        missing.append("Definition of Useful Insight")
+
+    if missing:
+        conn.close()
+        return render_error(f"The following anchors are required: {', '.join(missing)}")
+
+    conn.execute(
+        """UPDATE studies SET known_vs_unknown = ?, target_audience = ?,
+           study_fit = ?, definition_useful_insight = ? WHERE id = ?""",
+        (ku, ta, sf, dui, study_id),
     )
     conn.commit()
     conn.close()

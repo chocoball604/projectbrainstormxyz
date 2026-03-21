@@ -1,0 +1,83 @@
+BUG FIX ONLY: New “Mark recommends” flow is missing the branch completion steps for BOTH Survey and IDI/FG.
+
+Symptoms:
+1) If user confirms IDI (or FG) after initial discovery, the app allows attaching personas and then shows Run Study without collecting the remaining Research Brief anchors. Study runs and gets QA_blocked (correct), but Branch B UX is incomplete.
+2) If user confirms Survey after initial discovery, the app lets the user configure respondent_count/question_count but does NOT provide a way to input survey_questions. Run Study then gets blocked (correct), but Branch A UX is incomplete.
+
+Goal (must match [PRD_Mark-PBXYZ_V4.01.docx](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=77cb5263-35f1-46b0-9edb-401caeff8a33&cid=bfec441e4a44d47e&EntityRepresentationId=81d35bc9-6389-46f8-92a7-dccd1d7c91af)):
+- For Survey (Branch A): after choosing Survey, user must configure and ENTER survey questions (survey_questions must equal question_count exactly) before Run Study is available.
+- For IDI/FG (Branch B): after choosing IDI/FG, user must complete the remaining Research Brief anchors to total 6 before Run Study is available.
+
+Strict constraints:
+- Do NOT implement Prompt 11+ chat changes yet.
+- Do NOT change Ben QA logic, grounding traces, telemetry, exports, budgets, or persona system.
+- Do NOT reset/delete the database.
+
+What to implement:
+
+A) UI: Branch completion sections must appear immediately after study_type is set
+1) If study_type == synthetic_survey:
+   - Show Survey Setup section containing:
+     - respondent_count input (already exists)
+     - question_count input (already exists)
+     - Survey Questions builder UI:
+        * shows N slots where N = question_count (or allows adding questions until count reached)
+        * stores survey_questions (list) and enforces EXACT count match
+        * “Save Questions” button persists survey_questions to DB
+   - Hide persona attach UI
+   - Hide/disable Run Study until:
+        respondent_count set,
+        question_count set,
+        len(survey_questions) == question_count
+
+2) If study_type == synthetic_idi OR synthetic_focus_group:
+   - Show “Complete Research Brief (Required)” section containing the remaining anchors not collected in Initial Discovery:
+        * known_vs_unknown
+        * target_audience
+        * study_fit
+        * definition_of_useful_insight
+     (business_problem and decision_to_support were already collected in discovery)
+   - Provide Save button (one save for all 4 is fine)
+   - Keep persona attach UI (with existing persona count constraints)
+   - Hide/disable Run Study until:
+        all 6 anchors present and non-empty (trim whitespace),
+        AND persona count is valid for the selected type
+
+B) Server-side enforcement (defense in depth)
+Even if UI hides the button, enforce in /run-study/<study_id>:
+- If synthetic_survey:
+   * block run if survey_questions missing OR len != question_count
+- If synthetic_idi / synthetic_focus_group:
+   * block run if any required anchor missing/blank
+Return an error listing what is missing.
+
+C) Minimal routes / DB fields
+- Reuse existing study columns if present.
+- If survey_questions storage column already exists, use it.
+- If it does not exist, add a migration adding:
+   survey_questions TEXT (JSON)
+- Add routes if needed:
+   /save-survey-questions/<study_id>
+   /save-remaining-anchors/<study_id>
+(Names are flexible; keep minimal changes.)
+
+Deliverables:
+- Files changed
+- How to test:
+
+Test 1 (Survey branch):
+1) New Research -> Let Mark recommend -> save Business Problem + Decision -> choose Survey
+2) Confirm Survey Questions UI appears
+3) Set question_count=3, enter only 2 questions -> Save -> should show error or keep Run disabled
+4) Enter 3rd question -> Save -> Run becomes available
+5) Run Study succeeds (may DOWNGRADE due to placeholder, but must not be QA_blocked for missing questions)
+
+Test 2 (IDI branch):
+1) New Research -> Let Mark recommend -> save Business Problem + Decision -> choose IDI
+2) Confirm “Complete Research Brief” section appears with remaining 4 anchors
+3) Attach personas
+4) Try Run before filling anchors -> Run should be hidden/disabled; direct POST should be blocked
+5) Fill remaining anchors -> Save -> Run becomes available; run should not be QA_blocked for missing anchors
+
+Test 3 (FG branch):
+Same as IDI, plus persona count constraints remain enforced.
