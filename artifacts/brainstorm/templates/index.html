@@ -269,6 +269,21 @@
 
     {% if user and user.state == 'active' %}
     <div class="section visible" id="section-dashboard">
+
+        {% if not configure_study and not view_study_output %}
+        <div style="background: #f0f4ff; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; border: 1px solid #d0d9f5;">
+            <h3 style="margin: 0 0 8px; font-size: 15px; color: #1a1a2e;">How It Works</h3>
+            <div style="display: flex; gap: 24px; font-size: 13px; color: #555;">
+                <div style="flex: 1;">
+                    <strong style="color: #4361ee;">Step 1:</strong> Click "New Research" to create a draft study with a title and study type.
+                </div>
+                <div style="flex: 1;">
+                    <strong style="color: #4361ee;">Step 2:</strong> Open the draft study to complete setup, configure details, and run your research.
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="card">
             <div class="card-header">
                 <h2>My Studies</h2>
@@ -300,7 +315,7 @@
                         <td>{{ s.created_at }}</td>
                         <td>
                             {% if s.status == 'draft' %}
-                            <a href="/?token={{ token }}&configure={{ s.id }}" class="btn btn-primary btn-small">Configure</a>
+                            <a href="/?token={{ token }}&configure={{ s.id }}" class="btn btn-primary btn-small">Open Study</a>
                             {% endif %}
                             {% if s.status == 'qa_blocked' %}
                             <a href="/?token={{ token }}&view_output={{ s.id }}" class="btn btn-small" style="background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">View QA Report</a>
@@ -314,7 +329,7 @@
             </table>
             {% else %}
             <div class="empty-state">
-                No studies yet. Click "New Research" to create your first study.
+                No studies yet. Click "New Research" to create your first draft study.
             </div>
             {% endif %}
         </div>
@@ -322,7 +337,7 @@
         {% if configure_study %}
         <div class="card" id="configure-study-section">
             <div class="card-header">
-                <h2>Configure Study: {{ configure_study.title }}</h2>
+                <h2>Study Detail: {{ configure_study.title }}</h2>
                 <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
             </div>
 
