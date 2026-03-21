@@ -332,19 +332,93 @@
             </div>
 
             {% if not configure_study.study_type %}
-            <form action="/set-study-type/{{ configure_study.id }}" method="POST">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div class="form-group">
-                    <label for="study-type-select">Study Type</label>
-                    <select id="study-type-select" name="study_type" required style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: #fff;">
-                        <option value="">— Select a type —</option>
-                        <option value="synthetic_survey">Synthetic Survey</option>
-                        <option value="synthetic_idi">Synthetic IDI</option>
-                        <option value="synthetic_focus_group">Synthetic Focus Group</option>
-                    </select>
+
+            {% set bp_saved = configure_study.business_problem and configure_study.business_problem|trim|length > 0 %}
+            {% set ds_saved = configure_study.decision_to_support and configure_study.decision_to_support|trim|length > 0 %}
+
+            <div style="background: #f0f4ff; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #d0d9f5;">
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Mark Discovery</h3>
+                <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
+                    Answer two quick questions so Mark can recommend the best study type.
+                </p>
+
+                <div style="margin-bottom: 16px;">
+                    <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">
+                        1. Business Problem
+                        {% if bp_saved %}<span style="color: #27ae60; font-size: 12px; margin-left: 6px;">Saved</span>{% endif %}
+                    </label>
+                    {% if bp_saved %}
+                    <div style="background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #333;">
+                        {{ configure_study.business_problem }}
+                    </div>
+                    {% else %}
+                    <form action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <input type="hidden" name="field" value="business_problem">
+                        <input type="text" name="value" required placeholder="Describe the business problem in one sentence" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <button type="submit" class="btn btn-primary btn-small">Save</button>
+                    </form>
+                    {% endif %}
                 </div>
-                <button type="submit" class="btn btn-primary">Save Study Type</button>
-            </form>
+
+                <div style="margin-bottom: 4px;">
+                    <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">
+                        2. Decision to Support
+                        {% if ds_saved %}<span style="color: #27ae60; font-size: 12px; margin-left: 6px;">Saved</span>{% endif %}
+                    </label>
+                    {% if ds_saved %}
+                    <div style="background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #333;">
+                        {{ configure_study.decision_to_support }}
+                    </div>
+                    {% else %}
+                    <form action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <input type="hidden" name="field" value="decision_to_support">
+                        <input type="text" name="value" required placeholder="What decision will this research support?" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <button type="submit" class="btn btn-primary btn-small">Save</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if bp_saved and ds_saved %}
+            <div style="background: #e8f5e9; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #c8e6c9;">
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 8px;">Mark's Recommendation</h3>
+                <p style="font-size: 13px; color: #555; margin: 0 0 16px;">
+                    Based on your inputs, Mark recommends: <strong>{{ mark_recommendation_label }}</strong>
+                </p>
+                <p style="font-size: 12px; color: #777; margin: 0 0 16px;">
+                    {{ mark_recommendation_reason }}
+                </p>
+                <p style="font-size: 13px; color: #555; margin: 0 0 12px; font-weight: 600;">
+                    Confirm the study type:
+                </p>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <input type="hidden" name="study_type" value="synthetic_survey">
+                        <button type="submit" class="btn {% if mark_recommendation == 'synthetic_survey' %}btn-success{% else %}btn-secondary{% endif %}">
+                            Use Survey{% if mark_recommendation == 'synthetic_survey' %} (recommended){% endif %}
+                        </button>
+                    </form>
+                    <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <input type="hidden" name="study_type" value="synthetic_idi">
+                        <button type="submit" class="btn {% if mark_recommendation == 'synthetic_idi' %}btn-success{% else %}btn-secondary{% endif %}">
+                            Use IDI{% if mark_recommendation == 'synthetic_idi' %} (recommended){% endif %}
+                        </button>
+                    </form>
+                    <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <input type="hidden" name="study_type" value="synthetic_focus_group">
+                        <button type="submit" class="btn {% if mark_recommendation == 'synthetic_focus_group' %}btn-success{% else %}btn-secondary{% endif %}">
+                            Use Focus Group{% if mark_recommendation == 'synthetic_focus_group' %} (recommended){% endif %}
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
             {% endif %}
 
             {% if configure_study.study_type == 'synthetic_survey' %}
@@ -535,44 +609,82 @@
 
         {% if new_research_step == '1' %}
         <div class="card" id="new-research-section">
-            <h2>New Research</h2>
+            <h2>Start Research</h2>
             <p style="font-size: 14px; color: #777; margin-bottom: 20px;">
-                Choose a study title and type to get started.
+                Choose a study title and how you'd like to pick the study type.
             </p>
             <div class="form-group">
                 <label for="nr-title">Study Title</label>
                 <input type="text" id="nr-title" required>
             </div>
             <div class="form-group">
-                <label for="nr-type-select">Study Type</label>
-                <select id="nr-type-select" required style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: #fff;">
-                    <option value="">— Select a type —</option>
-                    <option value="synthetic_survey">Synthetic Survey</option>
-                    <option value="synthetic_idi">Synthetic IDI</option>
-                    <option value="synthetic_focus_group">Synthetic Focus Group</option>
-                </select>
+                <label>Study Type Selection</label>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 2px solid #4361ee; border-radius: 8px; cursor: pointer; background: #f0f4ff; font-weight: 500;">
+                        <input type="radio" name="nr_mode" value="mark_recommend" checked id="nr-mode-recommend">
+                        Let Mark recommend <span style="font-size: 12px; color: #4361ee; font-weight: 600;">(recommended)</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; font-weight: 500;">
+                        <input type="radio" name="nr_mode" value="choose_myself" id="nr-mode-choose">
+                        I already know the study type
+                    </label>
+                </div>
             </div>
-            <div style="background: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 13px;">
-                <strong>Study Type Limits:</strong>
-                <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
-                    <li><strong>Survey:</strong> max 12 questions, max 400 respondents, no persona dossiers</li>
-                    <li><strong>IDI:</strong> 1–3 personas required</li>
-                    <li><strong>Focus Group:</strong> 4–6 personas required</li>
-                </ul>
+            <div id="nr-type-dropdown" style="display: none;">
+                <div class="form-group">
+                    <label for="nr-type-select">Study Type</label>
+                    <select id="nr-type-select" style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: #fff;">
+                        <option value="">— Select a type —</option>
+                        <option value="synthetic_survey">Synthetic Survey</option>
+                        <option value="synthetic_idi">Synthetic IDI</option>
+                        <option value="synthetic_focus_group">Synthetic Focus Group</option>
+                    </select>
+                </div>
+                <div style="background: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 13px;">
+                    <strong>Study Type Limits:</strong>
+                    <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
+                        <li><strong>Survey:</strong> max 12 questions, max 400 respondents, no persona dossiers</li>
+                        <li><strong>IDI:</strong> 1–3 personas required</li>
+                        <li><strong>Focus Group:</strong> 4–6 personas required</li>
+                    </ul>
+                </div>
             </div>
             <div style="display: flex; gap: 12px; margin-top: 8px;">
                 <button type="button" class="btn btn-primary" id="nr-continue-btn">Continue</button>
                 <a href="/?token={{ token }}" class="btn btn-secondary">Cancel</a>
             </div>
             <script>
-            document.getElementById('nr-continue-btn').addEventListener('click', function() {
-                var title = document.getElementById('nr-title').value.trim();
-                var stype = document.getElementById('nr-type-select').value;
-                if (!title) { alert('Title is required.'); return; }
-                if (!stype) { alert('Please select a study type.'); return; }
-                var url = '/?token={{ token }}&new_research=2&nr_type=' + encodeURIComponent(stype) + '&nr_title=' + encodeURIComponent(title);
-                window.location.href = url;
-            });
+            (function() {
+                var modeRadios = document.querySelectorAll('input[name="nr_mode"]');
+                var dropdown = document.getElementById('nr-type-dropdown');
+                function toggleDropdown() {
+                    var chosen = document.querySelector('input[name="nr_mode"]:checked');
+                    dropdown.style.display = (chosen && chosen.value === 'choose_myself') ? 'block' : 'none';
+                }
+                modeRadios.forEach(function(r) { r.addEventListener('change', toggleDropdown); });
+                toggleDropdown();
+
+                document.getElementById('nr-continue-btn').addEventListener('click', function() {
+                    var title = document.getElementById('nr-title').value.trim();
+                    if (!title) { alert('Title is required.'); return; }
+                    var mode = document.querySelector('input[name="nr_mode"]:checked').value;
+                    if (mode === 'mark_recommend') {
+                        var form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = '/create-study-tbd';
+                        var t = document.createElement('input'); t.type='hidden'; t.name='token'; t.value='{{ token }}';
+                        var ti = document.createElement('input'); ti.type='hidden'; ti.name='title'; ti.value=title;
+                        form.appendChild(t); form.appendChild(ti);
+                        document.body.appendChild(form);
+                        form.submit();
+                    } else {
+                        var stype = document.getElementById('nr-type-select').value;
+                        if (!stype) { alert('Please select a study type.'); return; }
+                        var url = '/?token={{ token }}&new_research=2&nr_type=' + encodeURIComponent(stype) + '&nr_title=' + encodeURIComponent(title);
+                        window.location.href = url;
+                    }
+                });
+            })();
             </script>
         </div>
         {% endif %}

@@ -417,6 +417,9 @@ def index():
     available_personas = []
     clone_source = None
     view_study_output = None
+    mark_recommendation = ""
+    mark_recommendation_label = ""
+    mark_recommendation_reason = ""
     admin_web_sources = []
     grounding_traces = []
     cost_telemetry_rows = []
@@ -489,6 +492,12 @@ def index():
                 attached_ids = set(cleaned_ids)
                 available_personas = [p for p in all_personas if p["persona_instance_id"] not in attached_ids]
 
+                if not configure_study.get("study_type"):
+                    bp = configure_study.get("business_problem") or ""
+                    ds = configure_study.get("decision_to_support") or ""
+                    if bp.strip() and ds.strip():
+                        mark_recommendation, mark_recommendation_label, mark_recommendation_reason = get_mark_recommendation(bp, ds)
+
         personas_list = get_user_personas_list(conn, user["id"])
 
         view_pid = request.args.get("view_persona")
@@ -552,6 +561,9 @@ def index():
         admin_web_sources=admin_web_sources,
         grounding_traces=grounding_traces,
         cost_telemetry_rows=cost_telemetry_rows,
+        mark_recommendation=mark_recommendation,
+        mark_recommendation_label=mark_recommendation_label,
+        mark_recommendation_reason=mark_recommendation_reason,
     )
 
 
@@ -757,6 +769,120 @@ def create_study():
         conn.commit()
         conn.close()
         return redirect(url_for("index", token=token))
+
+
+@app.route("/create-study-tbd", methods=["POST"])
+def create_study_tbd():
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user to create a study.")
+
+    title = (request.form.get("title") or "").strip()
+    if not title:
+        return render_error("Title is required.")
+
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO studies (user_id, title, status, study_type) VALUES (?, ?, 'draft', '')",
+        (user["id"], title),
+    )
+    conn.commit()
+    study_id = conn.execute("SELECT id FROM studies ORDER BY id DESC LIMIT 1").fetchone()["id"]
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
+@app.route("/save-discovery/<int:study_id>", methods=["POST"])
+def save_discovery(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    field = request.form.get("field", "").strip()
+    value = (request.form.get("value") or "").strip()
+
+    if field not in ("business_problem", "decision_to_support"):
+        return render_error("Invalid discovery field.")
+    if not value:
+        return render_error("Value cannot be empty.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Study not found or not in draft status.")
+
+    conn.execute(f"UPDATE studies SET {field} = ? WHERE id = ?", (value, study_id))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
+def get_mark_recommendation(business_problem, decision_to_support):
+    bp = (business_problem or "").lower()
+    ds = (decision_to_support or "").lower()
+    combined = bp + " " + ds
+
+    survey_signals = ["how many", "percentage", "quantif", "measure", "scale", "survey", "poll",
+                      "prevalence", "frequency", "rate", "volume", "count", "trend",
+                      "satisfaction score", "nps", "benchmark", "metric", "statistical"]
+    fg_signals = ["group dynamic", "focus group", "collective", "social", "community",
+                  "consensus", "debate", "discussion", "react to concept", "co-creation",
+                  "brainstorm together", "group reaction", "shared experience"]
+    idi_signals = ["why", "understand", "motivation", "explore", "deep dive", "journey",
+                   "experience", "interview", "personal", "individual", "feeling",
+                   "perception", "narrative", "story", "insight", "qualitative"]
+
+    survey_score = sum(1 for s in survey_signals if s in combined)
+    fg_score = sum(1 for s in fg_signals if s in combined)
+    idi_score = sum(1 for s in idi_signals if s in combined)
+
+    if survey_score > idi_score and survey_score > fg_score:
+        return "synthetic_survey", "Synthetic Survey", "Your inputs suggest quantitative measurement would best address this problem."
+    elif fg_score > idi_score:
+        return "synthetic_focus_group", "Synthetic Focus Group", "Your inputs suggest group dynamics and collective reactions would yield the richest insights."
+    else:
+        return "synthetic_idi", "Synthetic IDI", "Your inputs suggest in-depth individual exploration would best uncover the insights you need."
+
+
+@app.route("/set-mark-recommendation/<int:study_id>", methods=["POST"])
+def set_mark_recommendation(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    study_type = request.form.get("study_type", "").strip()
+    if study_type not in VALID_STUDY_TYPES:
+        return render_error("Invalid study type.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Study not found or not in draft status.")
+
+    if study_type == "synthetic_survey":
+        conn.execute(
+            "UPDATE studies SET study_type = ?, personas_used = '[]' WHERE id = ?",
+            (study_type, study_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE studies SET study_type = ? WHERE id = ?",
+            (study_type, study_id),
+        )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
 
 
 @app.route("/set-study-type/<int:study_id>", methods=["POST"])
@@ -1445,6 +1571,9 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         admin_web_sources=admin_web_sources,
         grounding_traces=grounding_traces,
         cost_telemetry_rows=cost_telemetry_rows,
+        mark_recommendation="",
+        mark_recommendation_label="",
+        mark_recommendation_reason="",
     )
 
 

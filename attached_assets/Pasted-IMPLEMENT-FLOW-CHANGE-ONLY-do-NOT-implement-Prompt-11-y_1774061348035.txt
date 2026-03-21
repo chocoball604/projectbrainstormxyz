@@ -1,0 +1,51 @@
+IMPLEMENT FLOW CHANGE ONLY (do NOT implement Prompt 11+ yet)
+
+Goal:
+Update New Research flow to: Start Research -> Mark short discovery (2 anchors) -> Mark recommends study type -> user confirms -> branch.
+
+Current UI:
+New Research screen asks for Study Title + Study Type, then Continue.
+
+Change requirements (minimal impact):
+
+1) Update the New Research screen:
+- Replace the Study Type dropdown with two options:
+  A) “Let Mark recommend (recommended)” (default)
+  B) “I already know the study type” -> when selected, show the existing dropdown:
+     synthetic_survey / synthetic_idi / synthetic_focus_group
+- Continue should work even if type is “Let Mark recommend”.
+
+2) Study creation on Continue:
+- Create the draft study as usual, but:
+  - If “Let Mark recommend” was chosen, set study_type = NULL / empty / 'tbd'
+  - If “I already know” was chosen, set study_type to the chosen value
+- After creating, automatically open the Study Detail view for that study (the view where we will later add chat in Prompt 12).
+
+3) Study Detail behavior for type 'tbd':
+- If study_type is unset/tbd, show a short “Mark Discovery” section:
+  - Field 1: Business Problem (one sentence)
+  - Field 2: Decision to Support (one sentence)
+  - Save buttons for each
+- After both are saved, show “Mark Recommendation” section:
+  - Mark recommends a type (for now, simple rule-based recommendation is fine)
+  - Show 3 confirm buttons: Use Survey / Use IDI / Use Focus Group
+  - On click, set study_type and refresh the Study Detail page to show the correct branch UI
+
+4) Do NOT change:
+- QA logic, grounding traces, telemetry, exports
+- run-study execution
+- persona system
+
+Deliverables:
+- Files changed
+- How to test:
+
+Test A (Mark recommends):
+1) New Research -> choose “Let Mark recommend” -> Continue
+2) Study opens -> fill Business Problem -> Save
+3) Fill Decision -> Save
+4) Recommendation appears -> click “Use Survey” -> study_type set to survey
+
+Test B (User chooses upfront):
+1) New Research -> choose “I already know” -> select IDI -> Continue
+2) Study opens already typed as IDI
