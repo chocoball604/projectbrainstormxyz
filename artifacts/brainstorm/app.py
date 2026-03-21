@@ -1140,6 +1140,29 @@ def run_ben_qa(study_dict):
     }
 
 
+@app.route("/ready-for-qa/<int:study_id>", methods=["POST"])
+def ready_for_qa(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("Unauthorized.")
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Study not found or not in draft status.")
+    conn.execute(
+        "UPDATE studies SET qa_status = 'pending_review' WHERE id = ?",
+        (study_id,),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(f"/?token={token}&configure={study_id}")
+
+
 @app.route("/send-chat/<int:study_id>", methods=["POST"])
 def send_chat(study_id):
     token = get_token()

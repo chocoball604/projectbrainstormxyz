@@ -335,11 +335,39 @@
         </div>
 
         {% if configure_study %}
-        <div class="card" id="configure-study-section">
-            <div class="card-header">
-                <h2>Study Detail: {{ configure_study.title }}</h2>
-                <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
-            </div>
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h2 style="margin: 0;">Study Detail: {{ configure_study.title }}</h2>
+            <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
+        </div>
+
+        {% set sq_list_panel = configure_study.survey_questions_list or [] %}
+        {% set q_count_panel = configure_study.question_count or 0 %}
+        {% set rc_panel = configure_study.respondent_count or 0 %}
+        {% set has_bp_panel = configure_study.business_problem and configure_study.business_problem|trim|length > 0 %}
+        {% set has_ds_panel = configure_study.decision_to_support and configure_study.decision_to_support|trim|length > 0 %}
+        {% set has_ku_panel = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
+        {% set has_ta_panel = configure_study.target_audience and configure_study.target_audience|trim|length > 0 %}
+        {% set has_sf_panel = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
+        {% set has_dui_panel = configure_study.definition_useful_insight and configure_study.definition_useful_insight|trim|length > 0 %}
+        {% set persona_count_panel = configure_study_personas|length %}
+
+        {% if configure_study.study_type == 'synthetic_survey' %}
+            {% set checklist_complete = rc_panel >= 1 and q_count_panel >= 1 and sq_list_panel|length == q_count_panel %}
+        {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
+            {% set all_anchors_panel = has_bp_panel and has_ds_panel and has_ku_panel and has_ta_panel and has_sf_panel and has_dui_panel %}
+            {% if configure_study.study_type == 'synthetic_idi' %}
+                {% set personas_valid_panel = persona_count_panel >= 1 and persona_count_panel <= 3 %}
+            {% else %}
+                {% set personas_valid_panel = persona_count_panel >= 4 and persona_count_panel <= 6 %}
+            {% endif %}
+            {% set checklist_complete = all_anchors_panel and personas_valid_panel %}
+        {% else %}
+            {% set checklist_complete = false %}
+        {% endif %}
+
+        <div style="display: flex; gap: 20px; align-items: flex-start;">
+
+        <div class="card" id="configure-study-section" style="flex: 1; min-width: 0;">
 
             <div class="info-msg" style="margin-bottom: 16px;">
                 Type: <strong>{{ configure_study.study_type or 'Not set' }}</strong>
@@ -728,6 +756,77 @@
                 <input type="text" name="message_text" required placeholder="Type your message to Mark..." style="flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
                 <button type="submit" class="btn btn-primary" style="white-space: nowrap;">Send</button>
             </form>
+        </div>
+
+        <div id="side-panel-brief" style="width: 300px; flex-shrink: 0; position: sticky; top: 20px;">
+            <div class="card" style="padding: 16px;">
+                <h3 style="font-size: 15px; color: #1a1a2e; margin: 0 0 12px; border-bottom: 2px solid #4361ee; padding-bottom: 8px;">Brief So Far</h3>
+
+                <div style="font-size: 13px; color: #555; margin-bottom: 12px;">
+                    <div style="margin-bottom: 4px;"><strong>Title:</strong> {{ configure_study.title }}</div>
+                    <div style="margin-bottom: 4px;"><strong>Type:</strong> {{ configure_study.study_type or 'Not set' }}</div>
+                    <div><strong>Status:</strong> <span class="badge badge-{{ configure_study.status }}">{{ configure_study.status }}</span></div>
+                </div>
+
+                <h4 style="font-size: 13px; color: #1a1a2e; margin: 16px 0 8px; font-weight: 600;">Required Items</h4>
+
+                {% if configure_study.study_type == 'synthetic_survey' %}
+                <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px;">
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if rc_panel >= 1 else '#e74c3c' }};">
+                        {{ '&#10003;' if rc_panel >= 1 else '&#10007;' }} Respondent count set{% if rc_panel >= 1 %} ({{ rc_panel }}){% endif %}
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if q_count_panel >= 1 else '#e74c3c' }};">
+                        {{ '&#10003;' if q_count_panel >= 1 else '&#10007;' }} Question count set{% if q_count_panel >= 1 %} ({{ q_count_panel }}){% endif %}
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if sq_list_panel|length == q_count_panel and q_count_panel >= 1 else '#e74c3c' }};">
+                        {{ '&#10003;' if sq_list_panel|length == q_count_panel and q_count_panel >= 1 else '&#10007;' }} Survey questions ({{ sq_list_panel|length }}/{{ q_count_panel }})
+                    </li>
+                </ul>
+
+                {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
+                <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px;">
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_bp_panel else '#e74c3c' }};">
+                        {{ '&#10003;' if has_bp_panel else '&#10007;' }} Business Problem
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_ds_panel else '#e74c3c' }};">
+                        {{ '&#10003;' if has_ds_panel else '&#10007;' }} Decision to Support
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_ku_panel else '#e74c3c' }};">
+                        {{ '&#10003;' if has_ku_panel else '&#10007;' }} Known vs Unknown
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_ta_panel else '#e74c3c' }};">
+                        {{ '&#10003;' if has_ta_panel else '&#10007;' }} Target Audience
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_sf_panel else '#e74c3c' }};">
+                        {{ '&#10003;' if has_sf_panel else '&#10007;' }} Study Fit
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_dui_panel else '#e74c3c' }};">
+                        {{ '&#10003;' if has_dui_panel else '&#10007;' }} Definition of Useful Insight
+                    </li>
+                    <li style="padding: 8px 0 4px; border-top: 1px solid #eee; margin-top: 4px;
+                        color: {{ '#27ae60' if personas_valid_panel else '#e74c3c' }};">
+                        {{ '&#10003;' if personas_valid_panel else '&#10007;' }} Personas ({{ persona_count_panel }}/{% if configure_study.study_type == 'synthetic_idi' %}1–3{% else %}4–6{% endif %})
+                    </li>
+                </ul>
+
+                {% else %}
+                <p style="font-size: 13px; color: #999;">Select a study type to see the checklist.</p>
+                {% endif %}
+
+                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #eee;">
+                    {% if checklist_complete %}
+                    <form action="/ready-for-qa/{{ configure_study.id }}" method="POST">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <button type="submit" class="btn btn-success" style="width: 100%; font-size: 13px;">Ready for QA Review</button>
+                    </form>
+                    {% else %}
+                    <button disabled class="btn" style="width: 100%; font-size: 13px; background: #ccc; color: #888; cursor: not-allowed; border: none; padding: 8px 16px; border-radius: 6px;">Ready for QA Review</button>
+                    <p style="font-size: 11px; color: #999; margin: 6px 0 0; text-align: center;">Complete all items above to enable.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
         </div>
         {% endif %}
 
