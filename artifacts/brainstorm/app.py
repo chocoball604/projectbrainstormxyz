@@ -1163,6 +1163,59 @@ def ready_for_qa(study_id):
     return redirect(f"/?token={token}&configure={study_id}")
 
 
+def get_coaching_nudge(study, persona_count):
+    st = study["study_type"] or ""
+
+    if not st:
+        bp = (study["business_problem"] or "").strip()
+        ds = (study["decision_to_support"] or "").strip()
+        if not bp:
+            return "Let's start by defining your Business Problem. What challenge is your business facing that this research should address?"
+        if not ds:
+            return "Great, you've described the business problem. Now, what specific decision do you need this research to support?"
+        return "Both discovery fields are filled! Review Mark's recommendation above and confirm a study type to continue."
+
+    if st == "synthetic_survey":
+        rc = study["respondent_count"] or 0
+        qc = study["question_count"] or 0
+        sq = []
+        if study["survey_questions"]:
+            try:
+                sq = json.loads(study["survey_questions"])
+            except (json.JSONDecodeError, TypeError):
+                sq = []
+        if rc < 1:
+            return "Next up: set your respondent count. How many people should take this survey? (Use the Survey Configuration form above.)"
+        if qc < 1:
+            return "Now set the number of survey questions you'd like to ask. (Use the Survey Configuration form above.)"
+        if len(sq) != qc:
+            return f"You need exactly {qc} survey questions but have {len(sq)} so far. Add or update your questions using the form above."
+        return "Your survey setup looks complete! You can click 'Ready for QA Review' in the side panel when you're ready."
+
+    if st in ("synthetic_idi", "synthetic_focus_group"):
+        anchors = [
+            ("business_problem", "Business Problem", "What business challenge should this research address?"),
+            ("decision_to_support", "Decision to Support", "What specific decision will this research inform?"),
+            ("known_vs_unknown", "Known vs Unknown", "What do you already know, and what remains unknown?"),
+            ("target_audience", "Target Audience", "Who is the target audience for this research?"),
+            ("study_fit", "Study Fit", "Why is this study type appropriate, and what can it NOT answer?"),
+            ("definition_useful_insight", "Definition of Useful Insight", "What would a useful insight look like for this study?"),
+        ]
+        for field, label, prompt in anchors:
+            val = (study[field] or "").strip()
+            if not val:
+                return f"Next missing item: {label}. {prompt} (Fill it in the Research Brief section above.)"
+        if st == "synthetic_idi":
+            if persona_count < 1 or persona_count > 3:
+                return f"You have {persona_count} persona(s) attached. IDI requires 1–3 personas. Attach or remove personas above."
+        else:
+            if persona_count < 4 or persona_count > 6:
+                return f"You have {persona_count} persona(s) attached. Focus Groups require 4–6 personas. Attach or remove personas above."
+        return "Everything looks complete! You can click 'Ready for QA Review' in the side panel when you're ready."
+
+    return "Thanks for your message! I've noted your input — we'll use this as we shape the study together."
+
+
 @app.route("/send-chat/<int:study_id>", methods=["POST"])
 def send_chat(study_id):
     token = get_token()
@@ -1185,10 +1238,21 @@ def send_chat(study_id):
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'user', ?)",
         (study_id, message_text),
     )
-    canned_reply = "Thanks for your message! I'm Mark, your research assistant. I've noted your input — we'll use this as we shape the study together."
+
+    persona_count = 0
+    raw_ids = normalize_personas_used(study["personas_used"])
+    for pid in raw_ids:
+        p_row = conn.execute(
+            "SELECT 1 FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+            (pid, user["id"]),
+        ).fetchone()
+        if p_row:
+            persona_count += 1
+
+    mark_reply = get_coaching_nudge(dict(study), persona_count)
     conn.execute(
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
-        (study_id, canned_reply),
+        (study_id, mark_reply),
     )
     conn.commit()
     conn.close()

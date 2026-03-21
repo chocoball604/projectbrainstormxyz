@@ -68,6 +68,7 @@ Python Flask + SQLite single-page app for AI-Native Market Research.
   - P11: Study Selection Funnel — dashboard shows 2-step guide, "Open Study" replaces "Configure", Study Detail view, no chat on dashboard.
   - P12: Study-scoped chat — `chat_messages` table (id, study_id, sender, message_text, timestamp_utc). Chat thread + input in Study Detail only. Canned Mark reply on each message. `/send-chat/<id>` route.
   - P13: Side panel "Brief So Far" — right-side panel in Study Detail with title/type/status + checklist. Survey: respondent_count, question_count, questions match. IDI/FG: 6 anchors + persona bounds. "Ready for QA Review" button disabled until complete. `/ready-for-qa/<id>` route sets `qa_status=pending_review`.
+  - P14: Mark coaching nudges — `get_coaching_nudge()` returns one nudge per missing item. Survey: respondent_count → question_count → questions match. IDI/FG: anchors one-by-one → personas. TBD: BP → DS. No auto-writing.
 - **Personas**: Each persona has a unique immutable `persona_instance_id` (e.g. `P-5EB8581A`). Clone creates a new persona. Delete auto-detaches from non-completed studies. Delete blocked if used in completed study.
 - **Grounding Traces**: Recorded on persona creation (and study execution when implemented). Schema follows `grounding_trace.schema.json`. Reason code required when `admin_sources_used_in_output` is false.
 - **Admin Web Sources**: Admin can add/toggle/delete web sources. Active sources set `admin_sources_configured=true` and `admin_sources_queried=true` in grounding traces.
