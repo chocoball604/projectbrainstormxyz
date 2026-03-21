@@ -187,6 +187,15 @@ def init_db():
             timestamp_utc        TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            study_id      INTEGER NOT NULL,
+            sender        TEXT NOT NULL,
+            message_text  TEXT NOT NULL,
+            timestamp_utc TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
     migrate_db(conn)
     conn.commit()
     conn.close()
@@ -417,6 +426,7 @@ def index():
     available_personas = []
     clone_source = None
     view_study_output = None
+    chat_messages = []
     mark_recommendation = ""
     mark_recommendation_label = ""
     mark_recommendation_reason = ""
@@ -492,6 +502,11 @@ def index():
                 attached_ids = set(cleaned_ids)
                 available_personas = [p for p in all_personas if p["persona_instance_id"] not in attached_ids]
 
+                chat_messages = [dict(r) for r in conn.execute(
+                    "SELECT * FROM chat_messages WHERE study_id = ? ORDER BY id ASC",
+                    (configure_study["id"],),
+                ).fetchall()]
+
                 if not configure_study.get("study_type"):
                     bp = configure_study.get("business_problem") or ""
                     ds = configure_study.get("decision_to_support") or ""
@@ -564,6 +579,7 @@ def index():
         mark_recommendation=mark_recommendation,
         mark_recommendation_label=mark_recommendation_label,
         mark_recommendation_reason=mark_recommendation_reason,
+        chat_messages=chat_messages,
     )
 
 
@@ -1122,6 +1138,38 @@ def run_ben_qa(study_dict):
         "notes": "All checks passed. Output meets quality standards.",
         "confidence_labels": {"Strong": max(1, n_insights // 2), "Indicative": n_insights - max(1, n_insights // 2), "Exploratory": 0},
     }
+
+
+@app.route("/send-chat/<int:study_id>", methods=["POST"])
+def send_chat(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("Unauthorized.")
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Study not found.")
+    message_text = (request.form.get("message_text") or "").strip()
+    if not message_text:
+        conn.close()
+        return redirect(f"/?token={token}&configure={study_id}")
+    conn.execute(
+        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'user', ?)",
+        (study_id, message_text),
+    )
+    canned_reply = "Thanks for your message! I'm Mark, your research assistant. I've noted your input — we'll use this as we shape the study together."
+    conn.execute(
+        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+        (study_id, canned_reply),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(f"/?token={token}&configure={study_id}")
 
 
 @app.route("/run-study/<int:study_id>", methods=["POST"])
