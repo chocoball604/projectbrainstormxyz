@@ -728,6 +728,58 @@
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
 
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Uploads (Grounding Documents)</h3>
+            <p style="font-size: 12px; color: #888; margin-bottom: 10px;">
+                Upload documents to improve grounding. Allowed: {{ upload_allowed_extensions }}. Max {{ upload_max_file_size_mb }}MB per file, {{ upload_max_files }} files, {{ upload_max_total_mb }}MB total per study.
+            </p>
+
+            {% if study_uploads %}
+            <table style="margin-bottom: 12px; font-size: 13px;">
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Type</th>
+                        <th>Size</th>
+                        <th>Uploaded</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for up in study_uploads %}
+                    <tr>
+                        <td>{{ up.filename }}</td>
+                        <td><code>{{ up.file_type }}</code></td>
+                        <td>{{ (up.file_size_bytes / 1024)|round(1) }} KB</td>
+                        <td style="font-size: 12px;">{{ up.uploaded_at }}</td>
+                        <td>
+                            <form action="/delete-study-file/{{ up.id }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Delete this file?');">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p style="font-size: 12px; color: #888; margin-bottom: 8px;">
+                {{ study_uploads|length }} of {{ upload_max_files }} files &middot; {{ (study_uploads_total_size / 1024)|round(1) }} KB of {{ upload_max_total_mb }} MB used
+            </p>
+            {% else %}
+            <p style="font-size: 13px; color: #999; margin-bottom: 8px;">No files uploaded yet.</p>
+            {% endif %}
+
+            {% if study_uploads|length < upload_max_files %}
+            <form action="/upload-study-file/{{ configure_study.id }}" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end; margin-bottom: 8px;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <input type="file" name="file" required style="font-size: 13px;">
+                <button type="submit" class="btn btn-primary btn-small">Upload</button>
+            </form>
+            {% else %}
+            <p style="font-size: 12px; color: #dc3545; font-weight: 600;">File limit reached ({{ upload_max_files }} files).</p>
+            {% endif %}
+
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Run Study</h3>
             {% if configure_study.qa_status == 'precheck_passed' %}
                 <p style="font-size: 13px; color: #27ae60; margin-bottom: 12px; font-weight: 600;">
@@ -1641,6 +1693,62 @@
                     </div>
                 </div>
                 <button type="submit" class="btn btn-success">Add Source</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Global Documents (Admin Uploads)</h2>
+            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
+                Upload global grounding documents. Active documents are included in all study reports. Allowed: {{ upload_allowed_extensions }}. Max {{ upload_max_file_size_mb }}MB per file.
+            </p>
+
+            {% if admin_uploads_list %}
+            <table style="margin-bottom: 20px; font-size: 13px;">
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Type</th>
+                        <th>Size</th>
+                        <th>Uploaded</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for au in admin_uploads_list %}
+                    <tr>
+                        <td>{{ au.filename }}</td>
+                        <td><code>{{ au.file_type }}</code></td>
+                        <td>{{ (au.file_size_bytes / 1024)|round(1) }} KB</td>
+                        <td style="font-size: 12px;">{{ au.uploaded_at }}</td>
+                        <td>
+                            <span class="badge badge-{{ 'active' if au.status == 'active' else 'disabled' }}">{{ au.status }}</span>
+                        </td>
+                        <td>
+                            <form action="/admin/toggle-upload/{{ au.id }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-primary btn-small">
+                                    {{ 'Disable' if au.status == 'active' else 'Enable' }}
+                                </button>
+                            </form>
+                            <form action="/admin/delete-upload/{{ au.id }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Delete this upload?');">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No global documents uploaded yet.</p>
+            {% endif %}
+
+            <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Upload New Document</h3>
+            <form action="/admin/upload-document" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <input type="file" name="file" required style="font-size: 13px;">
+                <button type="submit" class="btn btn-success">Upload</button>
             </form>
         </div>
 

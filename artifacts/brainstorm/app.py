@@ -53,6 +53,15 @@ VALID_STUDY_TYPES = ["synthetic_survey", "synthetic_idi", "synthetic_focus_group
 BILLABLE_STATUSES = ("completed", "qa_blocked", "terminated_system", "terminated_user")
 FREE_TIER_MONTHLY_LIMIT = 6
 
+UPLOAD_MAX_FILES_PER_STUDY = 10
+UPLOAD_MAX_FILE_SIZE = 1 * 1024 * 1024
+UPLOAD_MAX_TOTAL_PER_STUDY = 10 * 1024 * 1024
+UPLOAD_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "csv", "png", "jpg", "jpeg"}
+USER_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "user")
+ADMIN_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "admin")
+os.makedirs(USER_UPLOADS_DIR, exist_ok=True)
+os.makedirs(ADMIN_UPLOADS_DIR, exist_ok=True)
+
 
 def get_monthly_usage(conn, user_id):
     import calendar
@@ -229,6 +238,31 @@ def init_db():
             qa_notes            TEXT,
             timestamp_utc       TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE(study_id, followup_round)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_uploads (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            study_id        INTEGER NOT NULL,
+            filename        TEXT    NOT NULL,
+            file_type       TEXT    NOT NULL,
+            file_size_bytes INTEGER NOT NULL,
+            storage_path    TEXT    NOT NULL,
+            uploaded_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (study_id) REFERENCES studies(id)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS admin_uploads (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename        TEXT    NOT NULL,
+            file_type       TEXT    NOT NULL,
+            file_size_bytes INTEGER NOT NULL,
+            storage_path    TEXT    NOT NULL,
+            uploaded_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+            status          TEXT    NOT NULL DEFAULT 'active'
         )
     """)
     migrate_db(conn)
@@ -478,6 +512,8 @@ def index():
     configure_study_personas = []
     available_personas = []
     clone_source = None
+    study_uploads = []
+    study_uploads_total_size = 0
     view_study_output = None
     chat_messages = []
     chat_save_buttons = []
@@ -487,6 +523,7 @@ def index():
     admin_web_sources = []
     grounding_traces = []
     cost_telemetry_rows = []
+    admin_uploads_list = []
 
     if is_admin:
         conn = get_db()
@@ -502,6 +539,9 @@ def index():
         ).fetchall()]
         cost_telemetry_rows = [dict(r) for r in conn.execute(
             "SELECT * FROM cost_telemetry ORDER BY id DESC LIMIT 50"
+        ).fetchall()]
+        admin_uploads_list = [dict(r) for r in conn.execute(
+            "SELECT * FROM admin_uploads ORDER BY uploaded_at DESC"
         ).fetchall()]
         conn.close()
 
@@ -611,6 +651,12 @@ def index():
 
                 chat_save_buttons = get_save_buttons(configure_study)
 
+                study_uploads = [dict(r) for r in conn.execute(
+                    "SELECT * FROM user_uploads WHERE study_id = ? AND user_id = ? ORDER BY uploaded_at ASC",
+                    (configure_study["id"], user["id"]),
+                ).fetchall()]
+                study_uploads_total_size = sum(u["file_size_bytes"] for u in study_uploads)
+
                 if not configure_study.get("study_type"):
                     bp = configure_study.get("business_problem") or ""
                     ds = configure_study.get("decision_to_support") or ""
@@ -684,10 +730,19 @@ def index():
                 view_study_output["followup_count"] = len(followup_rows)
                 report_version = request.args.get("report_version")
                 report_version = int(report_version) if report_version and report_version.isdigit() else None
+                upload_names = [r["filename"] for r in conn.execute(
+                    "SELECT filename FROM user_uploads WHERE study_id = ? AND user_id = ?",
+                    (view_study_output["id"], user["id"]),
+                ).fetchall()]
+                active_admin_names = [r["filename"] for r in conn.execute(
+                    "SELECT filename FROM admin_uploads WHERE status = 'active'"
+                ).fetchall()]
+                all_upload_names = upload_names + active_admin_names
                 view_study_output["report_sections"] = build_structured_report(
                     view_study_output,
                     followups=view_study_output["followups"],
                     version=report_version,
+                    uploaded_filenames=all_upload_names,
                 )
 
         conn.close()
@@ -735,6 +790,13 @@ def index():
         usage_limit_reached=usage_limit_reached,
         usage_window_start=usage_window_start,
         usage_window_end=usage_window_end,
+        study_uploads=study_uploads,
+        study_uploads_total_size=study_uploads_total_size,
+        upload_max_files=UPLOAD_MAX_FILES_PER_STUDY,
+        upload_max_file_size_mb=UPLOAD_MAX_FILE_SIZE // (1024 * 1024),
+        upload_max_total_mb=UPLOAD_MAX_TOTAL_PER_STUDY // (1024 * 1024),
+        upload_allowed_extensions=", ".join(sorted(UPLOAD_ALLOWED_EXTENSIONS)),
+        admin_uploads_list=admin_uploads_list,
     )
 
 
@@ -976,6 +1038,176 @@ def create_study_tbd():
     return redirect(url_for("index", token=token, configure=study_id))
 
 
+def _allowed_upload(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in UPLOAD_ALLOWED_EXTENSIONS
+
+
+@app.route("/upload-study-file/<int:study_id>", methods=["POST"])
+def upload_study_file(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT id FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Study not found or not in draft status.")
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        conn.close()
+        return render_error("No file selected.")
+
+    if not _allowed_upload(f.filename):
+        conn.close()
+        ext = f.filename.rsplit(".", 1)[-1] if "." in f.filename else "(none)"
+        return render_error(f"File type '.{ext}' is not allowed. Allowed types: {', '.join(sorted(UPLOAD_ALLOWED_EXTENSIONS))}.")
+
+    file_data = f.read()
+    file_size = len(file_data)
+
+    if file_size > UPLOAD_MAX_FILE_SIZE:
+        conn.close()
+        return render_error(f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024*1024)}MB size limit.")
+
+    existing = conn.execute(
+        "SELECT COUNT(*) as cnt, COALESCE(SUM(file_size_bytes), 0) as total FROM user_uploads WHERE study_id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+
+    if existing["cnt"] >= UPLOAD_MAX_FILES_PER_STUDY:
+        conn.close()
+        return render_error(f"Maximum {UPLOAD_MAX_FILES_PER_STUDY} files per study reached.")
+
+    if existing["total"] + file_size > UPLOAD_MAX_TOTAL_PER_STUDY:
+        conn.close()
+        return render_error(f"Total upload size would exceed {UPLOAD_MAX_TOTAL_PER_STUDY // (1024*1024)}MB limit for this study.")
+
+    import uuid
+    safe_name = f"{uuid.uuid4().hex}_{f.filename}"
+    storage_path = os.path.join(USER_UPLOADS_DIR, safe_name)
+    with open(storage_path, "wb") as out:
+        out.write(file_data)
+
+    ext = f.filename.rsplit(".", 1)[1].lower()
+    conn.execute(
+        "INSERT INTO user_uploads (user_id, study_id, filename, file_type, file_size_bytes, storage_path) VALUES (?, ?, ?, ?, ?, ?)",
+        (user["id"], study_id, f.filename, ext, file_size, storage_path),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
+@app.route("/delete-study-file/<int:upload_id>", methods=["POST"])
+def delete_study_file(upload_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    upload = conn.execute(
+        "SELECT * FROM user_uploads WHERE id = ? AND user_id = ?",
+        (upload_id, user["id"]),
+    ).fetchone()
+    if not upload:
+        conn.close()
+        return render_error("Upload not found.")
+
+    study_id = upload["study_id"]
+    if os.path.exists(upload["storage_path"]):
+        os.remove(upload["storage_path"])
+    conn.execute("DELETE FROM user_uploads WHERE id = ?", (upload_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
+@app.route("/admin/upload-document", methods=["POST"])
+def admin_upload_document():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return render_error("No file selected.")
+
+    if not _allowed_upload(f.filename):
+        ext = f.filename.rsplit(".", 1)[-1] if "." in f.filename else "(none)"
+        return render_error(f"File type '.{ext}' is not allowed. Allowed types: {', '.join(sorted(UPLOAD_ALLOWED_EXTENSIONS))}.")
+
+    file_data = f.read()
+    file_size = len(file_data)
+
+    if file_size > UPLOAD_MAX_FILE_SIZE:
+        return render_error(f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024*1024)}MB size limit.")
+
+    import uuid
+    safe_name = f"{uuid.uuid4().hex}_{f.filename}"
+    storage_path = os.path.join(ADMIN_UPLOADS_DIR, safe_name)
+    with open(storage_path, "wb") as out:
+        out.write(file_data)
+
+    ext = f.filename.rsplit(".", 1)[1].lower()
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO admin_uploads (filename, file_type, file_size_bytes, storage_path) VALUES (?, ?, ?, ?)",
+        (f.filename, ext, file_size, storage_path),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/toggle-upload/<int:upload_id>", methods=["POST"])
+def admin_toggle_upload(upload_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    conn = get_db()
+    upload = conn.execute("SELECT * FROM admin_uploads WHERE id = ?", (upload_id,)).fetchone()
+    if not upload:
+        conn.close()
+        return render_error("Upload not found.")
+
+    new_status = "disabled" if upload["status"] == "active" else "active"
+    conn.execute("UPDATE admin_uploads SET status = ? WHERE id = ?", (new_status, upload_id))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/delete-upload/<int:upload_id>", methods=["POST"])
+def admin_delete_upload(upload_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    conn = get_db()
+    upload = conn.execute("SELECT * FROM admin_uploads WHERE id = ?", (upload_id,)).fetchone()
+    if not upload:
+        conn.close()
+        return render_error("Upload not found.")
+
+    if os.path.exists(upload["storage_path"]):
+        os.remove(upload["storage_path"])
+    conn.execute("DELETE FROM admin_uploads WHERE id = ?", (upload_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
 @app.route("/save-discovery/<int:study_id>", methods=["POST"])
 def save_discovery(study_id):
     token = get_token()
@@ -1123,9 +1355,11 @@ ANCHOR_FIELDS = [
 ]
 
 
-def build_structured_report(study, followups=None, version=None):
+def build_structured_report(study, followups=None, version=None, uploaded_filenames=None):
     if followups is None:
         followups = []
+    if uploaded_filenames is None:
+        uploaded_filenames = []
     max_version = 1 + len(followups)
     if version is None:
         version = max_version
@@ -1262,6 +1496,11 @@ def build_structured_report(study, followups=None, version=None):
                 source_lines.append(f"Personas Used: {', '.join(pids)}")
         except (json.JSONDecodeError, TypeError):
             pass
+    if uploaded_filenames:
+        source_lines.append("")
+        source_lines.append("Uploaded Documents:")
+        for uf in uploaded_filenames:
+            source_lines.append(f"  - {uf}")
     source_lines.append("")
     source_lines.append("Note: Real citations will be populated when live AI model integration is enabled.")
     sections["sources_citations"] = "\n".join(source_lines)
@@ -1781,12 +2020,19 @@ def download_pdf(study_id):
         "SELECT * FROM followups WHERE study_id = ? ORDER BY followup_round ASC",
         (study_id,),
     ).fetchall()
+    upload_names = [r["filename"] for r in conn.execute(
+        "SELECT filename FROM user_uploads WHERE study_id = ?", (study_id,)
+    ).fetchall()]
+    active_admin_names = [r["filename"] for r in conn.execute(
+        "SELECT filename FROM admin_uploads WHERE status = 'active'"
+    ).fetchall()]
     conn.close()
+    all_upload_names = upload_names + active_admin_names
     followups = [dict(f) for f in followup_rows]
     study_dict = dict(study)
     version_param = request.args.get("version")
     version = int(version_param) if version_param and version_param.isdigit() else None
-    sections = build_structured_report(study_dict, followups=followups, version=version)
+    sections = build_structured_report(study_dict, followups=followups, version=version, uploaded_filenames=all_upload_names)
     pdf_bytes = generate_report_pdf(study_dict, sections)
     report_version = sections.get("version", 1)
     safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in (study_dict.get("title") or f"study_{study_id}")).strip().replace(" ", "_")
@@ -2662,6 +2908,13 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         usage_limit_reached=False,
         usage_window_start="",
         usage_window_end="",
+        study_uploads=[],
+        study_uploads_total_size=0,
+        upload_max_files=UPLOAD_MAX_FILES_PER_STUDY,
+        upload_max_file_size_mb=UPLOAD_MAX_FILE_SIZE // (1024 * 1024),
+        upload_max_total_mb=UPLOAD_MAX_TOTAL_PER_STUDY // (1024 * 1024),
+        upload_allowed_extensions=", ".join(sorted(UPLOAD_ALLOWED_EXTENSIONS)),
+        admin_uploads_list=[],
     )
 
 
