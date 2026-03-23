@@ -487,12 +487,45 @@ def index():
         ).fetchall()]
         conn.close()
 
+    studies_page = 1
+    studies_q = ""
+    studies_total_pages = 1
+    studies_total = 0
+    personas_page = 1
+    personas_q = ""
+    personas_total_pages = 1
+    personas_total = 0
+    PAGE_SIZE = 10
+
     if user and user["state"] == "active":
         conn = get_db()
-        studies = [dict(r) for r in conn.execute(
-            "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? ORDER BY created_at DESC",
-            (user["id"],),
-        ).fetchall()]
+
+        studies_page = max(1, int(request.args.get("studies_page", "1") or "1"))
+        studies_q = (request.args.get("studies_q") or "").strip()
+        if studies_q:
+            studies_total = conn.execute(
+                "SELECT COUNT(*) FROM studies WHERE user_id = ? AND title LIKE ?",
+                (user["id"], f"%{studies_q}%"),
+            ).fetchone()[0]
+        else:
+            studies_total = conn.execute(
+                "SELECT COUNT(*) FROM studies WHERE user_id = ?",
+                (user["id"],),
+            ).fetchone()[0]
+        studies_total_pages = max(1, (studies_total + PAGE_SIZE - 1) // PAGE_SIZE)
+        studies_page = min(studies_page, studies_total_pages)
+        s_offset = (studies_page - 1) * PAGE_SIZE
+        if studies_q:
+            studies = [dict(r) for r in conn.execute(
+                "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (user["id"], f"%{studies_q}%", PAGE_SIZE, s_offset),
+            ).fetchall()]
+        else:
+            studies = [dict(r) for r in conn.execute(
+                "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (user["id"], PAGE_SIZE, s_offset),
+            ).fetchall()]
+
         configure_id = request.args.get("configure")
         if configure_id:
             row = conn.execute(
@@ -558,7 +591,31 @@ def index():
                     if bp.strip() and ds.strip():
                         mark_recommendation, mark_recommendation_label, mark_recommendation_reason = get_mark_recommendation(bp, ds)
 
-        personas_list = get_user_personas_list(conn, user["id"])
+        personas_page = max(1, int(request.args.get("personas_page", "1") or "1"))
+        personas_q = (request.args.get("personas_q") or "").strip()
+        if personas_q:
+            personas_total = conn.execute(
+                "SELECT COUNT(*) FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?)",
+                (user["id"], f"%{personas_q}%", f"%{personas_q}%"),
+            ).fetchone()[0]
+        else:
+            personas_total = conn.execute(
+                "SELECT COUNT(*) FROM personas WHERE user_id = ?",
+                (user["id"],),
+            ).fetchone()[0]
+        personas_total_pages = max(1, (personas_total + PAGE_SIZE - 1) // PAGE_SIZE)
+        personas_page = min(personas_page, personas_total_pages)
+        p_offset = (personas_page - 1) * PAGE_SIZE
+        if personas_q:
+            personas_list = [dict(r) for r in conn.execute(
+                "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
+                (user["id"], f"%{personas_q}%", f"%{personas_q}%", PAGE_SIZE, p_offset),
+            ).fetchall()]
+        else:
+            personas_list = [dict(r) for r in conn.execute(
+                "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                (user["id"], PAGE_SIZE, p_offset),
+            ).fetchall()]
 
         view_pid = request.args.get("view_persona")
         if view_pid:
@@ -593,13 +650,19 @@ def index():
                         view_study_output["confidence_parsed"] = None
                 else:
                     view_study_output["confidence_parsed"] = None
-                view_study_output["report_sections"] = build_structured_report(view_study_output)
                 followup_rows = conn.execute(
                     "SELECT * FROM followups WHERE study_id = ? ORDER BY followup_round ASC",
                     (view_study_output["id"],),
                 ).fetchall()
                 view_study_output["followups"] = [dict(f) for f in followup_rows]
                 view_study_output["followup_count"] = len(followup_rows)
+                report_version = request.args.get("report_version")
+                report_version = int(report_version) if report_version and report_version.isdigit() else None
+                view_study_output["report_sections"] = build_structured_report(
+                    view_study_output,
+                    followups=view_study_output["followups"],
+                    version=report_version,
+                )
 
         conn.close()
 
@@ -633,6 +696,14 @@ def index():
         mark_recommendation_reason=mark_recommendation_reason,
         chat_messages=chat_messages,
         chat_save_buttons=chat_save_buttons,
+        studies_page=studies_page,
+        studies_q=studies_q,
+        studies_total_pages=studies_total_pages,
+        studies_total=studies_total,
+        personas_page=personas_page,
+        personas_q=personas_q,
+        personas_total_pages=personas_total_pages,
+        personas_total=personas_total,
     )
 
 
@@ -1009,7 +1080,14 @@ ANCHOR_FIELDS = [
 ]
 
 
-def build_structured_report(study):
+def build_structured_report(study, followups=None, version=None):
+    if followups is None:
+        followups = []
+    max_version = 1 + len(followups)
+    if version is None:
+        version = max_version
+    version = max(1, min(version, max_version))
+
     title = study.get("title") or "Untitled Study"
     st = study.get("study_type") or "Unknown"
     st_label = STUDY_TYPE_LABELS.get(st, st)
@@ -1145,6 +1223,28 @@ def build_structured_report(study):
     source_lines.append("Note: Real citations will be populated when live AI model integration is enabled.")
     sections["sources_citations"] = "\n".join(source_lines)
 
+    sections["followup_sections"] = []
+    for fu in followups:
+        if fu.get("followup_round", 0) > version - 1:
+            break
+        fu_lines = []
+        fu_lines.append(f"Question: {fu.get('user_question', '')}")
+        fu_lines.append("")
+        fu_qa = fu.get("qa_status", "")
+        if fu_qa == "fail":
+            fu_lines.append(f"[QA BLOCKED] {fu.get('qa_notes', '')}")
+        else:
+            if fu_qa == "downgrade":
+                fu_lines.append(f"[QA DOWNGRADE] {fu.get('qa_notes', '')}")
+            fu_lines.append(fu.get("generated_output", ""))
+        sections["followup_sections"].append({
+            "round": fu["followup_round"],
+            "content": "\n".join(fu_lines),
+        })
+
+    sections["version"] = version
+    sections["max_version"] = max_version
+
     return sections
 
 
@@ -1256,9 +1356,28 @@ def _pdf_write_text(pdf, text, size, style="", cjk_available=True, method="cell"
                  fill=kwargs.get("fill", False))
 
 
+DISCLAIMER_TEXT = (
+    "Disclaimer\n"
+    "This output was generated by an experimental AI-powered simulation system. "
+    "All personas, behaviours, and insights are synthetic and do not represent real "
+    "individuals or guaranteed real-world outcomes. Results are provided for exploratory "
+    "purposes only and should not be relied upon as professional, legal, financial, or "
+    "investment advice."
+)
+
+
+class BrainstormPDF(FPDF):
+    def footer(self):
+        self.set_y(-35)
+        self.set_font("Helvetica", "I", 7)
+        self.set_text_color(130, 130, 130)
+        self.multi_cell(0, 3, DISCLAIMER_TEXT, align="C")
+        self.set_text_color(0, 0, 0)
+
+
 def generate_report_pdf(study, sections):
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf = BrainstormPDF()
+    pdf.set_auto_page_break(auto=True, margin=38)
     pdf.add_page()
 
     cjk_ok = _register_cjk_fonts(pdf)
@@ -1296,12 +1415,15 @@ def generate_report_pdf(study, sections):
         _pdf_write_text(pdf, content, 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5)
         pdf.ln(4)
 
-    pdf.ln(6)
-    pdf.set_font("Helvetica", "I", 9)
-    pdf.set_text_color(120, 120, 120)
-    pdf.multi_cell(0, 4, "Disclaimer: This report contains experimental, AI-generated synthetic research output. "
-                         "It is intended for development and testing purposes only. Do not base real business "
-                         "decisions on this data without independent validation through traditional research methods.")
+    fu_sections = sections.get("followup_sections", [])
+    for fus in fu_sections:
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_fill_color(240, 240, 240)
+        heading = f"{5 + fus['round']}. Follow-up Round {fus['round']}"
+        pdf.cell(0, 8, heading, new_x="LMARGIN", new_y="NEXT", fill=True)
+        pdf.ln(2)
+        _pdf_write_text(pdf, fus["content"], 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5)
+        pdf.ln(4)
 
     return pdf.output()
 
@@ -1606,13 +1728,22 @@ def download_pdf(study_id):
         "SELECT * FROM studies WHERE id = ? AND user_id = ?",
         (study_id, user["id"]),
     ).fetchone()
-    conn.close()
     if not study:
+        conn.close()
         return render_error("Study not found.")
     if study["status"] not in ("completed", "qa_blocked", "terminated_system"):
+        conn.close()
         return render_error("Report is only available for completed or reviewed studies.")
+    followup_rows = conn.execute(
+        "SELECT * FROM followups WHERE study_id = ? ORDER BY followup_round ASC",
+        (study_id,),
+    ).fetchall()
+    conn.close()
+    followups = [dict(f) for f in followup_rows]
     study_dict = dict(study)
-    sections = build_structured_report(study_dict)
+    version_param = request.args.get("version")
+    version = int(version_param) if version_param and version_param.isdigit() else None
+    sections = build_structured_report(study_dict, followups=followups, version=version)
     pdf_bytes = generate_report_pdf(study_dict, sections)
     safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in (study_dict.get("title") or "report")).strip().replace(" ", "_")
     filename = f"brainstorm_report_{safe_title}_{study_id}.pdf"
@@ -2472,6 +2603,16 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         mark_recommendation="",
         mark_recommendation_label="",
         mark_recommendation_reason="",
+        chat_messages=[],
+        chat_save_buttons=[],
+        studies_page=1,
+        studies_q="",
+        studies_total_pages=1,
+        studies_total=0,
+        personas_page=1,
+        personas_q="",
+        personas_total_pages=1,
+        personas_total=0,
     )
 
 

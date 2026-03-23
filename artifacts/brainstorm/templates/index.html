@@ -290,6 +290,18 @@
                 <a href="/?token={{ token }}&new_research=1" class="btn btn-primary">New Research</a>
             </div>
 
+            <form method="GET" action="/" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="flex: 1;">
+                    <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by title</label>
+                    <input type="text" name="studies_q" value="{{ studies_q }}" placeholder="Search studies..." style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-small" style="height: 34px;">Search</button>
+                {% if studies_q %}
+                <a href="/?token={{ token }}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
+                {% endif %}
+            </form>
+
             {% if studies %}
             <table>
                 <thead>
@@ -327,9 +339,25 @@
                     {% endfor %}
                 </tbody>
             </table>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: #777;">
+                <span>{{ studies_total }} studies total — Page {{ studies_page }} of {{ studies_total_pages }}</span>
+                <div style="display: flex; gap: 6px;">
+                    {% if studies_page > 1 %}
+                    <a href="/?token={{ token }}&studies_page={{ studies_page - 1 }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}" class="btn btn-secondary btn-small">Prev</a>
+                    {% endif %}
+                    {% if studies_page < studies_total_pages %}
+                    <a href="/?token={{ token }}&studies_page={{ studies_page + 1 }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}" class="btn btn-secondary btn-small">Next</a>
+                    {% endif %}
+                </div>
+            </div>
             {% else %}
             <div class="empty-state">
+                {% if studies_q %}
+                No studies matching "{{ studies_q }}". <a href="/?token={{ token }}">Clear search</a>
+                {% else %}
                 No studies yet. Click "New Research" to create your first draft study.
+                {% endif %}
             </div>
             {% endif %}
         </div>
@@ -888,16 +916,27 @@
             {% endif %}
 
             {% if view_study_output.status in ['completed', 'qa_blocked', 'terminated_system'] %}
-            <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
-                <a href="/download-pdf/{{ view_study_output.id }}?token={{ token }}" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;">
-                    <span style="font-size: 16px;">&#128196;</span> Download PDF
+            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+                {% if view_study_output.report_sections and view_study_output.report_sections.max_version > 1 %}
+                <span style="font-size: 13px; color: #555;">Report Version:</span>
+                {% for v in range(1, view_study_output.report_sections.max_version + 1) %}
+                <a href="/?token={{ token }}&view_output={{ view_study_output.id }}&report_version={{ v }}"
+                   class="btn btn-small {% if v == view_study_output.report_sections.version %}btn-primary{% else %}btn-secondary{% endif %}"
+                   style="min-width: 36px; text-align: center;">V{{ v }}</a>
+                {% endfor %}
+                <span style="flex: 1;"></span>
+                {% endif %}
+                <a href="/download-pdf/{{ view_study_output.id }}?token={{ token }}{% if view_study_output.report_sections %}&version={{ view_study_output.report_sections.version }}{% endif %}" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 16px;">&#128196;</span> Download PDF{% if view_study_output.report_sections and view_study_output.report_sections.max_version > 1 %} (V{{ view_study_output.report_sections.version }}){% endif %}
                 </a>
             </div>
             {% endif %}
 
             {% if view_study_output.report_sections %}
             <div id="report-viewer" style="margin-bottom: 24px;">
-                <h3 style="font-size: 18px; color: #1a1a2e; margin-bottom: 16px; border-bottom: 2px solid #4361ee; padding-bottom: 8px;">Research Report</h3>
+                <h3 style="font-size: 18px; color: #1a1a2e; margin-bottom: 16px; border-bottom: 2px solid #4361ee; padding-bottom: 8px;">
+                    Research Report{% if view_study_output.report_sections.max_version > 1 %} — V{{ view_study_output.report_sections.version }}{% endif %}
+                </h3>
 
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">1. Executive Summary</h4>
@@ -922,6 +961,18 @@
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">5. Sources and Citations</h4>
                     <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.sources_citations }}</pre>
+                </div>
+
+                {% for fus in view_study_output.report_sections.followup_sections %}
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #e8f0fe; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #4361ee;">{{ 5 + fus.round }}. Follow-up Round {{ fus.round }}</h4>
+                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ fus.content }}</pre>
+                </div>
+                {% endfor %}
+
+                <div style="background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px; margin-top: 16px; font-size: 12px; color: #888; line-height: 1.6;">
+                    <strong>Disclaimer</strong><br>
+                    This output was generated by an experimental AI&#8209;powered simulation system. All personas, behaviours, and insights are synthetic and do not represent real individuals or guaranteed real&#8209;world outcomes. Results are provided for exploratory purposes only and should not be relied upon as professional, legal, financial, or investment advice.
                 </div>
             </div>
             {% endif %}
@@ -1231,6 +1282,18 @@
                 <a href="/?token={{ token }}&new_persona=1" class="btn btn-primary">New Persona</a>
             </div>
 
+            <form method="GET" action="/" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="flex: 1;">
+                    <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by Persona ID or name</label>
+                    <input type="text" name="personas_q" value="{{ personas_q }}" placeholder="Search personas..." style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-small" style="height: 34px;">Search</button>
+                {% if personas_q %}
+                <a href="/?token={{ token }}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
+                {% endif %}
+            </form>
+
             {% if personas_list %}
             <table>
                 <thead>
@@ -1257,9 +1320,25 @@
                     {% endfor %}
                 </tbody>
             </table>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: #777;">
+                <span>{{ personas_total }} personas total — Page {{ personas_page }} of {{ personas_total_pages }}</span>
+                <div style="display: flex; gap: 6px;">
+                    {% if personas_page > 1 %}
+                    <a href="/?token={{ token }}&personas_page={{ personas_page - 1 }}{% if personas_q %}&personas_q={{ personas_q }}{% endif %}" class="btn btn-secondary btn-small">Prev</a>
+                    {% endif %}
+                    {% if personas_page < personas_total_pages %}
+                    <a href="/?token={{ token }}&personas_page={{ personas_page + 1 }}{% if personas_q %}&personas_q={{ personas_q }}{% endif %}" class="btn btn-secondary btn-small">Next</a>
+                    {% endif %}
+                </div>
+            </div>
             {% else %}
             <div class="empty-state">
+                {% if personas_q %}
+                No personas matching "{{ personas_q }}". <a href="/?token={{ token }}">Clear search</a>
+                {% else %}
                 No personas yet. Click "New Persona" to create one.
+                {% endif %}
             </div>
             {% endif %}
         </div>
