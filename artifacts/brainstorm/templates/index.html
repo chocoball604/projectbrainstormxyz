@@ -728,54 +728,78 @@
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
 
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Uploads (Grounding Documents)</h3>
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Documents (Grounding)</h3>
             <p style="font-size: 12px; color: #888; margin-bottom: 10px;">
-                Upload documents to improve grounding. Allowed: {{ upload_allowed_extensions }}. Max {{ upload_max_file_size_mb }}MB per file, {{ upload_max_files }} files, {{ upload_max_total_mb }}MB total per study.
+                Attach documents to improve grounding. Max {{ upload_max_files }} docs, {{ upload_max_total_mb }}MB total per study. Upload adds to your library and auto-attaches.
             </p>
 
             {% if study_uploads %}
             <table style="margin-bottom: 12px; font-size: 13px;">
                 <thead>
                     <tr>
+                        <th>Doc ID</th>
                         <th>Filename</th>
                         <th>Type</th>
                         <th>Size</th>
-                        <th>Uploaded</th>
+                        <th>Status</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for up in study_uploads %}
                     <tr>
+                        <td><code style="font-size: 11px;">DOC-{{ up.id }}</code></td>
                         <td>{{ up.filename }}</td>
                         <td><code>{{ up.file_type }}</code></td>
                         <td>{{ (up.file_size_bytes / 1024)|round(1) }} KB</td>
-                        <td style="font-size: 12px;">{{ up.uploaded_at }}</td>
                         <td>
-                            <form action="/delete-study-file/{{ up.id }}" method="POST" style="display: inline;">
+                            {% if up.status == 'deleted' %}
+                            <span style="color: #dc3545; font-size: 11px;">Deleted (retained for audit)</span>
+                            {% else %}
+                            <span style="color: #27ae60; font-size: 11px;">Active</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if configure_study.status == 'draft' and up.status == 'active' %}
+                            <form action="/detach-doc-from-study/{{ up.attachment_id }}" method="POST" style="display: inline;">
                                 <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Delete this file?');">Delete</button>
+                                <button type="submit" class="btn btn-secondary btn-small" onclick="return confirm('Detach this document from the study? (It stays in your library.)');">Detach</button>
                             </form>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             <p style="font-size: 12px; color: #888; margin-bottom: 8px;">
-                {{ study_uploads|length }} of {{ upload_max_files }} files &middot; {{ (study_uploads_total_size / 1024)|round(1) }} KB of {{ upload_max_total_mb }} MB used
+                {{ study_uploads|length }} of {{ upload_max_files }} attached &middot; {{ (study_uploads_total_size / 1024)|round(1) }} KB of {{ upload_max_total_mb }} MB
             </p>
             {% else %}
-            <p style="font-size: 13px; color: #999; margin-bottom: 8px;">No files uploaded yet.</p>
+            <p style="font-size: 13px; color: #999; margin-bottom: 8px;">No documents attached yet.</p>
             {% endif %}
 
-            {% if study_uploads|length < upload_max_files %}
-            <form action="/upload-study-file/{{ configure_study.id }}" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end; margin-bottom: 8px;">
-                <input type="hidden" name="token" value="{{ token }}">
-                <input type="file" name="file" required style="font-size: 13px;">
-                <button type="submit" class="btn btn-primary btn-small">Upload</button>
-            </form>
-            {% else %}
-            <p style="font-size: 12px; color: #dc3545; font-weight: 600;">File limit reached ({{ upload_max_files }} files).</p>
+            {% if configure_study.status == 'draft' and study_uploads|length < upload_max_files %}
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px;">
+                <form action="/upload-study-file/{{ configure_study.id }}" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="file" name="file" required style="font-size: 13px;">
+                    <button type="submit" class="btn btn-primary btn-small">Upload New</button>
+                </form>
+                {% if study_attachable_docs %}
+                <form action="/attach-doc-to-study/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <select name="doc_id" required style="font-size: 13px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px;">
+                        <option value="">-- Attach from My Documents --</option>
+                        {% for d in study_attachable_docs %}
+                        <option value="{{ d.id }}">DOC-{{ d.id }}: {{ d.filename }} ({{ (d.file_size_bytes / 1024)|round(1) }} KB)</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-success btn-small">Attach</button>
+                </form>
+                {% endif %}
+            </div>
+            {% elif study_uploads|length >= upload_max_files %}
+            <p style="font-size: 12px; color: #dc3545; font-weight: 600;">Attachment limit reached ({{ upload_max_files }} docs).</p>
             {% endif %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
@@ -1418,6 +1442,106 @@
                 No personas matching "{{ personas_q }}". <a href="/?token={{ token }}">Clear search</a>
                 {% else %}
                 No personas yet. Click "New Persona" to create one.
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>My Documents (Grounding Library)</h2>
+            </div>
+
+            <div style="background: #e8f4f8; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 13px; font-weight: 600; color: #1a1a2e;">Storage used: {{ (user_storage_used / (1024*1024))|round(2) }} MB of {{ user_storage_cap_mb }} MB</span>
+                </div>
+                {% set storage_pct = (user_storage_used / user_storage_cap * 100) if user_storage_cap > 0 else 0 %}
+                <div style="background: #ddd; border-radius: 4px; height: 8px; overflow: hidden;">
+                    <div style="background: {{ '#dc3545' if storage_pct >= 90 else '#4a90d9' }}; height: 100%; width: {{ [storage_pct, 100]|min }}%; border-radius: 4px;"></div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end;">
+                <form method="GET" action="/" style="display: flex; gap: 8px; align-items: flex-end; flex: 1;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div style="flex: 1;">
+                        <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by filename or Doc ID</label>
+                        <input type="text" name="docs_q" value="{{ docs_q }}" placeholder="e.g. report.pdf or DOC-42" style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small" style="height: 34px;">Search</button>
+                    {% if docs_q %}
+                    <a href="/?token={{ token }}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
+                    {% endif %}
+                </form>
+                <form action="/upload-user-doc" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="file" name="file" required style="font-size: 13px;">
+                    <button type="submit" class="btn btn-success btn-small" style="height: 34px;">Upload</button>
+                </form>
+            </div>
+
+            {% if docs_list %}
+            <table style="font-size: 13px;">
+                <thead>
+                    <tr>
+                        <th>Doc ID</th>
+                        <th>Filename</th>
+                        <th>Type</th>
+                        <th>Size</th>
+                        <th>Uploaded</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in docs_list %}
+                    <tr{% if doc.status == 'deleted' %} style="opacity: 0.6;"{% endif %}>
+                        <td><code style="font-size: 11px;">DOC-{{ doc.id }}</code></td>
+                        <td>{{ doc.filename }}</td>
+                        <td><code>{{ doc.file_type }}</code></td>
+                        <td>{{ (doc.file_size_bytes / 1024)|round(1) }} KB</td>
+                        <td style="font-size: 12px;">{{ doc.uploaded_at }}</td>
+                        <td>
+                            {% if doc.status == 'deleted' %}
+                            <span class="badge badge-disabled">Deleted</span>
+                            <span style="font-size: 10px; color: #999; display: block;">{{ doc.deleted_at }}</span>
+                            {% else %}
+                            <span class="badge badge-active">Active</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if doc.status == 'active' %}
+                            <form action="/delete-user-doc/{{ doc.id }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Deleting removes this document from future use. Past studies may still reference it for audit. Continue?');">Delete</button>
+                            </form>
+                            {% else %}
+                            <span style="font-size: 11px; color: #999;">Retained</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: #777;">
+                <span>{{ docs_total }} documents total — Page {{ docs_page }} of {{ docs_total_pages }}</span>
+                <div style="display: flex; gap: 6px;">
+                    {% if docs_page > 1 %}
+                    <a href="/?token={{ token }}&docs_page={{ docs_page - 1 }}{% if docs_q %}&docs_q={{ docs_q }}{% endif %}" class="btn btn-secondary btn-small">Prev</a>
+                    {% endif %}
+                    {% if docs_page < docs_total_pages %}
+                    <a href="/?token={{ token }}&docs_page={{ docs_page + 1 }}{% if docs_q %}&docs_q={{ docs_q }}{% endif %}" class="btn btn-secondary btn-small">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                {% if docs_q %}
+                No documents matching "{{ docs_q }}". <a href="/?token={{ token }}">Clear search</a>
+                {% else %}
+                No documents yet. Upload a file to get started.
                 {% endif %}
             </div>
             {% endif %}

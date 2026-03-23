@@ -18,6 +18,7 @@ P18: Report Viewer + PDF download for completed studies.
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
 
+import hashlib
 import io
 import json
 import os
@@ -53,10 +54,12 @@ VALID_STUDY_TYPES = ["synthetic_survey", "synthetic_idi", "synthetic_focus_group
 BILLABLE_STATUSES = ("completed", "qa_blocked", "terminated_system", "terminated_user")
 FREE_TIER_MONTHLY_LIMIT = 6
 
-UPLOAD_MAX_FILES_PER_STUDY = 10
+UPLOAD_MAX_FILES_PER_STUDY = 5
 UPLOAD_MAX_FILE_SIZE = 1 * 1024 * 1024
-UPLOAD_MAX_TOTAL_PER_STUDY = 10 * 1024 * 1024
+UPLOAD_MAX_TOTAL_PER_STUDY = 5 * 1024 * 1024
+UPLOAD_USER_STORAGE_CAP = 15 * 1024 * 1024
 UPLOAD_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "csv", "png", "jpg", "jpeg"}
+DOCS_PAGE_SIZE = 10
 USER_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "user")
 ADMIN_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "admin")
 os.makedirs(USER_UPLOADS_DIR, exist_ok=True)
@@ -242,16 +245,30 @@ def init_db():
     """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS user_uploads (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id         INTEGER NOT NULL,
-            study_id        INTEGER NOT NULL,
-            filename        TEXT    NOT NULL,
-            file_type       TEXT    NOT NULL,
-            file_size_bytes INTEGER NOT NULL,
-            storage_path    TEXT    NOT NULL,
-            uploaded_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-            FOREIGN KEY (user_id) REFERENCES users(id),
-            FOREIGN KEY (study_id) REFERENCES studies(id)
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            filename              TEXT    NOT NULL,
+            file_type             TEXT    NOT NULL,
+            file_size_bytes       INTEGER NOT NULL,
+            storage_path          TEXT,
+            uploaded_at           TEXT    NOT NULL DEFAULT (datetime('now')),
+            status                TEXT    NOT NULL DEFAULT 'active',
+            deleted_at            TEXT,
+            content_sha256        TEXT,
+            retained_excerpt_text TEXT,
+            retained_excerpt_bytes INTEGER,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS study_documents (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            study_id    INTEGER NOT NULL,
+            user_doc_id INTEGER NOT NULL,
+            attached_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (study_id) REFERENCES studies(id),
+            FOREIGN KEY (user_doc_id) REFERENCES user_uploads(id),
+            UNIQUE(study_id, user_doc_id)
         )
     """)
     conn.execute("""
@@ -339,6 +356,81 @@ def migrate_db(conn):
                 "UPDATE studies SET personas_used = ? WHERE id = ?",
                 (json.dumps(migrated), row["id"]),
             )
+
+    uu_cols = [row[1] for row in conn.execute("PRAGMA table_info(user_uploads)").fetchall()]
+
+    if "study_id" in uu_cols:
+        existing_links = conn.execute(
+            "SELECT id, study_id FROM user_uploads WHERE study_id IS NOT NULL AND study_id != 0"
+        ).fetchall()
+        sd_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='study_documents'"
+        ).fetchone()
+        if sd_exists:
+            conn.execute("DROP TABLE study_documents")
+        conn.execute("""
+            CREATE TABLE study_documents (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                study_id    INTEGER NOT NULL,
+                user_doc_id INTEGER NOT NULL,
+                attached_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(study_id, user_doc_id)
+            )
+        """)
+        for link in existing_links:
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO study_documents (study_id, user_doc_id) VALUES (?, ?)",
+                    (link["study_id"], link["id"]),
+                )
+            except Exception:
+                pass
+        conn.execute("""
+            CREATE TABLE user_uploads_new (
+                id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id               INTEGER NOT NULL,
+                filename              TEXT    NOT NULL,
+                file_type             TEXT    NOT NULL,
+                file_size_bytes       INTEGER NOT NULL,
+                storage_path          TEXT,
+                uploaded_at           TEXT    NOT NULL DEFAULT (datetime('now')),
+                status                TEXT    NOT NULL DEFAULT 'active',
+                deleted_at            TEXT,
+                content_sha256        TEXT,
+                retained_excerpt_text TEXT,
+                retained_excerpt_bytes INTEGER
+            )
+        """)
+        conn.execute("""
+            INSERT INTO user_uploads_new (id, user_id, filename, file_type, file_size_bytes, storage_path, uploaded_at)
+            SELECT id, user_id, filename, file_type, file_size_bytes, storage_path, uploaded_at
+            FROM user_uploads
+        """)
+        conn.execute("DROP TABLE user_uploads")
+        conn.execute("ALTER TABLE user_uploads_new RENAME TO user_uploads")
+    else:
+        if "status" not in uu_cols:
+            conn.execute("ALTER TABLE user_uploads ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+        if "deleted_at" not in uu_cols:
+            conn.execute("ALTER TABLE user_uploads ADD COLUMN deleted_at TEXT")
+        if "content_sha256" not in uu_cols:
+            conn.execute("ALTER TABLE user_uploads ADD COLUMN content_sha256 TEXT")
+        if "retained_excerpt_text" not in uu_cols:
+            conn.execute("ALTER TABLE user_uploads ADD COLUMN retained_excerpt_text TEXT")
+        if "retained_excerpt_bytes" not in uu_cols:
+            conn.execute("ALTER TABLE user_uploads ADD COLUMN retained_excerpt_bytes INTEGER")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS study_documents (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            study_id    INTEGER NOT NULL,
+            user_doc_id INTEGER NOT NULL,
+            attached_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (study_id) REFERENCES studies(id),
+            FOREIGN KEY (user_doc_id) REFERENCES user_uploads(id),
+            UNIQUE(study_id, user_doc_id)
+        )
+    """)
 
 
 def create_session(user_id=None, is_admin=False):
@@ -514,6 +606,7 @@ def index():
     clone_source = None
     study_uploads = []
     study_uploads_total_size = 0
+    study_attachable_docs = []
     view_study_output = None
     chat_messages = []
     chat_save_buttons = []
@@ -524,6 +617,13 @@ def index():
     grounding_traces = []
     cost_telemetry_rows = []
     admin_uploads_list = []
+    docs_list = []
+    docs_page = 1
+    docs_q = ""
+    docs_total_pages = 1
+    docs_total = 0
+    user_storage_used = 0
+    user_storage_cap_mb = UPLOAD_USER_STORAGE_CAP // (1024 * 1024)
 
     if is_admin:
         conn = get_db()
@@ -652,10 +752,21 @@ def index():
                 chat_save_buttons = get_save_buttons(configure_study)
 
                 study_uploads = [dict(r) for r in conn.execute(
-                    "SELECT * FROM user_uploads WHERE study_id = ? AND user_id = ? ORDER BY uploaded_at ASC",
+                    """SELECT u.id, u.filename, u.file_type, u.file_size_bytes, u.uploaded_at, u.status,
+                              sd.id as attachment_id
+                       FROM study_documents sd
+                       JOIN user_uploads u ON u.id = sd.user_doc_id
+                       WHERE sd.study_id = ? AND u.user_id = ?
+                       ORDER BY sd.attached_at ASC""",
                     (configure_study["id"], user["id"]),
                 ).fetchall()]
-                study_uploads_total_size = sum(u["file_size_bytes"] for u in study_uploads)
+                study_uploads_total_size = sum(u["file_size_bytes"] for u in study_uploads if u["status"] == "active")
+                attached_doc_ids = {u["id"] for u in study_uploads}
+                all_active_docs = [dict(r) for r in conn.execute(
+                    "SELECT id, filename, file_type, file_size_bytes FROM user_uploads WHERE user_id = ? AND status = 'active' ORDER BY uploaded_at DESC",
+                    (user["id"],),
+                ).fetchall()]
+                study_attachable_docs = [d for d in all_active_docs if d["id"] not in attached_doc_ids]
 
                 if not configure_study.get("study_type"):
                     bp = configure_study.get("business_problem") or ""
@@ -687,6 +798,37 @@ def index():
             personas_list = [dict(r) for r in conn.execute(
                 "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
                 (user["id"], PAGE_SIZE, p_offset),
+            ).fetchall()]
+
+        user_storage_used = conn.execute(
+            "SELECT COALESCE(SUM(file_size_bytes), 0) FROM user_uploads WHERE user_id = ? AND status = 'active'",
+            (user["id"],),
+        ).fetchone()[0]
+        docs_page = max(1, int(request.args.get("docs_page", "1") or "1"))
+        docs_q = (request.args.get("docs_q") or "").strip()
+        doc_id_like = f"%DOC-{docs_q.replace('DOC-', '').replace('doc-', '')}%" if docs_q else ""
+        if docs_q:
+            docs_total = conn.execute(
+                "SELECT COUNT(*) FROM user_uploads WHERE user_id = ? AND (filename LIKE ? OR CAST(id AS TEXT) LIKE ?)",
+                (user["id"], f"%{docs_q}%", doc_id_like),
+            ).fetchone()[0]
+        else:
+            docs_total = conn.execute(
+                "SELECT COUNT(*) FROM user_uploads WHERE user_id = ?",
+                (user["id"],),
+            ).fetchone()[0]
+        docs_total_pages = max(1, (docs_total + DOCS_PAGE_SIZE - 1) // DOCS_PAGE_SIZE)
+        docs_page = min(docs_page, docs_total_pages)
+        d_offset = (docs_page - 1) * DOCS_PAGE_SIZE
+        if docs_q:
+            docs_list = [dict(r) for r in conn.execute(
+                "SELECT * FROM user_uploads WHERE user_id = ? AND (filename LIKE ? OR CAST(id AS TEXT) LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
+                (user["id"], f"%{docs_q}%", doc_id_like, DOCS_PAGE_SIZE, d_offset),
+            ).fetchall()]
+        else:
+            docs_list = [dict(r) for r in conn.execute(
+                "SELECT * FROM user_uploads WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                (user["id"], DOCS_PAGE_SIZE, d_offset),
             ).fetchall()]
 
         view_pid = request.args.get("view_persona")
@@ -731,7 +873,9 @@ def index():
                 report_version = request.args.get("report_version")
                 report_version = int(report_version) if report_version and report_version.isdigit() else None
                 upload_names = [r["filename"] for r in conn.execute(
-                    "SELECT filename FROM user_uploads WHERE study_id = ? AND user_id = ?",
+                    """SELECT u.filename FROM study_documents sd
+                       JOIN user_uploads u ON u.id = sd.user_doc_id
+                       WHERE sd.study_id = ? AND u.user_id = ?""",
                     (view_study_output["id"], user["id"]),
                 ).fetchall()]
                 active_admin_names = [r["filename"] for r in conn.execute(
@@ -792,11 +936,20 @@ def index():
         usage_window_end=usage_window_end,
         study_uploads=study_uploads,
         study_uploads_total_size=study_uploads_total_size,
+        study_attachable_docs=study_attachable_docs,
         upload_max_files=UPLOAD_MAX_FILES_PER_STUDY,
         upload_max_file_size_mb=UPLOAD_MAX_FILE_SIZE // (1024 * 1024),
         upload_max_total_mb=UPLOAD_MAX_TOTAL_PER_STUDY // (1024 * 1024),
         upload_allowed_extensions=", ".join(sorted(UPLOAD_ALLOWED_EXTENSIONS)),
         admin_uploads_list=admin_uploads_list,
+        docs_list=docs_list,
+        docs_page=docs_page,
+        docs_q=docs_q,
+        docs_total_pages=docs_total_pages,
+        docs_total=docs_total,
+        user_storage_used=user_storage_used,
+        user_storage_cap_mb=user_storage_cap_mb,
+        user_storage_cap=UPLOAD_USER_STORAGE_CAP,
     )
 
 
@@ -1042,6 +1195,36 @@ def _allowed_upload(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in UPLOAD_ALLOWED_EXTENSIONS
 
 
+def _compute_sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def _extract_excerpt(file_data, file_type, max_chars=4096):
+    if file_type in ("txt", "csv"):
+        try:
+            return file_data[:max_chars].decode("utf-8", errors="replace")
+        except Exception:
+            return "[Text extraction failed]"
+    return "[Binary document retained by hash only]"
+
+
+def _get_user_storage_used(conn, user_id):
+    return conn.execute(
+        "SELECT COALESCE(SUM(file_size_bytes), 0) FROM user_uploads WHERE user_id = ? AND status = 'active'",
+        (user_id,),
+    ).fetchone()[0]
+
+
+def _get_study_attachment_stats(conn, study_id):
+    row = conn.execute(
+        """SELECT COUNT(*) as cnt, COALESCE(SUM(u.file_size_bytes), 0) as total
+           FROM study_documents sd JOIN user_uploads u ON u.id = sd.user_doc_id
+           WHERE sd.study_id = ? AND u.status = 'active'""",
+        (study_id,),
+    ).fetchone()
+    return row["cnt"], row["total"]
+
+
 @app.route("/upload-study-file/<int:study_id>", methods=["POST"])
 def upload_study_file(study_id):
     token = get_token()
@@ -1075,18 +1258,19 @@ def upload_study_file(study_id):
         conn.close()
         return render_error(f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024*1024)}MB size limit.")
 
-    existing = conn.execute(
-        "SELECT COUNT(*) as cnt, COALESCE(SUM(file_size_bytes), 0) as total FROM user_uploads WHERE study_id = ? AND user_id = ?",
-        (study_id, user["id"]),
-    ).fetchone()
-
-    if existing["cnt"] >= UPLOAD_MAX_FILES_PER_STUDY:
+    current_storage = _get_user_storage_used(conn, user["id"])
+    if current_storage + file_size > UPLOAD_USER_STORAGE_CAP:
         conn.close()
-        return render_error(f"Maximum {UPLOAD_MAX_FILES_PER_STUDY} files per study reached.")
+        return render_error(f"User storage cap ({UPLOAD_USER_STORAGE_CAP // (1024*1024)}MB) would be exceeded. Delete some documents to free space.")
 
-    if existing["total"] + file_size > UPLOAD_MAX_TOTAL_PER_STUDY:
+    att_cnt, att_total = _get_study_attachment_stats(conn, study_id)
+    if att_cnt >= UPLOAD_MAX_FILES_PER_STUDY:
         conn.close()
-        return render_error(f"Total upload size would exceed {UPLOAD_MAX_TOTAL_PER_STUDY // (1024*1024)}MB limit for this study.")
+        return render_error(f"Maximum {UPLOAD_MAX_FILES_PER_STUDY} files attached to this study.")
+
+    if att_total + file_size > UPLOAD_MAX_TOTAL_PER_STUDY:
+        conn.close()
+        return render_error(f"Total attached size would exceed {UPLOAD_MAX_TOTAL_PER_STUDY // (1024*1024)}MB limit for this study.")
 
     import uuid
     safe_name = f"{uuid.uuid4().hex}_{f.filename}"
@@ -1095,38 +1279,185 @@ def upload_study_file(study_id):
         out.write(file_data)
 
     ext = f.filename.rsplit(".", 1)[1].lower()
+    content_sha = _compute_sha256(file_data)
+    excerpt = _extract_excerpt(file_data, ext)
     conn.execute(
-        "INSERT INTO user_uploads (user_id, study_id, filename, file_type, file_size_bytes, storage_path) VALUES (?, ?, ?, ?, ?, ?)",
-        (user["id"], study_id, f.filename, ext, file_size, storage_path),
+        "INSERT INTO user_uploads (user_id, filename, file_type, file_size_bytes, storage_path, content_sha256, retained_excerpt_text, retained_excerpt_bytes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')",
+        (user["id"], f.filename, ext, file_size, storage_path, content_sha, excerpt, len(excerpt)),
+    )
+    doc_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.execute(
+        "INSERT INTO study_documents (study_id, user_doc_id) VALUES (?, ?)",
+        (study_id, doc_id),
     )
     conn.commit()
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
 
 
-@app.route("/delete-study-file/<int:upload_id>", methods=["POST"])
-def delete_study_file(upload_id):
+@app.route("/upload-user-doc", methods=["POST"])
+def upload_user_doc():
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return render_error("No file selected.")
+
+    if not _allowed_upload(f.filename):
+        ext = f.filename.rsplit(".", 1)[-1] if "." in f.filename else "(none)"
+        return render_error(f"File type '.{ext}' is not allowed. Allowed types: {', '.join(sorted(UPLOAD_ALLOWED_EXTENSIONS))}.")
+
+    file_data = f.read()
+    file_size = len(file_data)
+
+    if file_size > UPLOAD_MAX_FILE_SIZE:
+        return render_error(f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024*1024)}MB size limit.")
+
+    conn = get_db()
+    current_storage = _get_user_storage_used(conn, user["id"])
+    if current_storage + file_size > UPLOAD_USER_STORAGE_CAP:
+        conn.close()
+        return render_error(f"User storage cap ({UPLOAD_USER_STORAGE_CAP // (1024*1024)}MB) would be exceeded. Delete some documents to free space.")
+
+    import uuid
+    safe_name = f"{uuid.uuid4().hex}_{f.filename}"
+    storage_path = os.path.join(USER_UPLOADS_DIR, safe_name)
+    with open(storage_path, "wb") as out:
+        out.write(file_data)
+
+    ext = f.filename.rsplit(".", 1)[1].lower()
+    content_sha = _compute_sha256(file_data)
+    excerpt = _extract_excerpt(file_data, ext)
+    conn.execute(
+        "INSERT INTO user_uploads (user_id, filename, file_type, file_size_bytes, storage_path, content_sha256, retained_excerpt_text, retained_excerpt_bytes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')",
+        (user["id"], f.filename, ext, file_size, storage_path, content_sha, excerpt, len(excerpt)),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/attach-doc-to-study/<int:study_id>", methods=["POST"])
+def attach_doc_to_study(study_id):
     token = get_token()
     user, _ = get_session_data(token)
     if not user or user["state"] != "active":
         return render_error("You must be an active user.")
 
     conn = get_db()
-    upload = conn.execute(
-        "SELECT * FROM user_uploads WHERE id = ? AND user_id = ?",
-        (upload_id, user["id"]),
+    study = conn.execute(
+        "SELECT id FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
     ).fetchone()
-    if not upload:
+    if not study:
         conn.close()
-        return render_error("Upload not found.")
+        return render_error("Study not found or not in draft status.")
 
-    study_id = upload["study_id"]
-    if os.path.exists(upload["storage_path"]):
-        os.remove(upload["storage_path"])
-    conn.execute("DELETE FROM user_uploads WHERE id = ?", (upload_id,))
+    doc_id = request.form.get("doc_id")
+    if not doc_id:
+        conn.close()
+        return render_error("No document selected.")
+
+    doc = conn.execute(
+        "SELECT * FROM user_uploads WHERE id = ? AND user_id = ? AND status = 'active'",
+        (doc_id, user["id"]),
+    ).fetchone()
+    if not doc:
+        conn.close()
+        return render_error("Document not found or not active.")
+
+    already = conn.execute(
+        "SELECT id FROM study_documents WHERE study_id = ? AND user_doc_id = ?",
+        (study_id, doc_id),
+    ).fetchone()
+    if already:
+        conn.close()
+        return render_error("Document already attached to this study.")
+
+    att_cnt, att_total = _get_study_attachment_stats(conn, study_id)
+    if att_cnt >= UPLOAD_MAX_FILES_PER_STUDY:
+        conn.close()
+        return render_error(f"Maximum {UPLOAD_MAX_FILES_PER_STUDY} files attached to this study.")
+
+    if att_total + doc["file_size_bytes"] > UPLOAD_MAX_TOTAL_PER_STUDY:
+        conn.close()
+        return render_error(f"Total attached size would exceed {UPLOAD_MAX_TOTAL_PER_STUDY // (1024*1024)}MB limit for this study.")
+
+    conn.execute(
+        "INSERT INTO study_documents (study_id, user_doc_id) VALUES (?, ?)",
+        (study_id, int(doc_id)),
+    )
     conn.commit()
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
+
+
+@app.route("/detach-doc-from-study/<int:attachment_id>", methods=["POST"])
+def detach_doc_from_study(attachment_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    att = conn.execute(
+        """SELECT sd.id, sd.study_id FROM study_documents sd
+           JOIN user_uploads u ON u.id = sd.user_doc_id
+           JOIN studies s ON s.id = sd.study_id
+           WHERE sd.id = ? AND u.user_id = ? AND s.status = 'draft'""",
+        (attachment_id, user["id"]),
+    ).fetchone()
+    if not att:
+        conn.close()
+        return render_error("Attachment not found or study not in draft.")
+
+    study_id = att["study_id"]
+    conn.execute("DELETE FROM study_documents WHERE id = ?", (attachment_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
+@app.route("/delete-user-doc/<int:doc_id>", methods=["POST"])
+def delete_user_doc(doc_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    doc = conn.execute(
+        "SELECT * FROM user_uploads WHERE id = ? AND user_id = ? AND status = 'active'",
+        (doc_id, user["id"]),
+    ).fetchone()
+    if not doc:
+        conn.close()
+        return render_error("Document not found or already deleted.")
+
+    if doc["storage_path"] and os.path.exists(doc["storage_path"]):
+        os.remove(doc["storage_path"])
+
+    conn.execute(
+        """UPDATE user_uploads SET status = 'deleted', deleted_at = datetime('now'), storage_path = NULL
+           WHERE id = ?""",
+        (doc_id,),
+    )
+
+    draft_study_ids = [r["study_id"] for r in conn.execute(
+        """SELECT sd.study_id FROM study_documents sd
+           JOIN studies s ON s.id = sd.study_id
+           WHERE sd.user_doc_id = ? AND s.status = 'draft'""",
+        (doc_id,),
+    ).fetchall()]
+    for sid in draft_study_ids:
+        conn.execute("DELETE FROM study_documents WHERE study_id = ? AND user_doc_id = ?", (sid, doc_id))
+
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
 
 
 @app.route("/admin/upload-document", methods=["POST"])
@@ -2021,7 +2352,9 @@ def download_pdf(study_id):
         (study_id,),
     ).fetchall()
     upload_names = [r["filename"] for r in conn.execute(
-        "SELECT filename FROM user_uploads WHERE study_id = ?", (study_id,)
+        """SELECT u.filename FROM study_documents sd
+           JOIN user_uploads u ON u.id = sd.user_doc_id
+           WHERE sd.study_id = ?""", (study_id,)
     ).fetchall()]
     active_admin_names = [r["filename"] for r in conn.execute(
         "SELECT filename FROM admin_uploads WHERE status = 'active'"
@@ -2910,11 +3243,20 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         usage_window_end="",
         study_uploads=[],
         study_uploads_total_size=0,
+        study_attachable_docs=[],
         upload_max_files=UPLOAD_MAX_FILES_PER_STUDY,
         upload_max_file_size_mb=UPLOAD_MAX_FILE_SIZE // (1024 * 1024),
         upload_max_total_mb=UPLOAD_MAX_TOTAL_PER_STUDY // (1024 * 1024),
         upload_allowed_extensions=", ".join(sorted(UPLOAD_ALLOWED_EXTENSIONS)),
         admin_uploads_list=[],
+        docs_list=[],
+        docs_page=1,
+        docs_q="",
+        docs_total_pages=1,
+        docs_total=0,
+        user_storage_used=0,
+        user_storage_cap_mb=UPLOAD_USER_STORAGE_CAP // (1024 * 1024),
+        user_storage_cap=UPLOAD_USER_STORAGE_CAP,
     )
 
 

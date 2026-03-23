@@ -1,0 +1,166 @@
+IMPLEMENT: User Grounding Library + Lowered Limits + Soft Delete (minimal retention)
+Do ONLY this prompt. Do not implement other prompts or refactor unrelated features.
+
+Context / PRD alignment:
+- Grounding includes User-uploaded (private) + Admin-uploaded (global) documents as grounding sources.
+- User workspace includes “Uploaded Assets”.
+- We will implement a user-level Grounding Library, while still allowing “attach to study” behavior.
+([PRD_Mark-PBXYZ_V4.01.docx](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=77cb5263-35f1-46b0-9edb-401caeff8a33&cid=bfec441e4a44d47e&EntityRepresentationId=ab59f6cd-e3f5-45b0-b356-bd3febe60f6d))
+
+Hard constraints:
+- Do NOT reset/delete DB.
+- Do NOT change QA logic, grounding trace logic, telemetry, exports, budgets, persona system behavior.
+- Keep token-based sessions working.
+- Minimal changes only.
+
+------------------------------------------
+A) Limits changes (IMPORTANT)
+------------------------------------------
+1) Per-study attachment/upload limits (replace prior 10/1/10):
+- Max files attached to a study: 5
+- Max size per file: 1MB
+- Max total attached size per study: 5MB
+
+2) Per-user storage cap:
+- Max total storage of user documents: 15MB
+- If user exceeds 15MB, they must delete documents to free space before uploading more.
+
+3) Allowed file types:
+- PDF, DOCX, TXT, CSV, PNG, JPG/JPEG
+
+Enforce limits server-side, not just UI.
+
+------------------------------------------
+B) Create “My Documents (Grounding Library)” section (user-level)
+------------------------------------------
+Add a new workspace section under “My Personas” (or adjacent in UI) called:
+“My Documents (Grounding Library)”
+
+This list shows ALL user uploaded docs (not just study-scoped), with:
+- Document ID (stable identifier)
+- Filename
+- File type
+- Size
+- Uploaded date
+- Status: Active / Deleted (retained)
+
+Controls:
+- Search box: search by filename OR Document ID (case-insensitive partial match)
+- Pagination: show most recent 10 by default with Prev/Next and Page X of Y
+
+Also show a usage meter at top:
+“Storage used: X MB of 15 MB”
+
+------------------------------------------
+C) Data model (minimal + retention-safe)
+------------------------------------------
+If you already have user_uploads table, evolve it carefully (migration) to support:
+- user_doc_id (stable ID string shown to user; can be same as primary key but show as “DOC-<id>”)
+- user_id
+- filename
+- file_type
+- file_size_bytes
+- storage_path (for active files only)
+- uploaded_at
+- status: active/deleted
+- deleted_at (nullable)
+- content_sha256 (hash of the original file bytes)
+- retained_excerpt_text (nullable; capped small; see retention below)
+- retained_excerpt_bytes (optional) (store length for debugging)
+- NOTE: Do NOT keep the full original file for deleted docs (to avoid bloat); keep only minimal retention fields.
+
+Study attachment table:
+- If you already have study_uploads or a linkage, keep it.
+- Otherwise create a join table study_documents:
+  - id
+  - study_id
+  - user_doc_id (FK to user uploads)
+  - attached_at
+
+This allows one uploaded doc to be attached to multiple studies without re-uploading.
+
+------------------------------------------
+D) Upload + Attach flows
+------------------------------------------
+1) Upload new doc:
+- Upload from within Study Detail OR from My Documents page.
+- Upload always stores doc in user library (counts toward 15MB).
+- If user uploads from within a study, auto-attach to that study (if study attachment limits allow).
+- Enforce per-study attach limits: max 5 files, max 5MB attached total, max 1MB each.
+- Enforce per-user total 15MB before accepting upload.
+
+2) Attach existing doc to a study:
+- In Study Detail “Uploads” section, provide “Attach from My Documents” dropdown/list.
+- Only show Active docs.
+- Enforce per-study attach limits on attach.
+
+3) Show attached docs in Study Detail:
+- List attached docs (filename, doc ID).
+- Allow detach from study without deleting the doc from library.
+
+------------------------------------------
+E) Soft delete + minimal retention (Policy 2)
+------------------------------------------
+User can delete a document from My Documents.
+
+Deletion behavior (Policy 2):
+- Document becomes status=deleted and is removed from “active attach” lists.
+- It is no longer eligible for new studies/personas.
+- BUT we retain minimal provenance for audit and to avoid breaking old studies/personas:
+  Keep:
+   * user_doc_id
+   * filename
+   * file_type
+   * uploaded_at
+   * deleted_at
+   * file_size_bytes
+   * content_sha256
+   * retained_excerpt_text (small)
+- Remove the active stored binary file to avoid storage bloat:
+   * delete file at storage_path and set storage_path=NULL
+- For studies/personas that referenced it:
+   * display “Document deleted (retained for audit)” + show doc ID + filename + sha256 (optional)
+   * keep references stable (do not delete references from completed studies)
+- For draft/incomplete studies:
+   * if doc is deleted, it should be automatically detached from those studies (since it can no longer be used going forward).
+
+Minimal retention rule (IMPORTANT):
+- retained_excerpt_text should be capped small, e.g. max 4KB characters.
+- For TXT/CSV: take first 4KB of text.
+- For PDF/DOCX/images: do NOT attempt full extraction; store only a placeholder excerpt like:
+  “[Binary document retained by hash only]”
+  (or store file metadata only)
+This prevents DB bloat.
+
+Deletion warning UI:
+- Show a warning:
+  “Deleting removes this document from future use. Past studies may still reference it for audit.”
+
+------------------------------------------
+F) Search + pagination requirements
+------------------------------------------
+My Documents list:
+- Default: most recent 10 (active + deleted shown, but deleted can be collapsible or labeled)
+- Pagination + search query params:
+  docs_page, docs_q
+
+Search matching:
+- filename LIKE %q% OR user_doc_id LIKE %q% (case-insensitive)
+
+------------------------------------------
+G) Deliverables + How to test
+------------------------------------------
+Deliverables:
+- Files changed
+- DB migrations (if any)
+- How to test (must include):
+  1) Upload 6th doc to a study => blocked at 5 files
+  2) Upload >1MB file => blocked
+  3) Attach docs until total attached >5MB => blocked
+  4) Upload docs until user total >15MB => blocked; deleting a doc frees space
+  5) My Documents shows 10 + pagination + search by filename and doc ID
+  6) Deleting a doc:
+     - removes it from attach lists
+     - preserves minimal retention fields (sha256, metadata)
+     - does NOT break old completed studies (shows “deleted retained for audit”)
+     - auto-detaches from draft studies
