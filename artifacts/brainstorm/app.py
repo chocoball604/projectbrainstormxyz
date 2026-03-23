@@ -806,7 +806,8 @@ def index():
         ).fetchone()[0]
         docs_page = max(1, int(request.args.get("docs_page", "1") or "1"))
         docs_q = (request.args.get("docs_q") or "").strip()
-        doc_id_like = f"%DOC-{docs_q.replace('DOC-', '').replace('doc-', '')}%" if docs_q else ""
+        doc_id_num = docs_q.upper().replace('DOC-', '').replace('D-', '') if docs_q else ""
+        doc_id_like = f"%{doc_id_num}%" if doc_id_num else ""
         if docs_q:
             docs_total = conn.execute(
                 "SELECT COUNT(*) FROM user_uploads WHERE user_id = ? AND (filename LIKE ? OR CAST(id AS TEXT) LIKE ?)",

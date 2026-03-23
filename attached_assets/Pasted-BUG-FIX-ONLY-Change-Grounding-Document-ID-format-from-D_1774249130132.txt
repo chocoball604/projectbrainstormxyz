@@ -1,0 +1,55 @@
+BUG FIX ONLY: Change Grounding Document ID format from "DOC-<number>" to "D-<number>" to follow the global ID convention (P- for personas, D- for documents).
+
+Constraints:
+- Do NOT reset/delete DB.
+- Do NOT change upload limits, retention behavior, join tables, QA/telemetry/export logic, or study/persona behavior.
+- Minimal changes only.
+
+Requirements:
+
+1) Document ID display format:
+Everywhere the document identifier is shown to users (and in report “Sources”), change:
+- DOC-123  -> D-123
+
+Places to update (at minimum):
+- My Documents (Grounding Library) list
+- Study Detail attached documents list
+- Report Viewer “Sources / Grounding Sources” display
+- Any “deleted retained for audit” document reference display
+
+2) Backward-compatible search:
+The search box in My Documents must accept ALL of these inputs and return the same doc:
+- "D-123" (new)
+- "DOC-123" (legacy)
+- "123" (numeric partial match)
+
+Implementation guidance:
+- Normalize search input:
+  - if it starts with "DOC-" replace with "D-"
+  - if it starts with "D-" strip prefix for numeric matching OR search both forms
+- Query should match by:
+  - numeric id (preferred)
+  - OR stored user_doc_id if that exists
+
+3) Storage schema handling (choose the correct approach based on current code):
+A) If document ID is computed dynamically from the numeric primary key:
+- Just change formatting function from f"DOC-{id}" to f"D-{id}" and update search normalization accordingly.
+- No DB migration needed.
+
+B) If document ID is stored in a column (user_doc_id) as literal "DOC-###":
+- Add a migration to update existing records:
+  UPDATE user_uploads SET user_doc_id = REPLACE(user_doc_id,'DOC-','D-') WHERE user_doc_id LIKE 'DOC-%';
+- Ensure new uploads generate user_doc_id using "D-" prefix.
+- Keep search backwards-compatible by also accepting DOC- input.
+
+4) Do NOT confuse Document IDs with Persona IDs:
+- Ensure UI labels explicitly say “Document ID” next to D-123.
+
+Deliverables:
+- Files changed
+- How to test:
+  A) Existing docs previously displayed as DOC-### now display as D-###
+  B) Search by “D-12” finds docs
+  C) Search by legacy “DOC-12” ALSO finds the same docs
+  D) Search by “12” works (partial numeric)
+  E) New uploads receive a D- prefix

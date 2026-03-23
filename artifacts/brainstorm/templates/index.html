@@ -748,7 +748,7 @@
                 <tbody>
                     {% for up in study_uploads %}
                     <tr>
-                        <td><code style="font-size: 11px;">DOC-{{ up.id }}</code></td>
+                        <td><code style="font-size: 11px;">D-{{ up.id }}</code></td>
                         <td>{{ up.filename }}</td>
                         <td><code>{{ up.file_type }}</code></td>
                         <td>{{ (up.file_size_bytes / 1024)|round(1) }} KB</td>
@@ -791,7 +791,7 @@
                     <select name="doc_id" required style="font-size: 13px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px;">
                         <option value="">-- Attach from My Documents --</option>
                         {% for d in study_attachable_docs %}
-                        <option value="{{ d.id }}">DOC-{{ d.id }}: {{ d.filename }} ({{ (d.file_size_bytes / 1024)|round(1) }} KB)</option>
+                        <option value="{{ d.id }}">D-{{ d.id }}: {{ d.filename }} ({{ (d.file_size_bytes / 1024)|round(1) }} KB)</option>
                         {% endfor %}
                     </select>
                     <button type="submit" class="btn btn-success btn-small">Attach</button>
@@ -1467,7 +1467,7 @@
                     <input type="hidden" name="token" value="{{ token }}">
                     <div style="flex: 1;">
                         <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by filename or Doc ID</label>
-                        <input type="text" name="docs_q" value="{{ docs_q }}" placeholder="e.g. report.pdf or DOC-42" style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+                        <input type="text" name="docs_q" value="{{ docs_q }}" placeholder="e.g. report.pdf or D-42" style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
                     </div>
                     <button type="submit" class="btn btn-primary btn-small" style="height: 34px;">Search</button>
                     {% if docs_q %}
@@ -1497,7 +1497,7 @@
                 <tbody>
                     {% for doc in docs_list %}
                     <tr{% if doc.status == 'deleted' %} style="opacity: 0.6;"{% endif %}>
-                        <td><code style="font-size: 11px;">DOC-{{ doc.id }}</code></td>
+                        <td><code style="font-size: 11px;">D-{{ doc.id }}</code></td>
                         <td>{{ doc.filename }}</td>
                         <td><code>{{ doc.file_type }}</code></td>
                         <td>{{ (doc.file_size_bytes / 1024)|round(1) }} KB</td>
