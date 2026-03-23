@@ -1111,13 +1111,120 @@ def build_structured_report(study):
     return sections
 
 
+CJK_FONT_PATH = os.path.join(os.path.dirname(__file__), "fonts", "NotoSansCJK-Regular.ttc")
+TRAD_MARKERS = set("漢歡測臺體繁廣")
+SIMP_MARKERS = set("汉欢测台体简")
+
+
+def _has_non_ascii(text):
+    for ch in text:
+        if ord(ch) > 127:
+            return True
+    return False
+
+
+def _has_cjk(text):
+    for ch in text:
+        cp = ord(ch)
+        if (0x3000 <= cp <= 0x9FFF or 0xF900 <= cp <= 0xFAFF
+                or 0x20000 <= cp <= 0x2FA1F or 0xFF00 <= cp <= 0xFFEF):
+            return True
+    return False
+
+
+def _has_kana(text):
+    for ch in text:
+        cp = ord(ch)
+        if 0x3040 <= cp <= 0x30FF or 0x31F0 <= cp <= 0x31FF:
+            return True
+    return False
+
+
+def _pick_cjk_font(text):
+    if _has_kana(text):
+        return "CJK_JP"
+    chars = set(text)
+    if chars & TRAD_MARKERS:
+        return "CJK_TC"
+    if chars & SIMP_MARKERS:
+        return "CJK_SC"
+    return "CJK_TC"
+
+
+def _register_cjk_fonts(pdf):
+    if not os.path.exists(CJK_FONT_PATH):
+        return False
+    try:
+        pdf.add_font("CJK_JP", fname=CJK_FONT_PATH, collection_font_number=0)
+        pdf.add_font("CJK_SC", fname=CJK_FONT_PATH, collection_font_number=2)
+        pdf.add_font("CJK_TC", fname=CJK_FONT_PATH, collection_font_number=3)
+        return True
+    except Exception:
+        return False
+
+
+def _pdf_set_font(pdf, text, size, style="", cjk_available=True):
+    if cjk_available and _has_cjk(text):
+        font_name = _pick_cjk_font(text)
+        pdf.set_font(font_name, "", size)
+    else:
+        pdf.set_font("Helvetica", style, size)
+
+
+def _pdf_write_text(pdf, text, size, style="", cjk_available=True, method="cell", **kwargs):
+    needs_unicode = _has_non_ascii(text)
+    if not cjk_available or not needs_unicode:
+        pdf.set_font("Helvetica", style, size)
+        if method == "multi_cell":
+            safe = text.encode("latin-1", "replace").decode("latin-1")
+            pdf.multi_cell(kwargs.get("w", 0), kwargs.get("h", 5), safe)
+        else:
+            safe = text.encode("latin-1", "replace").decode("latin-1")
+            pdf.cell(kwargs.get("w", 0), kwargs.get("h", 10), safe,
+                     new_x=kwargs.get("new_x", "LMARGIN"),
+                     new_y=kwargs.get("new_y", "NEXT"),
+                     align=kwargs.get("align", ""),
+                     fill=kwargs.get("fill", False))
+        return
+
+    font_name = _pick_cjk_font(text)
+    fallback_order = ["CJK_JP", "CJK_SC", "CJK_TC"]
+    fallback_order.remove(font_name)
+    fallback_order.insert(0, font_name)
+
+    for fn in fallback_order:
+        try:
+            pdf.set_font(fn, "", size)
+            if method == "multi_cell":
+                pdf.multi_cell(kwargs.get("w", 0), kwargs.get("h", 5), text)
+            else:
+                pdf.cell(kwargs.get("w", 0), kwargs.get("h", 10), text,
+                         new_x=kwargs.get("new_x", "LMARGIN"),
+                         new_y=kwargs.get("new_y", "NEXT"),
+                         align=kwargs.get("align", ""),
+                         fill=kwargs.get("fill", False))
+            return
+        except Exception:
+            continue
+
+    pdf.set_font("Helvetica", style, size)
+    safe = text.encode("latin-1", "replace").decode("latin-1")
+    if method == "multi_cell":
+        pdf.multi_cell(kwargs.get("w", 0), kwargs.get("h", 5), safe)
+    else:
+        pdf.cell(kwargs.get("w", 0), kwargs.get("h", 10), safe,
+                 new_x=kwargs.get("new_x", "LMARGIN"),
+                 new_y=kwargs.get("new_y", "NEXT"),
+                 align=kwargs.get("align", ""),
+                 fill=kwargs.get("fill", False))
+
+
 def generate_report_pdf(study, sections):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    def _safe(text):
-        return text.encode("latin-1", "replace").decode("latin-1")
+    cjk_ok = _register_cjk_fonts(pdf)
 
     pdf.set_font("Helvetica", "B", 18)
     pdf.cell(0, 12, "Project Brainstorm - Research Report", new_x="LMARGIN", new_y="NEXT", align="C")
@@ -1129,11 +1236,11 @@ def generate_report_pdf(study, sections):
     pdf.set_text_color(0, 0, 0)
     pdf.ln(4)
 
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, _safe(study.get("title", "Untitled Study")), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 10)
+    title_text = study.get("title", "Untitled Study")
+    _pdf_write_text(pdf, title_text, 14, style="B", cjk_available=cjk_ok, h=10)
     st_label = STUDY_TYPE_LABELS.get(study.get("study_type", ""), study.get("study_type", "Unknown"))
-    pdf.cell(0, 6, _safe(f"Type: {st_label}  |  Status: {study.get('status', 'unknown')}"), new_x="LMARGIN", new_y="NEXT")
+    status_line = f"Type: {st_label}  |  Status: {study.get('status', 'unknown')}"
+    _pdf_write_text(pdf, status_line, 10, cjk_available=cjk_ok, h=6)
     pdf.ln(6)
 
     heading_sections = [
@@ -1149,8 +1256,7 @@ def generate_report_pdf(study, sections):
         pdf.set_fill_color(240, 240, 240)
         pdf.cell(0, 8, heading, new_x="LMARGIN", new_y="NEXT", fill=True)
         pdf.ln(2)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(0, 5, _safe(content))
+        _pdf_write_text(pdf, content, 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5)
         pdf.ln(4)
 
     pdf.ln(6)
@@ -2371,6 +2477,41 @@ def admin_dev_inject_invalid_qual_study():
     study_id = conn.execute("SELECT id FROM studies ORDER BY id DESC LIMIT 1").fetchone()["id"]
     conn.close()
     return f"DEV ONLY: Created invalid {study_type} study id={study_id} with blank field '{blank_field}'. Use /admin/dev-run-study/{study_id} to test QA."
+
+
+@app.route("/admin/dev-cjk-pdf-test")
+def admin_dev_cjk_pdf_test():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    if not is_admin:
+        return "Admin access required.", 403
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_page()
+    cjk_ok = _register_cjk_fonts(pdf)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 12, "CJK Font Rendering Test", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.ln(8)
+    test_lines = [
+        ("Simplified Chinese", "简体中文：汉语、欢迎、测试"),
+        ("Traditional Chinese", "繁體中文：漢語、歡迎、測試"),
+        ("Japanese", "日本語：こんにちは世界、自転車"),
+    ]
+    for label, text in test_lines:
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(0, 8, f"{label}:", new_x="LMARGIN", new_y="NEXT")
+        _pdf_write_text(pdf, text, 12, cjk_available=cjk_ok, h=10)
+        pdf.ln(4)
+    pdf.ln(8)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 8, f"CJK fonts loaded: {'Yes' if cjk_ok else 'No'}", new_x="LMARGIN", new_y="NEXT")
+    pdf_bytes = pdf.output()
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name="cjk_font_test.pdf",
+    )
 
 
 @app.route("/admin/export/studies.csv")
