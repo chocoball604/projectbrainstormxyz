@@ -827,6 +827,11 @@ def index():
     token = get_token()
     user, is_admin = get_session_data(token)
 
+    if not user and not is_admin:
+        error = request.args.get("error")
+        show_auth_tab = request.args.get("show_auth_tab", "signup")
+        return render_template("landing.html", error=error, show_auth_tab=show_auth_tab)
+
     pending_users = []
     all_users = []
     studies = []
@@ -1289,6 +1294,18 @@ def admin_login():
 def logout():
     delete_session(get_token())
     return redirect(url_for("index"))
+
+
+@app.route("/landing")
+def landing_page():
+    error = request.args.get("error")
+    show_auth_tab = request.args.get("show_auth_tab", "signup")
+    return render_template("landing.html", error=error, show_auth_tab=show_auth_tab)
+
+
+@app.route("/blog")
+def blog_page():
+    return render_template("landing.html", error=None, show_auth_tab="signup")
 
 
 @app.route("/admin/approve/<int:user_id>", methods=["POST"])
@@ -3657,6 +3674,15 @@ def admin_delete_source(source_id):
 def render_error(message, show_new_research=False, show_new_persona=False):
     token = get_token()
     user, is_admin = get_session_data(token)
+    if not user and not is_admin:
+        referrer = request.referrer or ""
+        if "/login" in referrer or request.path == "/login":
+            show_tab = "login"
+        elif "/admin-login" in referrer or request.path == "/admin-login":
+            show_tab = "login"
+        else:
+            show_tab = "signup"
+        return render_template("landing.html", error=message, show_auth_tab=show_tab)
     pending_users = []
     all_users = []
     studies = []

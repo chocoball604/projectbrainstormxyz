@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Brainstorm — AI-Native Market Intelligence</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #333;
+            min-height: 100vh;
+            background: #fff;
+        }
+
+        .landing-header {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .landing-header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+        .landing-header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .landing-header-right a {
+            color: #fff;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            opacity: 0.9;
+            transition: opacity 0.2s;
+        }
+        .landing-header-right a:hover { opacity: 1; }
+        .landing-header-right .btn-header {
+            background: #3498db;
+            color: #fff;
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 14px;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        .landing-header-right .btn-header:hover { background: #2980b9; }
+        .lang-selector {
+            background: transparent;
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .lang-selector option { color: #333; background: #fff; }
+
+        .landing-section {
+            padding: 80px 24px;
+        }
+        .landing-section-inner {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .section-white { background: #fff; color: #1a1a2e; }
+        .section-blue { background: #064273; color: #fff; }
+
+        .landing-section h2 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 24px;
+            line-height: 1.2;
+        }
+        .landing-section h3 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            margin-top: 28px;
+        }
+        .landing-section p {
+            font-size: 18px;
+            line-height: 1.7;
+            margin-bottom: 16px;
+        }
+        .landing-section ul {
+            list-style: none;
+            padding: 0;
+            margin-bottom: 16px;
+        }
+        .landing-section ul li {
+            font-size: 17px;
+            line-height: 1.7;
+            padding-left: 24px;
+            position: relative;
+            margin-bottom: 6px;
+        }
+        .section-white ul li::before {
+            content: "•";
+            position: absolute;
+            left: 8px;
+            color: #064273;
+            font-weight: 700;
+        }
+        .section-blue ul li::before {
+            content: "•";
+            position: absolute;
+            left: 8px;
+            color: #7ec8e3;
+            font-weight: 700;
+        }
+
+        .btn-landing {
+            display: inline-block;
+            padding: 14px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-landing:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .btn-primary-landing { background: #3498db; color: #fff; }
+        .btn-secondary-landing { background: transparent; color: #3498db; border: 2px solid #3498db; margin-left: 12px; }
+        .section-blue .btn-secondary-landing { color: #fff; border-color: #fff; }
+        .section-blue .btn-primary-landing { background: #fff; color: #064273; }
+
+        .hero-section {
+            padding: 100px 24px 80px;
+            text-align: center;
+        }
+        .hero-section h2 {
+            font-size: 42px;
+            margin-bottom: 16px;
+        }
+        .hero-section .hero-subtitle {
+            font-size: 20px;
+            color: #555;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+        .hero-section .hero-desc {
+            font-size: 18px;
+            color: #666;
+            max-width: 700px;
+            margin: 0 auto 32px;
+            line-height: 1.7;
+        }
+        .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+        .callout-band {
+            padding: 60px 24px;
+            text-align: center;
+        }
+        .callout-band p {
+            font-size: 22px;
+            font-weight: 600;
+            font-style: italic;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+
+        .cta-section {
+            text-align: center;
+            padding: 80px 24px;
+        }
+        .cta-section h2 { margin-bottom: 28px; }
+        .cta-section p { font-size: 18px; margin-bottom: 8px; }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 24px;
+        }
+        @media (max-width: 700px) {
+            .two-col { grid-template-columns: 1fr; gap: 20px; }
+            .hero-section h2 { font-size: 30px; }
+            .landing-section h2 { font-size: 26px; }
+            .callout-band p { font-size: 18px; }
+            .landing-header-right { gap: 10px; }
+            .landing-header-right a { font-size: 12px; }
+        }
+
+        .flow-diagram {
+            margin-top: 40px;
+        }
+        .flow-diagram-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 32px;
+            font-style: italic;
+        }
+        .flow-step {
+            max-width: 560px;
+            margin: 0 auto 0;
+            padding: 24px 28px;
+            border-radius: 12px;
+            position: relative;
+        }
+        .flow-step-white {
+            background: #fff;
+            color: #1a1a2e;
+            border: 2px solid #e2e8f0;
+        }
+        .flow-step h4 {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .flow-step .flow-role {
+            font-size: 13px;
+            font-weight: 600;
+            color: #3498db;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        .flow-step ul {
+            margin: 8px 0 0 0;
+        }
+        .flow-step ul li {
+            font-size: 15px;
+            line-height: 1.6;
+        }
+        .flow-step ul li::before {
+            color: #3498db !important;
+        }
+        .flow-arrow {
+            text-align: center;
+            padding: 8px 0;
+            font-size: 28px;
+            color: #7ec8e3;
+            line-height: 1;
+        }
+        .flow-step-number {
+            display: inline-block;
+            background: #064273;
+            color: #fff;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            font-size: 14px;
+            font-weight: 700;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        .section-blue .two-col-title { color: #7ec8e3; }
+
+        .blog-placeholder {
+            text-align: center;
+            padding: 40px;
+            border: 2px dashed rgba(255,255,255,0.3);
+            border-radius: 12px;
+            margin-top: 24px;
+        }
+        .section-white .blog-placeholder {
+            border-color: #e2e8f0;
+        }
+        .blog-placeholder p {
+            font-size: 16px;
+            opacity: 0.7;
+        }
+
+        .landing-footer {
+            background: #1a1a2e;
+            color: rgba(255,255,255,0.6);
+            text-align: center;
+            padding: 24px;
+            font-size: 13px;
+        }
+
+        .auth-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        .auth-modal-overlay.active { display: flex; }
+        .auth-modal {
+            background: #fff;
+            border-radius: 12px;
+            padding: 40px;
+            max-width: 420px;
+            width: 90%;
+            position: relative;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .auth-modal h2 { color: #1a1a2e; font-size: 24px; margin-bottom: 20px; }
+        .auth-modal .close-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+        }
+        .auth-modal .form-group {
+            margin-bottom: 16px;
+        }
+        .auth-modal .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+        }
+        .auth-modal .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 15px;
+        }
+        .auth-modal .btn-submit {
+            width: 100%;
+            padding: 12px;
+            background: #3498db;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .auth-modal .btn-submit:hover { background: #2980b9; }
+        .auth-modal .switch-link {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 14px;
+            color: #666;
+        }
+        .auth-modal .switch-link a {
+            color: #3498db;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        {% if error %}
+        .landing-error {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 12px 24px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        {% endif %}
+    </style>
+</head>
+<body>
+
+<div class="landing-header">
+    <h1>Project Brainstorm</h1>
+    <div class="landing-header-right">
+        <a href="/blog">Blog / News</a>
+        <select class="lang-selector" aria-label="Language">
+            <option value="en" selected>English</option>
+            <option value="zh">中文</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="th">ภาษาไทย</option>
+            <option value="id">Bahasa Indonesia</option>
+        </select>
+        <a href="#" onclick="openAuthModal('login'); return false;">Login</a>
+        <a href="#" class="btn-header" onclick="openAuthModal('signup'); return false;">Sign Up</a>
+    </div>
+</div>
+
+{% if error %}
+<div class="landing-error">{{ error }}</div>
+{% endif %}
+
+<!-- Section 1: Hero (white) -->
+<section class="landing-section section-white hero-section" id="section-hero">
+    <div class="landing-section-inner">
+        <h2>Simulate Markets. Avoid Costly Mistakes.</h2>
+        <p class="hero-subtitle">AI&#8209;native market intelligence for Asia&#8209;Pacific and beyond.</p>
+        <p class="hero-desc">Test strategies, messaging, and decisions with culturally grounded simulations — before committing capital.</p>
+        <div class="hero-buttons">
+            <a href="#" class="btn-landing btn-primary-landing" onclick="openAuthModal('signup'); return false;">Run a Simulation</a>
+            <a href="#section-how-it-works" class="btn-landing btn-secondary-landing">See How It Works</a>
+        </div>
+    </div>
+</section>
+
+<!-- Section 2: The Problem (blue) -->
+<section class="landing-section section-blue" id="section-problem">
+    <div class="landing-section-inner">
+        <h2>The World's Most Important Region Is the Hardest to Understand</h2>
+        <p>Asia&#8209;Pacific is fast&#8209;growing, culturally complex, and unforgiving.</p>
+        <ul>
+            <li>16+ major markets</li>
+            <li>41+ languages</li>
+            <li>Rapidly shifting consumers and regulations</li>
+        </ul>
+        <p>Yet most decisions are still made using:</p>
+        <ul>
+            <li>Slow, biased surveys</li>
+            <li>Incomplete panels</li>
+            <li>Gut feel and "experience"</li>
+        </ul>
+        <p>The result: cultural misfires, failed launches, and billions in lost value.</p>
+    </div>
+</section>
+
+<!-- Section 3: The Insight Gap (white) -->
+<section class="landing-section section-white" id="section-insight-gap">
+    <div class="landing-section-inner">
+        <h2>Traditional Research Is Too Slow. Generic AI Is Not Trustworthy.</h2>
+        <div class="two-col">
+            <div>
+                <h3>Legacy market research</h3>
+                <ul>
+                    <li>Takes weeks or months</li>
+                    <li>Is expensive and episodic</li>
+                    <li>Breaks down in APAC</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Generic AI tools</h3>
+                <ul>
+                    <li>Are fast but opaque</li>
+                    <li>Lack cultural depth and focus</li>
+                    <li>Cannot be audited or trusted</li>
+                </ul>
+            </div>
+        </div>
+        <p style="margin-top: 28px; font-weight: 600; font-size: 19px; font-style: italic; text-align: center;">Speed without trust isn't insight — it's risk.</p>
+    </div>
+</section>
+
+<!-- Section 4: Our Solution (blue) -->
+<section class="landing-section section-blue" id="section-solution">
+    <div class="landing-section-inner">
+        <h2>AI&#8209;Native Market Intelligence Through Simulation</h2>
+        <p>Project Brainstorm replaces traditional surveys and focus groups with grounded simulations using synthetic consumers.</p>
+        <h3 style="color: #7ec8e3;">Synthetic consumers are:</h3>
+        <ul>
+            <li>Lifelike AI personas</li>
+            <li>Statistically plausible representations of real people</li>
+            <li>Grounded in trusted local journalism and regional data</li>
+        </ul>
+        <p>You interact through <strong>Mark</strong>, our Market Intelligence Copilot, who helps you:</p>
+        <ul>
+            <li>Frame the business problem</li>
+            <li>Design the research</li>
+            <li>Run simulations</li>
+            <li>Turn results into decision&#8209;ready insights</li>
+        </ul>
+    </div>
+</section>
+
+<!-- Section 5: Who It's For (white) -->
+<section class="landing-section section-white" id="section-who">
+    <div class="landing-section-inner">
+        <h2>Built for Teams That Can't Afford to Get APAC Wrong</h2>
+        <ul>
+            <li>Global and regional brand leaders</li>
+            <li>Consultancies and agencies</li>
+            <li>Investors and financial institutions</li>
+            <li>Public sector and policy teams</li>
+        </ul>
+        <p style="margin-top: 20px; font-weight: 500;">If your decisions carry reputational, financial, or strategic risk — this is for you.</p>
+    </div>
+</section>
+
+<!-- Section 6: Why Use Project Brainstorm (blue) -->
+<section class="landing-section section-blue" id="section-why">
+    <div class="landing-section-inner">
+        <h2>Continuous Market Testing — Without the Friction</h2>
+        <p>In a perfect world, teams would run constant research before every major decision.</p>
+        <p>We make that possible by delivering:</p>
+        <ul>
+            <li><strong>Speed:</strong> insights in minutes, not weeks</li>
+            <li><strong>Cultural fidelity:</strong> grounded in local sources, not assumptions</li>
+            <li><strong>Auditability:</strong> every output is source&#8209;cited and explainable</li>
+            <li><strong>Cost efficiency:</strong> SaaS subscriptions, not open&#8209;ended consulting</li>
+        </ul>
+        <p>Market research becomes a daily decision tool, not a last&#8209;minute expense.</p>
+    </div>
+</section>
+
+<!-- Section 7: What Makes Us Different (white) -->
+<section class="landing-section section-white" id="section-different">
+    <div class="landing-section-inner">
+        <h2>Trust Is Designed In — Not Assumed</h2>
+        <p>Unlike chatbots, Project Brainstorm is not a black box.</p>
+        <ul>
+            <li>Every persona is grounded</li>
+            <li>Every insight is labeled by confidence</li>
+            <li>Every claim is traceable to real sources</li>
+        </ul>
+        <p style="font-weight: 500;">We don't ask you to "trust the model". We make trust verifiable.</p>
+    </div>
+</section>
+
+<!-- Section 8: What You Get (blue) -->
+<section class="landing-section section-blue" id="section-outputs">
+    <div class="landing-section-inner">
+        <h2>Familiar Research Outputs — Generated in a New Way</h2>
+        <ul>
+            <li>Synthetic survey results</li>
+            <li>Synthetic focus group and in-depth interview transcripts</li>
+            <li>Structured insight reports</li>
+            <li>Recommendations, risks, and unknowns</li>
+            <li>Full citations and audit trails</li>
+        </ul>
+        <p style="margin-top: 20px; font-weight: 500;">Same outputs decision&#8209;makers expect — delivered faster, cheaper, and with cultural precision.</p>
+    </div>
+</section>
+
+<!-- Section 9: One-Line Differentiator (white, callout band) -->
+<section class="landing-section section-white callout-band" id="section-differentiator">
+    <div class="landing-section-inner">
+        <p>From human panels to grounded simulation — market research rebuilt for Asia&#8209;Pacific.</p>
+    </div>
+</section>
+
+<!-- Section 10: Final CTA (blue) -->
+<section class="landing-section section-blue cta-section" id="section-cta">
+    <div class="landing-section-inner">
+        <h2>Make Better Decisions Before It's Too Late</h2>
+        <p>Run a simulation.</p>
+        <p>Test assumptions.</p>
+        <p>Avoid blind spots.</p>
+        <div style="margin-top: 32px;">
+            <a href="#" class="btn-landing btn-primary-landing" onclick="openAuthModal('signup'); return false;">Get Started With Mark</a>
+        </div>
+    </div>
+</section>
+
+<!-- Section 11: See How It Works (white) -->
+<section class="landing-section section-white" id="section-how-it-works">
+    <div class="landing-section-inner">
+        <h2>See How It Works</h2>
+        <p>You start with a real business decision, not a survey form.</p>
+        <p><strong>Mark</strong> acts like a senior consultant — helping you frame the problem and choose the right research approach.</p>
+        <p><strong>Lisa</strong> does the work — running culturally-grounded simulations using synthetic consumers.</p>
+        <p><strong>Ben</strong> ensures trust — enforcing rigor, realism, and auditability before anything reaches you.</p>
+        <p>You get insights you can act on, fast — with clarity on what's strong, what's tentative, and what's unknown.</p>
+
+        <div class="flow-diagram">
+            <p class="flow-diagram-title">Multi-agent ecosystem. One disciplined flow. No guesswork.</p>
+
+            <div class="flow-step flow-step-white">
+                <span class="flow-step-number">1</span>
+                <h4 style="display: inline;">Your Business Question</h4>
+            </div>
+            <div class="flow-arrow">&#9660;</div>
+
+            <div class="flow-step flow-step-white">
+                <span class="flow-step-number">2</span>
+                <div class="flow-role">Mark, Market Intelligence Copilot</div>
+                <ul>
+                    <li>Clarifies the decision</li>
+                    <li>Frames the right questions</li>
+                    <li>Designs the study</li>
+                </ul>
+            </div>
+            <div class="flow-arrow">&#9660;</div>
+
+            <div class="flow-step flow-step-white">
+                <span class="flow-step-number">3</span>
+                <div class="flow-role">Lisa, Virtual Consultant</div>
+                <ul>
+                    <li>Builds grounded personas</li>
+                    <li>Runs simulations (surveys, in-depth interviews, focus groups)</li>
+                </ul>
+            </div>
+            <div class="flow-arrow">&#9660;</div>
+
+            <div class="flow-step flow-step-white">
+                <span class="flow-step-number">4</span>
+                <div class="flow-role">Ben, QA Sentinel</div>
+                <ul>
+                    <li>Checks realism and grounding</li>
+                    <li>Enforces rigor</li>
+                    <li>Blocks weak outputs</li>
+                </ul>
+            </div>
+            <div class="flow-arrow">&#9660;</div>
+
+            <div class="flow-step flow-step-white" style="border-color: #3498db;">
+                <span class="flow-step-number">5</span>
+                <div class="flow-role">Decision-ready insights</div>
+                <ul>
+                    <li>Clear findings</li>
+                    <li>Confidence labels</li>
+                    <li>Full source citations</li>
+                    <li>Risks and unknowns</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section 12: Blog/News (blue, placeholder) -->
+<section class="landing-section section-blue" id="section-blog">
+    <div class="landing-section-inner">
+        <h2>Blog / News</h2>
+        <div class="blog-placeholder">
+            <p>Coming soon</p>
+        </div>
+    </div>
+</section>
+
+<div class="landing-footer">
+    &copy; 2026 Project Brainstorm. All rights reserved.
+</div>
+
+<!-- Sign Up Modal -->
+<div class="auth-modal-overlay" id="modal-signup">
+    <div class="auth-modal">
+        <button class="close-btn" onclick="closeAuthModals()">&times;</button>
+        <h2>Sign Up</h2>
+        <form action="/signup" method="POST">
+            <div class="form-group">
+                <label for="signup-email">Email</label>
+                <input type="email" id="signup-email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="signup-username">Username</label>
+                <input type="text" id="signup-username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="signup-password">Password (min 6 characters)</label>
+                <input type="password" id="signup-password" name="password" minlength="6" required>
+            </div>
+            <button type="submit" class="btn-submit">Sign Up</button>
+        </form>
+        <div class="switch-link">
+            Already have an account? <a href="#" onclick="openAuthModal('login'); return false;">Login</a>
+        </div>
+    </div>
+</div>
+
+<!-- Login Modal -->
+<div class="auth-modal-overlay" id="modal-login">
+    <div class="auth-modal">
+        <button class="close-btn" onclick="closeAuthModals()">&times;</button>
+        <h2>Login</h2>
+        <form action="/login" method="POST">
+            <div class="form-group">
+                <label for="login-email">Email</label>
+                <input type="email" id="login-email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" name="password" required>
+            </div>
+            <button type="submit" class="btn-submit">Login</button>
+        </form>
+        <div class="switch-link">
+            Don't have an account? <a href="#" onclick="openAuthModal('signup'); return false;">Sign Up</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function openAuthModal(type) {
+    closeAuthModals();
+    document.getElementById('modal-' + type).classList.add('active');
+}
+function closeAuthModals() {
+    document.querySelectorAll('.auth-modal-overlay').forEach(function(m) { m.classList.remove('active'); });
+}
+document.querySelectorAll('.auth-modal-overlay').forEach(function(overlay) {
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeAuthModals();
+    });
+});
+
+document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
+    anchor.addEventListener('click', function(e) {
+        var href = this.getAttribute('href');
+        if (href.startsWith('#section-')) {
+            e.preventDefault();
+            var target = document.querySelector(href);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    });
+});
+
+{% if error %}
+openAuthModal('{{ show_auth_tab }}');
+{% endif %}
+</script>
+
+</body>
+</html>

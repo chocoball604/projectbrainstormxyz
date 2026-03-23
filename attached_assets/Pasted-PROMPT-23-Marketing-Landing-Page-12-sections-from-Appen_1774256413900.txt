@@ -1,0 +1,99 @@
+PROMPT 23 — Marketing Landing Page (12 sections from Appendix 2)
+Implement ONLY this prompt.
+
+Source of truth:
+Use the exact copy and structure from [Appendix 2 - Marketing Landingpage.docx]
+
+Hard constraints:
+- Do NOT modify study/chat/QA/report/upload/model config features.
+- Do NOT implement Prompt 24 (Blog) yet; section #12 should be a preview placeholder.
+
+Requirements:
+1) Create a public route (use / as unauthenticated homepage OR /landing) showing the marketing landing page to unauthenticated users.
+   - Authenticated users should still land on the dashboard (do not break existing behavior).
+
+2) Implement the 12 sections in EXACT order:
+  1 Hero
+  2 The Problem
+  3 The Insight Gap
+  4 Our Solution
+  5 Who It’s For
+  6 Why Use Project Brainstorm
+  7 What Makes Us Different
+  8 What You Get
+  9 One-Line Differentiator
+  10 Final CTA
+  11 See How It Works
+  12 Blog/News (preview placeholder)
+
+3) Copy/paste verbatim text for sections 1–11 from Appendix 2 - Marketing Landingpage.docx.
+
+4) Section backgrounds alternate:
+- Section 1 white
+- Section 2 Ocean Blue #064273
+- Section 3 white
+…repeat through Section 12.
+
+5) Header for unauthenticated users must include:
+- Sign Up
+- Login
+- Blog/News
+- Language selector (default English; no i18n implementation needed yet)
+
+6) Buttons and anchors:
+- “Run a Simulation” links to Sign Up
+- “Get Started With Mark” links to Sign Up
+- “See How It Works” jumps (anchor scroll) to Section 11.
+
+7) Section 11 diagram (IMPORTANT — implement explicitly):
+Appendix 2 includes a flow diagram under “See How It Works”.
+
+Implementation rules for the diagram:
+A) Preferred: Use the embedded image from Appendix 2 if it can be extracted/placed in the repo.
+   - Save it into a static assets folder (e.g., artifacts/brainstorm/static/landing/flow.png)
+   - Render it in Section 11 beneath the “Multi-agent ecosystem…” line.
+
+B) If the embedded image cannot be reliably extracted (common with docx), create a simple HTML/CSS diagram that matches the exact flow content in Appendix 2:
+Flow steps to render (verbatim structure):
+(1) Your Business Question
+(2) Mark, Market Intelligence Copilot
+  - Clarifies the decision
+  - Frames the right questions
+  - Designs the study
+(3) Lisa, Virtual Consultant
+  - Builds grounded personas
+  - Runs simulations (surveys, in-depth interviews, focus groups)
+(4) Ben, QA Sentinel
+  - Checks realism and grounding
+  - Enforces rigor
+  - Blocks weak outputs
+(5) Decision-ready insights
+  - Clear findings
+  - Confidence labels
+  - Full source citations
+  - Risks and unknowns
+
+Diagram layout requirements (CSS):
+- Vertical flow (top to bottom)
+- Boxes with rounded corners
+- Arrows between boxes
+- Readable on mobile (stacked naturally)
+- Use brand-consistent colors:
+  - On white sections: blue boxes
+  - On blue sections: white boxes or lighter tone for contrast
+- No external libraries required.
+
+8) Section 12 (Blog/News preview placeholder):
+- Title “Blog / News”
+- Show “Coming soon” placeholder until Prompt 24 is implemented.
+- Still include a “Read more” link that can point to /blog (even if it 404s for now) OR omit link entirely until Prompt 24 — choose whichever is less disruptive.
+
+Deliverables:
+- Files changed
+- How to test:
+  A) Open / while logged out -> landing page renders all 12 sections in correct order
+  B) Verify alternating backgrounds (white then #064273 repeating)
+  C) Header shows Sign Up / Login / Blog/News / Language selector when logged out
+  D) “See How It Works” button scrolls to Section 11
+  E) Diagram is present in Section 11 (either image or HTML/CSS diagram)
+  F) “Run a Simulation” and “Get Started With Mark” navigate to Sign Up
