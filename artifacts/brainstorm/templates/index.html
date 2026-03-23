@@ -2050,6 +2050,63 @@
         </div>
 
         <div class="card">
+            <h2>Model Health</h2>
+            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
+                Per-model health status. Auto-checked daily on admin dashboard load.
+            </p>
+
+            {% if health_status_list %}
+            <table style="margin-bottom: 20px; font-size: 13px;">
+                <thead>
+                    <tr>
+                        <th>Model ID</th>
+                        <th>Status</th>
+                        <th>Last Tested</th>
+                        <th>Last Error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for hs in health_status_list %}
+                    <tr>
+                        <td><code>{{ hs.model_id }}</code></td>
+                        <td>
+                            {% if hs.status == 'pass' %}
+                            <span class="badge badge-active">PASS</span>
+                            {% elif hs.status == 'fail' %}
+                            <span class="badge badge-disabled">FAIL</span>
+                            {% elif hs.status == 'not_connected' %}
+                            <span class="badge" style="background: #f59e0b; color: #fff;">NOT CONNECTED</span>
+                            {% else %}
+                            <span class="badge" style="background: #6b7280; color: #fff;">UNKNOWN</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size: 12px; font-family: monospace;">{{ hs.last_tested_at or '—' }}</td>
+                        <td style="font-size: 12px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ hs.last_error or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No health check data yet.</p>
+            {% endif %}
+
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <form action="/admin/model-health/run" method="POST" style="display: inline;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <button type="submit" class="btn btn-primary">Run Health Check Now</button>
+                </form>
+            </div>
+
+            {% if latest_weekly_report %}
+            <div style="margin-top: 20px;">
+                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px;">Latest Weekly QA Report</h3>
+                <pre style="background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto;">{{ latest_weekly_report.report_text }}</pre>
+                <p style="font-size: 11px; color: #999; margin-top: 4px;">Generated: {{ latest_weekly_report.created_at }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card">
             <h2>Grounding Traces (Recent 50)</h2>
             {% if grounding_traces %}
             <div style="overflow-x: auto;">

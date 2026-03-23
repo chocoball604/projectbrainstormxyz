@@ -1,0 +1,154 @@
+IMPLEMENT: Model Health Check + Automatic QA integration + Weekly QA Report logging
+AND create a single model-call wrapper function (call_llm) to prevent drift later.
+
+Do ONLY this change. Do NOT implement other prompts or refactor unrelated features.
+
+Context:
+- We configure model IDs for Mark/Lisa/Ben and a persona model pool.
+- This app is intended to use Replit AI Integrations (Replit-managed credentials) for OpenAI / Anthropic / Google and OpenRouter.
+- Actual LLM calls are currently placeholder (no live HTTP integration yet).
+- We still need a truthful model health system NOW, and it must be future-proof when live calls are added.
+- PRD expects weekly QA reporting for Admin.
+
+Hard constraints:
+- Do NOT reset/delete DB.
+- Do NOT change Ben QA logic for studies, grounding traces, telemetry, exports, budgets, follow-ups, report versioning, or grounding library behavior.
+- Keep token-based sessions working.
+- Keep UI single-page.
+
+====================================================
+A) Create ONE wrapper: call_llm(model_id, messages, purpose="")
+====================================================
+1) Add a single function in app.py:
+
+call_llm(model_id: str, messages: list[dict], purpose: str="") -> str
+
+2) For now (since integration is not connected), call_llm MUST:
+- raise NotImplementedError("LLM integration not connected yet")
+OR return a clearly labeled placeholder string.
+Choose NotImplementedError so health checks can reliably detect “not connected”.
+
+3) IMPORTANT rule:
+- Any future real model calls (study execution, persona generation, Mark chat, etc.) MUST use call_llm.
+- Do NOT create additional call paths like call_openrouter(), call_anthropic(), etc.
+- This prevents drift. The health check must also use call_llm.
+
+====================================================
+B) Data model: model health + QA logging (minimal)
+====================================================
+1) Create table model_health_checks:
+- id INTEGER PK
+- run_id TEXT
+- run_type TEXT ('manual'|'auto_daily'|'auto_weekly')
+- started_at TEXT (utc)
+- finished_at TEXT (utc)
+- integration_mode TEXT ('placeholder_not_connected'|'live_calls_enabled')
+- summary_status TEXT ('pass'|'fail'|'unknown')
+- details_json TEXT
+
+2) Create table model_health_status:
+- model_id TEXT PRIMARY KEY
+- status TEXT NOT NULL ('unknown'|'pass'|'fail'|'not_connected')
+- last_tested_at TEXT
+- last_error TEXT
+
+3) Weekly QA report storage:
+- If an existing weekly QA report / admin DM system exists, append to it.
+- Otherwise create weekly_qa_reports:
+  - id INTEGER PK
+  - week_start_date TEXT
+  - created_at TEXT (utc)
+  - report_text TEXT
+
+====================================================
+C) Health check logic
+====================================================
+Implement run_model_health_check(run_type):
+- Determine integration_mode:
+  - Try calling call_llm with a trivial model_id and trivial message inside a try:
+    if it raises NotImplementedError => placeholder_not_connected
+    else => live_calls_enabled (means real integration exists)
+
+Per-model checks:
+1) CONFIG CHECK (always):
+- Validate Mark/Lisa/Ben selected model IDs are present in allowed_models and status=active
+- Validate persona pool has >=1 active entry
+- Validate persona pool active model IDs are present in allowed_models and active
+If any config invalid => FAIL and capture errors.
+
+2) LIVE SMOKE CHECK (only when live_calls_enabled):
+For each model_id in:
+- mark_model / lisa_model / ben_model (if set)
+- active persona pool models
+Call call_llm(model_id, [{"role":"user","content":"Reply with the single word OK"}], purpose="health_check")
+PASS if returned text contains "OK" (case-insensitive), else FAIL.
+Capture exceptions and store last_error (truncate to 300 chars).
+
+If integration_mode == placeholder_not_connected:
+- Do NOT pretend PASS.
+- If config valid => per-model status = not_connected with last_error="LLM integration not connected (placeholder mode)"
+- If config invalid => per-model status fail for invalid items
+- summary_status:
+  - 'fail' if config invalid
+  - 'unknown' if config valid but not connected
+
+Persist:
+- Update model_health_status per model_id
+- Insert model_health_checks row with details_json
+
+====================================================
+D) Regular automatic QA check (no background jobs)
+====================================================
+Because Replit may not support reliable background schedulers, implement automatic checks on safe triggers:
+1) Auto-daily:
+- On Admin dashboard load (admin-only), if no model_health_checks run today (UTC date), run run_model_health_check('auto_daily') once.
+2) Auto-weekly:
+- On Admin dashboard load, if no weekly report exists for current week, generate it (below).
+
+====================================================
+E) Weekly QA report integration (Admin)
+====================================================
+Generate weekly QA report text including a “System Model Health” section:
+- integration_mode
+- last daily check timestamp
+- summary_status PASS/FAIL/UNKNOWN
+- list failing models (model_id + error)
+- persona pool: active count / total
+Deliver it:
+- If Admin DM system exists: send as Admin DM
+- Else: store in weekly_qa_reports and display latest in Admin UI
+
+====================================================
+F) Admin UI (Model Health)
+====================================================
+Add Admin section “Model Health”:
+- Show Mark/Lisa/Ben configured models + active persona pool models
+- Show per-model status badges: PASS/FAIL/NOT CONNECTED/UNKNOWN
+- Show last_tested_at + last_error
+- Button: “Run Health Check Now” (manual)
+- Link/view latest weekly QA report
+
+====================================================
+G) API endpoints (admin-only) for automated tests
+====================================================
+Add:
+- POST /admin/model-health/run
+- GET /admin/model-health/status
+- GET /admin/weekly-qa-report/latest
+
+These enable your curl-based test runner.
+
+====================================================
+H) Tests / How to test
+====================================================
+1) Placeholder mode:
+- With call_llm raising NotImplementedError, health check shows NOT CONNECTED for valid configs, FAIL for invalid configs.
+2) Manual run:
+- Admin clicks “Run Health Check Now” -> status updates and a log row is created.
+3) Auto-daily:
+- Reload admin dashboard twice same day -> auto_daily runs only once.
+4) Weekly report:
+- Open admin dashboard -> weekly report created and includes “System Model Health”.
+5) Curl:
+- POST /admin/model-health/run returns JSON summary
+- GET /admin/model-health/status returns statuses

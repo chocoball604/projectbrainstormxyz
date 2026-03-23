@@ -65,6 +65,162 @@ ADMIN_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "up
 os.makedirs(USER_UPLOADS_DIR, exist_ok=True)
 os.makedirs(ADMIN_UPLOADS_DIR, exist_ok=True)
 
+def call_llm(model_id, messages, purpose=""):
+    """Single wrapper for all LLM calls. Future integration point."""
+    raise NotImplementedError("LLM integration not connected yet")
+
+
+def run_model_health_check(run_type="manual"):
+    run_id = secrets.token_hex(8)
+    started_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_db()
+
+    integration_mode = "placeholder_not_connected"
+    try:
+        call_llm("_probe_", [{"role": "user", "content": "ping"}], purpose="integration_probe")
+        integration_mode = "live_calls_enabled"
+    except NotImplementedError:
+        integration_mode = "placeholder_not_connected"
+    except Exception:
+        integration_mode = "live_calls_enabled"
+
+    mc = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM model_config").fetchall()}
+    active_allowed = {r["model_id"] for r in conn.execute(
+        "SELECT model_id FROM allowed_models WHERE status = 'active'"
+    ).fetchall()}
+    pool_models = conn.execute("SELECT model_id, status FROM persona_model_pool").fetchall()
+    active_pool = [r["model_id"] for r in pool_models if r["status"] == "active"]
+
+    config_errors = []
+    for role, key in [("Mark", "mark_model"), ("Lisa", "lisa_model"), ("Ben", "ben_model")]:
+        mid = mc.get(key)
+        if not mid:
+            config_errors.append(f"{role} model not configured")
+        elif mid not in active_allowed:
+            config_errors.append(f"{role} model '{mid}' not in active allowed models")
+
+    if not active_pool:
+        config_errors.append("Persona model pool has no active entries")
+    for pm in active_pool:
+        if pm not in active_allowed:
+            config_errors.append(f"Pool model '{pm}' not in active allowed models")
+
+    config_valid = len(config_errors) == 0
+
+    all_model_ids = set()
+    for key in ("mark_model", "lisa_model", "ben_model"):
+        if mc.get(key):
+            all_model_ids.add(mc[key])
+    all_model_ids.update(active_pool)
+
+    per_model = {}
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+    if integration_mode == "placeholder_not_connected":
+        for mid in all_model_ids:
+            is_valid = mid in active_allowed
+            if is_valid:
+                per_model[mid] = {"status": "not_connected", "error": "LLM integration not connected (placeholder mode)"}
+            else:
+                per_model[mid] = {"status": "fail", "error": f"Model not in active allowed list"}
+        if not config_valid:
+            summary_status = "fail"
+        else:
+            summary_status = "unknown"
+    else:
+        for mid in all_model_ids:
+            if mid not in active_allowed:
+                per_model[mid] = {"status": "fail", "error": "Model not in active allowed list"}
+                continue
+            try:
+                result = call_llm(mid, [{"role": "user", "content": "Reply with the single word OK"}], purpose="health_check")
+                if "ok" in result.lower():
+                    per_model[mid] = {"status": "pass", "error": None}
+                else:
+                    per_model[mid] = {"status": "fail", "error": f"Unexpected response: {result[:300]}"}
+            except Exception as e:
+                per_model[mid] = {"status": "fail", "error": str(e)[:300]}
+        if not config_valid:
+            summary_status = "fail"
+        elif any(v["status"] == "fail" for v in per_model.values()):
+            summary_status = "fail"
+        else:
+            summary_status = "pass"
+
+    for mid, info in per_model.items():
+        conn.execute(
+            "INSERT INTO model_health_status (model_id, status, last_tested_at, last_error) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(model_id) DO UPDATE SET status=?, last_tested_at=?, last_error=?",
+            (mid, info["status"], now_str, info["error"], info["status"], now_str, info["error"]),
+        )
+
+    finished_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    details = {"config_errors": config_errors, "per_model": per_model, "models_checked": list(all_model_ids)}
+    conn.execute(
+        "INSERT INTO model_health_checks (run_id, run_type, started_at, finished_at, integration_mode, summary_status, details_json) VALUES (?,?,?,?,?,?,?)",
+        (run_id, run_type, started_at, finished_at, integration_mode, summary_status, json.dumps(details)),
+    )
+    conn.commit()
+    conn.close()
+    return {"run_id": run_id, "run_type": run_type, "integration_mode": integration_mode, "summary_status": summary_status, "details": details}
+
+
+def generate_weekly_qa_report():
+    conn = get_db()
+    from datetime import timedelta
+    today = datetime.utcnow().date()
+    week_start = today - timedelta(days=today.weekday())
+    week_start_str = week_start.strftime("%Y-%m-%d")
+
+    existing = conn.execute("SELECT id FROM weekly_qa_reports WHERE week_start_date = ?", (week_start_str,)).fetchone()
+    if existing:
+        conn.close()
+        return None
+
+    last_check = conn.execute("SELECT * FROM model_health_checks ORDER BY id DESC LIMIT 1").fetchone()
+    health_rows = conn.execute("SELECT * FROM model_health_status ORDER BY model_id").fetchall()
+    mc = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM model_config").fetchall()}
+    pool_total = conn.execute("SELECT COUNT(*) FROM persona_model_pool").fetchone()[0]
+    pool_active = conn.execute("SELECT COUNT(*) FROM persona_model_pool WHERE status='active'").fetchone()[0]
+
+    lines = [f"Weekly QA Report — Week of {week_start_str}", "=" * 50, ""]
+    lines.append("## System Model Health")
+    if last_check:
+        lines.append(f"Integration Mode: {last_check['integration_mode']}")
+        lines.append(f"Last Daily Check: {last_check['finished_at']}")
+        lines.append(f"Summary Status: {last_check['summary_status'].upper()}")
+    else:
+        lines.append("No health checks have been run yet.")
+    lines.append("")
+    lines.append(f"Mark Model: {mc.get('mark_model', 'not set')}")
+    lines.append(f"Lisa Model: {mc.get('lisa_model', 'not set')}")
+    lines.append(f"Ben Model: {mc.get('ben_model', 'not set')}")
+    lines.append(f"Persona Pool: {pool_active} active / {pool_total} total")
+    lines.append("")
+
+    failing = [dict(r) for r in health_rows if r["status"] == "fail"]
+    not_connected = [dict(r) for r in health_rows if r["status"] == "not_connected"]
+    if failing:
+        lines.append("### Failing Models:")
+        for f in failing:
+            lines.append(f"  - {f['model_id']}: {f['last_error'] or 'unknown error'}")
+    if not_connected:
+        lines.append("### Not Connected Models:")
+        for nc in not_connected:
+            lines.append(f"  - {nc['model_id']}: {nc['last_error'] or 'placeholder mode'}")
+    if not failing and not not_connected:
+        lines.append("All models OK or no checks run yet.")
+
+    report_text = "\n".join(lines)
+    conn.execute(
+        "INSERT INTO weekly_qa_reports (week_start_date, report_text) VALUES (?, ?)",
+        (week_start_str, report_text),
+    )
+    conn.commit()
+    conn.close()
+    return report_text
+
+
 SEED_ALLOWED_MODELS = [
     "openai/gpt-5.4-mini",
     "openai/gpt-5.4-nano",
@@ -313,6 +469,34 @@ def init_db():
             model_id TEXT NOT NULL UNIQUE,
             status   TEXT NOT NULL DEFAULT 'active',
             added_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS model_health_checks (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id           TEXT NOT NULL,
+            run_type         TEXT NOT NULL,
+            started_at       TEXT NOT NULL,
+            finished_at      TEXT,
+            integration_mode TEXT,
+            summary_status   TEXT,
+            details_json     TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS model_health_status (
+            model_id       TEXT PRIMARY KEY,
+            status         TEXT NOT NULL DEFAULT 'unknown',
+            last_tested_at TEXT,
+            last_error     TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS weekly_qa_reports (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            week_start_date TEXT NOT NULL,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            report_text     TEXT NOT NULL
         )
     """)
     seed_count = conn.execute("SELECT COUNT(*) FROM allowed_models").fetchone()[0]
@@ -668,6 +852,8 @@ def index():
     model_config = {}
     allowed_models_list = []
     persona_pool_list = []
+    health_status_list = []
+    latest_weekly_report = None
     docs_list = []
     docs_page = 1
     docs_q = ""
@@ -703,6 +889,27 @@ def index():
             "SELECT * FROM persona_model_pool ORDER BY model_id"
         ).fetchall()]
         conn.close()
+
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+        conn2 = get_db()
+        today_check = conn2.execute(
+            "SELECT id FROM model_health_checks WHERE started_at >= ? LIMIT 1",
+            (today_str,),
+        ).fetchone()
+        conn2.close()
+        if not today_check:
+            run_model_health_check("auto_daily")
+
+        generate_weekly_qa_report()
+
+        conn3 = get_db()
+        health_status_list = [dict(r) for r in conn3.execute(
+            "SELECT * FROM model_health_status ORDER BY model_id"
+        ).fetchall()]
+        wr = conn3.execute("SELECT * FROM weekly_qa_reports ORDER BY id DESC LIMIT 1").fetchone()
+        if wr:
+            latest_weekly_report = dict(wr)
+        conn3.close()
 
     studies_page = 1
     studies_q = ""
@@ -979,6 +1186,8 @@ def index():
         model_config=model_config,
         allowed_models_list=allowed_models_list,
         persona_pool_list=persona_pool_list,
+        health_status_list=health_status_list,
+        latest_weekly_report=latest_weekly_report,
         mark_recommendation=mark_recommendation,
         mark_recommendation_label=mark_recommendation_label,
         mark_recommendation_reason=mark_recommendation_reason,
@@ -3343,6 +3552,51 @@ def admin_import_openrouter_models():
         return render_error("Failed to fetch models from OpenRouter API. Please use the OpenRouter Models catalog link to browse model IDs manually.")
 
 
+@app.route("/admin/model-health/run", methods=["POST"])
+def admin_model_health_run():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    result = run_model_health_check("manual")
+    if request.headers.get("Accept") == "application/json":
+        from flask import jsonify
+        return jsonify(result)
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/model-health/status", methods=["GET"])
+def admin_model_health_status():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    conn = get_db()
+    rows = [dict(r) for r in conn.execute("SELECT * FROM model_health_status ORDER BY model_id").fetchall()]
+    last_check = conn.execute("SELECT * FROM model_health_checks ORDER BY id DESC LIMIT 1").fetchone()
+    conn.close()
+    from flask import jsonify
+    return jsonify({
+        "models": rows,
+        "last_check": dict(last_check) if last_check else None,
+    })
+
+
+@app.route("/admin/weekly-qa-report/latest", methods=["GET"])
+def admin_weekly_qa_report_latest():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    conn = get_db()
+    row = conn.execute("SELECT * FROM weekly_qa_reports ORDER BY id DESC LIMIT 1").fetchone()
+    conn.close()
+    from flask import jsonify
+    if row:
+        return jsonify(dict(row))
+    return jsonify({"message": "No weekly QA reports yet."})
+
+
 @app.route("/admin/add-source", methods=["POST"])
 def admin_add_source():
     token = get_token()
@@ -3477,6 +3731,8 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         model_config=model_config,
         allowed_models_list=allowed_models_list,
         persona_pool_list=persona_pool_list,
+        health_status_list=[],
+        latest_weekly_report=None,
         mark_recommendation="",
         mark_recommendation_label="",
         mark_recommendation_reason="",
