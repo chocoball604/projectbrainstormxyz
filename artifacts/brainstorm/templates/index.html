@@ -673,51 +673,29 @@
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
 
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Run Study</h3>
-            {% if configure_study.study_type == 'synthetic_survey' %}
-                {% if survey_questions_ready %}
-                <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                    Survey is configured and questions are set. Ready to run.
+            {% if configure_study.qa_status == 'precheck_passed' %}
+                <p style="font-size: 13px; color: #27ae60; margin-bottom: 12px; font-weight: 600;">
+                    Ben QA precheck passed. You may now run the study.
                 </p>
                 <form action="/run-study/{{ configure_study.id }}" method="POST">
                     <input type="hidden" name="token" value="{{ token }}">
                     <button type="submit" class="btn btn-success" onclick="return confirm('Run this study?');">Run Study</button>
                 </form>
-                {% else %}
-                <p style="color: #e74c3c; font-size: 13px;">
-                    Cannot run yet. You need exactly {{ q_count }} survey question{{ 's' if q_count != 1 else '' }} (currently {{ sq_list|length }}).
+            {% elif configure_study.qa_status == 'precheck_failed' %}
+                <p style="color: #e74c3c; font-size: 13px; margin-bottom: 8px; font-weight: 600;">
+                    Ben QA precheck failed. Fix the issues below and try again.
                 </p>
+                {% if configure_study.qa_notes %}
+                <ul style="color: #e74c3c; font-size: 13px; margin: 0 0 0 20px; line-height: 1.8;">
+                    {% for note in configure_study.precheck_failures %}
+                    <li>{{ note }}</li>
+                    {% endfor %}
+                </ul>
                 {% endif %}
-            {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
-                {% if all_anchors_complete and personas_valid %}
-                <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                    Research Brief is complete and personas are attached. Ready to run.
-                </p>
-                <form action="/run-study/{{ configure_study.id }}" method="POST">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <button type="submit" class="btn btn-success" onclick="return confirm('Run this study?');">Run Study</button>
-                </form>
-                {% else %}
-                <p style="color: #e74c3c; font-size: 13px;">
-                    Cannot run yet.
-                    {% if not all_anchors_complete %} Complete all 6 Research Brief anchors.{% endif %}
-                    {% if not personas_valid %}
-                        {% if configure_study.study_type == 'synthetic_idi' %}
-                        Attach 1–3 personas (currently {{ configure_study_personas|length }}).
-                        {% else %}
-                        Attach 4–6 personas (currently {{ configure_study_personas|length }}).
-                        {% endif %}
-                    {% endif %}
-                </p>
-                {% endif %}
-            {% elif configure_study.study_type %}
-                <form action="/run-study/{{ configure_study.id }}" method="POST">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <button type="submit" class="btn btn-success" onclick="return confirm('Run this study?');">Run Study</button>
-                </form>
             {% else %}
-            <p style="color: #e74c3c; font-size: 13px;">
-                You must select a study type above before running the study.
-            </p>
+                <p style="color: #888; font-size: 13px;">
+                    Click "Ready for QA Review" in the side panel to run Ben's precheck before executing the study.
+                </p>
             {% endif %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
@@ -833,6 +811,26 @@
                 <p style="font-size: 13px; color: #999;">Select a study type to see the checklist.</p>
                 {% endif %}
 
+                {% if configure_study.qa_status == 'precheck_passed' %}
+                <div style="margin-top: 16px; padding: 10px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; text-align: center;">
+                    <span style="font-size: 13px; color: #155724; font-weight: 600;">Ben QA Precheck: PASSED</span>
+                </div>
+                {% elif configure_study.qa_status == 'precheck_failed' %}
+                <div style="margin-top: 16px; padding: 10px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 6px;">
+                    <span style="font-size: 13px; color: #721c24; font-weight: 600;">Ben QA Precheck: FAILED</span>
+                    {% if configure_study.precheck_failures %}
+                    <ul style="font-size: 12px; color: #721c24; margin: 6px 0 6px 16px; padding: 0; line-height: 1.6;">
+                        {% for note in configure_study.precheck_failures %}
+                        <li>{{ note }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                    <form action="/ready-for-qa/{{ configure_study.id }}" method="POST" style="margin-top: 6px;">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <button type="submit" class="btn btn-warning" style="width: 100%; font-size: 12px; background: #ffc107; color: #333; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Re-run QA Precheck</button>
+                    </form>
+                </div>
+                {% else %}
                 <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #eee;">
                     {% if checklist_complete %}
                     <form action="/ready-for-qa/{{ configure_study.id }}" method="POST">
@@ -844,6 +842,7 @@
                     <p style="font-size: 11px; color: #999; margin: 6px 0 0; text-align: center;">Complete all items above to enable.</p>
                     {% endif %}
                 </div>
+                {% endif %}
             </div>
         </div>
 

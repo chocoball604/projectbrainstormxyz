@@ -480,6 +480,13 @@ def index():
                         configure_study["survey_brief_data"] = {}
                 else:
                     configure_study["survey_brief_data"] = {}
+                if configure_study.get("qa_notes") and configure_study.get("qa_status") == "precheck_failed":
+                    try:
+                        configure_study["precheck_failures"] = json.loads(configure_study["qa_notes"])
+                    except (json.JSONDecodeError, TypeError):
+                        configure_study["precheck_failures"] = []
+                else:
+                    configure_study["precheck_failures"] = []
                 raw_ids = normalize_personas_used(configure_study.get("personas_used"))
                 cleaned_ids = []
                 for pid in raw_ids:
@@ -1144,6 +1151,53 @@ def run_ben_qa(study_dict):
     }
 
 
+def ben_precheck(study, persona_count):
+    failures = []
+    st = study["study_type"] or ""
+
+    if not st:
+        failures.append("Study type is not set.")
+        return failures
+
+    if st == "synthetic_survey":
+        rc = study["respondent_count"] or 0
+        qc = study["question_count"] or 0
+        sq = []
+        if study["survey_questions"]:
+            try:
+                sq = json.loads(study["survey_questions"])
+            except (json.JSONDecodeError, TypeError):
+                sq = []
+        if rc < 1:
+            failures.append("Respondent count is not set.")
+        if qc < 1:
+            failures.append("Question count is not set.")
+        if len(sq) != qc:
+            failures.append(f"Survey has {len(sq)} questions but needs exactly {qc}.")
+    elif st in ("synthetic_idi", "synthetic_focus_group"):
+        anchor_labels = [
+            ("business_problem", "Business Problem"),
+            ("decision_to_support", "Decision to Support"),
+            ("known_vs_unknown", "Known vs Unknown"),
+            ("target_audience", "Target Audience"),
+            ("study_fit", "Study Fit"),
+            ("definition_useful_insight", "Definition of Useful Insight"),
+        ]
+        for field, label in anchor_labels:
+            if not (study.get(field) or "").strip():
+                failures.append(f"{label} is missing.")
+        if st == "synthetic_idi":
+            if persona_count < 1 or persona_count > 3:
+                failures.append(f"IDI requires 1–3 personas (currently {persona_count}).")
+        else:
+            if persona_count < 4 or persona_count > 6:
+                failures.append(f"Focus Group requires 4–6 personas (currently {persona_count}).")
+    else:
+        failures.append(f"Unknown study type: {st}")
+
+    return failures
+
+
 @app.route("/ready-for-qa/<int:study_id>", methods=["POST"])
 def ready_for_qa(study_id):
     token = get_token()
@@ -1158,10 +1212,29 @@ def ready_for_qa(study_id):
     if not study:
         conn.close()
         return render_error("Study not found or not in draft status.")
-    conn.execute(
-        "UPDATE studies SET qa_status = 'pending_review' WHERE id = ?",
-        (study_id,),
-    )
+
+    persona_count = 0
+    raw_ids = normalize_personas_used(study["personas_used"])
+    for pid in raw_ids:
+        p_row = conn.execute(
+            "SELECT 1 FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+            (pid, user["id"]),
+        ).fetchone()
+        if p_row:
+            persona_count += 1
+
+    failures = ben_precheck(dict(study), persona_count)
+
+    if failures:
+        conn.execute(
+            "UPDATE studies SET qa_status = 'precheck_failed', qa_notes = ? WHERE id = ?",
+            (json.dumps(failures), study_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE studies SET qa_status = 'precheck_passed', qa_notes = NULL WHERE id = ?",
+            (study_id,),
+        )
     conn.commit()
     conn.close()
     return redirect(f"/?token={token}&configure={study_id}")
@@ -1387,6 +1460,10 @@ def run_study(study_id):
     if not study:
         conn.close()
         return render_error("Draft study not found or already executed.")
+
+    if study["qa_status"] != "precheck_passed":
+        conn.close()
+        return render_error("You must pass Ben's QA precheck before running the study. Click 'Ready for QA Review' first.")
 
     study_type = study["study_type"]
     if not study_type:
