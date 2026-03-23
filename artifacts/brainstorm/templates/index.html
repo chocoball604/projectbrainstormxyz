@@ -878,26 +878,64 @@
                 This study's output has been blocked by the QA gate (Ben).<br>
                 <strong>Reason:</strong> {{ view_study_output.qa_notes or 'No notes provided.' }}
             </div>
-            {% else %}
+            {% endif %}
+
             {% if view_study_output.study_output and 'SIMULATED PLACEHOLDER' in view_study_output.study_output %}
             <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 13px; color: #856404;">
                 <strong>SIMULATED PLACEHOLDER — NOT REAL OUTPUT</strong><br>
                 This output is for development/testing purposes only. It does not represent real research data.
             </div>
             {% endif %}
+
+            {% if view_study_output.status in ['completed', 'qa_blocked', 'terminated_system'] %}
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+                <a href="/download-pdf/{{ view_study_output.id }}?token={{ token }}" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 16px;">&#128196;</span> Download PDF
+                </a>
+            </div>
+            {% endif %}
+
+            {% if view_study_output.report_sections %}
+            <div id="report-viewer" style="margin-bottom: 24px;">
+                <h3 style="font-size: 18px; color: #1a1a2e; margin-bottom: 16px; border-bottom: 2px solid #4361ee; padding-bottom: 8px;">Research Report</h3>
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">1. Executive Summary</h4>
+                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.executive_summary }}</pre>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">2. What Was Studied</h4>
+                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.what_was_studied }}</pre>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">3. Key Findings</h4>
+                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.key_findings }}</pre>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">4. Risks, Limits, and Unknowns</h4>
+                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.risks_limits }}</pre>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">5. Sources and Citations</h4>
+                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.sources_citations }}</pre>
+                </div>
+            </div>
+            {% endif %}
+
             {% if view_study_output.final_report %}
-            {% if view_study_output.study_type == 'synthetic_survey' %}
-            <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; line-height: 1.6;">{{ view_study_output.final_report }}</pre>
-            {% else %}
-            <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.8; font-family: 'Georgia', serif;">{{ view_study_output.final_report }}</pre>
-            {% endif %}
-            {% else %}
-            {% if view_study_output.study_type == 'synthetic_survey' %}
-            <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; line-height: 1.6;">{{ view_study_output.study_output }}</pre>
-            {% else %}
-            <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.8; font-family: 'Georgia', serif;">{{ view_study_output.study_output }}</pre>
-            {% endif %}
-            {% endif %}
+            <details style="margin-bottom: 16px;">
+                <summary style="cursor: pointer; font-size: 14px; color: #4361ee; font-weight: 500; padding: 8px 0;">Show Raw Output</summary>
+                <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; line-height: 1.6; margin-top: 8px;">{{ view_study_output.final_report }}</pre>
+            </details>
+            {% elif view_study_output.study_output %}
+            <details style="margin-bottom: 16px;">
+                <summary style="cursor: pointer; font-size: 14px; color: #4361ee; font-weight: 500; padding: 8px 0;">Show Raw Output</summary>
+                <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; line-height: 1.6; margin-top: 8px;">{{ view_study_output.study_output }}</pre>
+            </details>
             {% endif %}
         </div>
         {% endif %}

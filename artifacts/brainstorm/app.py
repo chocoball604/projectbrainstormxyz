@@ -1,5 +1,5 @@
 """
-app.py — Project Brainstorm V1 (PROMPT 1–7 + PRD fixes + branching flow)
+app.py — Project Brainstorm V1 (PROMPT 1–7 + PRD fixes + branching flow + P11-P18)
 
 Single-page Flask app with SQLite.
 Sections: Login/Signup | Pending Approval | Active Dashboard | Admin Panel
@@ -13,10 +13,12 @@ PROMPT 7: Execute studies with placeholder outputs.
 PRD FIX: Survey no personas (respondent/question config), IDI 1-3 personas, FG 4-6 personas.
 BRANCHING: Study type chosen first in New Research flow. Survey gets survey brief + questions.
            IDI/FG get existing 6-anchor brief. Type set at creation, not after.
+P18: Report Viewer + PDF download for completed studies.
 
 Rules: See brainstorm_v1_replit_singlepage_pack/00_FROZEN_RULES_FROM_PRD.md
 """
 
+import io
 import json
 import os
 import secrets
@@ -28,8 +30,10 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
+from fpdf import FPDF
 from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
@@ -549,7 +553,7 @@ def index():
                 "SELECT * FROM studies WHERE id = ? AND user_id = ?",
                 (view_output_id, user["id"]),
             ).fetchone()
-            if row and (row["study_output"] or row["status"] == "qa_blocked"):
+            if row and (row["study_output"] or row["status"] in ("qa_blocked", "completed", "terminated_system")):
                 view_study_output = dict(row)
                 if view_study_output.get("confidence_summary"):
                     try:
@@ -558,6 +562,7 @@ def index():
                         view_study_output["confidence_parsed"] = None
                 else:
                     view_study_output["confidence_parsed"] = None
+                view_study_output["report_sections"] = build_structured_report(view_study_output)
 
         conn.close()
 
@@ -951,6 +956,213 @@ def set_study_type(study_id):
     return redirect(url_for("index", token=token, configure=study_id))
 
 
+STUDY_TYPE_LABELS = {
+    "synthetic_survey": "Synthetic Survey",
+    "synthetic_idi": "Synthetic IDI (In-Depth Interview)",
+    "synthetic_focus_group": "Synthetic Focus Group",
+}
+
+ANCHOR_FIELDS = [
+    ("business_problem", "Business Problem"),
+    ("decision_to_support", "Decision to Support"),
+    ("known_vs_unknown", "Known vs Unknown"),
+    ("target_audience", "Target Audience"),
+    ("study_fit", "Study Fit"),
+    ("definition_useful_insight", "Definition of Useful Insight"),
+]
+
+
+def build_structured_report(study):
+    title = study.get("title") or "Untitled Study"
+    st = study.get("study_type") or "Unknown"
+    st_label = STUDY_TYPE_LABELS.get(st, st)
+    output_raw = study.get("final_report") or study.get("study_output") or ""
+    is_placeholder = "SIMULATED PLACEHOLDER" in output_raw
+
+    sections = {}
+
+    exec_lines = [f"Study: {title}", f"Type: {st_label}"]
+    for field, label in ANCHOR_FIELDS:
+        val = (study.get(field) or "").strip()
+        if val:
+            exec_lines.append(f"{label}: {val}")
+    if is_placeholder:
+        exec_lines.append("")
+        exec_lines.append("Note: This output is simulated placeholder data for development/testing purposes. It does not represent real research findings.")
+    else:
+        exec_lines.append("")
+        exec_lines.append("This report summarizes the findings from the study execution.")
+    sections["executive_summary"] = "\n".join(exec_lines)
+
+    studied_lines = [f"Study Title: {title}", f"Study Type: {st_label}"]
+    if st == "synthetic_survey":
+        rc = study.get("respondent_count") or 0
+        qc = study.get("question_count") or 0
+        studied_lines.append(f"Respondent Count: {rc}")
+        studied_lines.append(f"Question Count: {qc}")
+        sq = []
+        if study.get("survey_questions"):
+            try:
+                sq = json.loads(study["survey_questions"])
+            except (json.JSONDecodeError, TypeError):
+                sq = []
+        if sq:
+            studied_lines.append("Questions:")
+            for i, q in enumerate(sq, 1):
+                studied_lines.append(f"  {i}. {q}")
+    else:
+        for field, label in ANCHOR_FIELDS:
+            val = (study.get(field) or "").strip()
+            studied_lines.append(f"{label}: {val or '(not provided)'}")
+    sections["what_was_studied"] = "\n".join(studied_lines)
+
+    confidence = None
+    if study.get("confidence_summary"):
+        try:
+            confidence = json.loads(study["confidence_summary"])
+        except (json.JSONDecodeError, TypeError):
+            confidence = None
+
+    findings_lines = []
+    if is_placeholder:
+        findings_lines.append("[Placeholder findings — not based on real data]")
+    if st == "synthetic_survey" and output_raw:
+        try:
+            survey_data = json.loads(output_raw.split("\n", 1)[-1] if "===" in output_raw else output_raw)
+            if isinstance(survey_data, dict) and "questions" in survey_data:
+                for qi, qobj in enumerate(survey_data["questions"], 1):
+                    q_text = qobj.get("q", f"Question {qi}")
+                    conf_label = "Indicative" if confidence else "Exploratory"
+                    if confidence and confidence.get("Strong", 0) > 0 and qi == 1:
+                        conf_label = "Strong"
+                    findings_lines.append(f"Finding {qi} [{conf_label}]: {q_text}")
+                    results = qobj.get("results", {})
+                    for k, v in results.items():
+                        findings_lines.append(f"  - {k}: {v}")
+                    findings_lines.append("")
+        except (json.JSONDecodeError, TypeError, IndexError):
+            findings_lines.append("Raw output available but could not be parsed into structured findings.")
+    else:
+        clean_output = output_raw
+        for prefix in ["=== QA REVIEW: PASS ===", "=== QA REVIEW: DOWNGRADE ==="]:
+            if clean_output.startswith(prefix):
+                parts = clean_output.split("=" * 40, 1)
+                if len(parts) > 1:
+                    clean_output = parts[1].strip()
+                break
+        if clean_output.startswith("*** SIMULATED"):
+            lines_raw = clean_output.split("\n")
+            clean_output = "\n".join(l for l in lines_raw if not l.startswith("***"))
+        interview_blocks = clean_output.split("--- Interview with ") if "--- Interview with " in clean_output else []
+        if interview_blocks and len(interview_blocks) > 1:
+            for bi, block in enumerate(interview_blocks[1:], 1):
+                conf_label = "Indicative"
+                if confidence and confidence.get("Strong", 0) >= bi:
+                    conf_label = "Strong"
+                speaker = block.split("---")[0].strip()
+                findings_lines.append(f"Finding {bi} [{conf_label}]: Key themes from {speaker}")
+                snippet_lines = [l.strip() for l in block.split("\n") if l.strip() and not l.startswith("---")][:4]
+                for sl in snippet_lines:
+                    findings_lines.append(f"  {sl}")
+                findings_lines.append("")
+        elif clean_output.strip():
+            findings_lines.append(f"Finding 1 [Exploratory]: Study output summary")
+            for line in clean_output.strip().split("\n")[:10]:
+                if line.strip():
+                    findings_lines.append(f"  {line.strip()}")
+            findings_lines.append("")
+
+    if not findings_lines:
+        findings_lines.append("No findings available.")
+    sections["key_findings"] = "\n".join(findings_lines)
+
+    risk_lines = []
+    qa_status = study.get("qa_status") or ""
+    qa_notes = study.get("qa_notes") or ""
+    if qa_status == "fail" or study.get("status") == "qa_blocked":
+        risk_lines.append(f"QA Status: BLOCKED — {qa_notes}")
+    elif qa_status == "downgrade":
+        risk_lines.append(f"QA Status: DOWNGRADE — {qa_notes}")
+    if is_placeholder:
+        risk_lines.append("All data in this report is simulated. Do not use for real business decisions.")
+    risk_lines.append("Synthetic research outputs are experimental and should be validated with traditional research methods before acting on findings.")
+    if st == "synthetic_survey":
+        risk_lines.append("Survey responses are AI-generated and may not reflect real consumer behavior.")
+    elif st in ("synthetic_idi", "synthetic_focus_group"):
+        risk_lines.append("Interview/discussion outputs are AI-generated based on persona profiles and may contain biases inherent in the training data.")
+    sections["risks_limits"] = "\n".join(risk_lines)
+
+    source_lines = [
+        "AI Model: Simulated output (placeholder)",
+        "Grounding Sources: As configured by admin web sources (if any)",
+        "Persona Profiles: Generated from user-defined demographic and psychographic parameters",
+    ]
+    if study.get("personas_used"):
+        try:
+            pids = json.loads(study["personas_used"]) if isinstance(study["personas_used"], str) else study["personas_used"]
+            if pids:
+                source_lines.append(f"Personas Used: {', '.join(pids)}")
+        except (json.JSONDecodeError, TypeError):
+            pass
+    source_lines.append("")
+    source_lines.append("Note: Real citations will be populated when live AI model integration is enabled.")
+    sections["sources_citations"] = "\n".join(source_lines)
+
+    return sections
+
+
+def generate_report_pdf(study, sections):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_page()
+
+    def _safe(text):
+        return text.encode("latin-1", "replace").decode("latin-1")
+
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 12, "Project Brainstorm - Research Report", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 6, "Experimental / simulated output - not for production use", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 10, _safe(study.get("title", "Untitled Study")), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 10)
+    st_label = STUDY_TYPE_LABELS.get(study.get("study_type", ""), study.get("study_type", "Unknown"))
+    pdf.cell(0, 6, _safe(f"Type: {st_label}  |  Status: {study.get('status', 'unknown')}"), new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(6)
+
+    heading_sections = [
+        ("1. Executive Summary", sections.get("executive_summary", "")),
+        ("2. What Was Studied", sections.get("what_was_studied", "")),
+        ("3. Key Findings", sections.get("key_findings", "")),
+        ("4. Risks, Limits, and Unknowns", sections.get("risks_limits", "")),
+        ("5. Sources and Citations", sections.get("sources_citations", "")),
+    ]
+
+    for heading, content in heading_sections:
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_fill_color(240, 240, 240)
+        pdf.cell(0, 8, heading, new_x="LMARGIN", new_y="NEXT", fill=True)
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.multi_cell(0, 5, _safe(content))
+        pdf.ln(4)
+
+    pdf.ln(6)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.set_text_color(120, 120, 120)
+    pdf.multi_cell(0, 4, "Disclaimer: This report contains experimental, AI-generated synthetic research output. "
+                         "It is intended for development and testing purposes only. Do not base real business "
+                         "decisions on this data without independent validation through traditional research methods.")
+
+    return pdf.output()
+
+
 def generate_placeholder_output(study_type, study, persona_names):
     header = "*** SIMULATED PLACEHOLDER — NOT REAL OUTPUT ***"
     if study_type == "synthetic_survey":
@@ -1238,6 +1450,35 @@ def ready_for_qa(study_id):
     conn.commit()
     conn.close()
     return redirect(f"/?token={token}&configure={study_id}")
+
+
+@app.route("/download-pdf/<int:study_id>")
+def download_pdf(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("Unauthorized.")
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+    conn.close()
+    if not study:
+        return render_error("Study not found.")
+    if study["status"] not in ("completed", "qa_blocked", "terminated_system"):
+        return render_error("Report is only available for completed or reviewed studies.")
+    study_dict = dict(study)
+    sections = build_structured_report(study_dict)
+    pdf_bytes = generate_report_pdf(study_dict, sections)
+    safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in (study_dict.get("title") or "report")).strip().replace(" ", "_")
+    filename = f"brainstorm_report_{safe_title}_{study_id}.pdf"
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
+    )
 
 
 def get_save_buttons(study):
