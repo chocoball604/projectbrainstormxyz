@@ -1,0 +1,48 @@
+USAGE WINDOW CONSISTENCY CHECK + FIX (Do ONLY this)
+
+Goal:
+Determine whether “studies used this month” is implemented as:
+(A) calendar month (YYYY-MM-01 to end-of-month), OR
+(B) rolling 30-day window (now minus 30 days),
+and then make the chosen behavior consistent across the entire app.
+
+Context:
+The PRD includes language that can be read either way (calendar month and also 30-day period). We must not have mixed logic across routes/UI. (See [PRD_Mark-PBXYZ_V4.01.docx](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=77cb5263-35f1-46b0-9edb-401caeff8a33&cid=bfec441e4a44d47e&EntityRepresentationId=ab59f6cd-e3f5-45b0-b356-bd3febe60f6d)).
+
+Strict constraints:
+- Do NOT implement any other prompts or features.
+- Do NOT reset/delete DB.
+- Do NOT change QA logic, grounding traces, telemetry, exports, budgets, or persona rules.
+- Keep token-based sessions working.
+
+Step 1: Identify current behavior (must be explicit in your response)
+- Find every place the app calculates usage / “studies used this month” / quota enforcement.
+- List the exact functions/routes/templates involved.
+- Inspect the time window logic:
+  - If it uses start-of-month logic (strftime('%Y-%m'), 'start of month', etc) => calendar month
+  - If it uses now-30days logic (timedelta(days=30), '-30 days', etc) => rolling 30 days
+- In your output, state which model the code currently uses and quote the relevant snippet.
+
+Step 2: Choose ONE model and make it consistent everywhere
+- Do NOT invent a new cadence system.
+- Choose either calendar-month or rolling-30-days based on what is already implemented in most places.
+- Update all other locations to match the chosen model.
+
+Step 3: Make the window visible in the dashboard UI
+Add a small line under the usage meter:
+- If calendar month: “Usage window: <YYYY-MM-01> to <YYYY-MM-lastday> (calendar month)”
+- If rolling 30 days: “Usage window: last 30 days (since <YYYY-MM-DD>)”
+This line must reflect the exact computed dates used by enforcement.
+
+Step 4: Add a small internal test hook (dev-only) OR test instructions
+- Provide a simple way to validate the window:
+  Example: create one study with a timestamp outside the window and confirm it is not counted.
+  If you cannot easily simulate timestamps, provide a clear SQL-based test instruction.
+
+Deliverables:
+1) Files changed
+2) “Current behavior found” (calendar month or rolling 30 days) + where it was found
+3) “Final behavior chosen” (must match current majority behavior)
+4) How to test:
+   - A) Verify the window line on dashboard matches the chosen model
+   - B) Verify count changes correctly at the boundary (month change or 30-day boundary)

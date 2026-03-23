@@ -296,8 +296,13 @@
                 {% set bar_color = '#dc3545' if usage_limit_reached else ('#ffc107' if pct >= 75 else '#4361ee') %}
                 <div style="width: {{ [pct, 100]|min }}%; height: 100%; background: {{ bar_color }}; border-radius: 6px; transition: width 0.3s;"></div>
             </div>
+            {% if usage_window_start and usage_window_end %}
+            <div style="margin-top: 4px; font-size: 11px; color: #999;">
+                Usage window: {{ usage_window_start }} to {{ usage_window_end }} (calendar month)
+            </div>
+            {% endif %}
             {% if usage_limit_reached %}
-            <div style="margin-top: 6px; font-size: 12px; color: #dc3545;">
+            <div style="margin-top: 4px; font-size: 12px; color: #dc3545;">
                 You have reached your monthly limit of {{ usage_limit }} studies. New studies will be available next month.
             </div>
             {% endif %}

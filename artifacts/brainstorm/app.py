@@ -55,14 +55,18 @@ FREE_TIER_MONTHLY_LIMIT = 6
 
 
 def get_monthly_usage(conn, user_id):
+    import calendar
     now = datetime.utcnow()
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+    window_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last_day = calendar.monthrange(now.year, now.month)[1]
+    window_end = now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=0)
+    month_start_str = window_start.strftime("%Y-%m-%d %H:%M:%S")
     placeholders = ",".join("?" for _ in BILLABLE_STATUSES)
     count = conn.execute(
         f"SELECT COUNT(*) FROM studies WHERE user_id = ? AND status IN ({placeholders}) AND created_at >= ?",
-        (user_id, *BILLABLE_STATUSES, month_start),
+        (user_id, *BILLABLE_STATUSES, month_start_str),
     ).fetchone()[0]
-    return count, FREE_TIER_MONTHLY_LIMIT
+    return count, FREE_TIER_MONTHLY_LIMIT, window_start.strftime("%Y-%m-%d"), window_end.strftime("%Y-%m-%d")
 
 STUDY_TYPE_LIMITS = {
     "synthetic_survey": {"max_questions": 12, "max_respondents": 400},
@@ -513,11 +517,13 @@ def index():
     usage_count = 0
     usage_limit = FREE_TIER_MONTHLY_LIMIT
     usage_limit_reached = False
+    usage_window_start = ""
+    usage_window_end = ""
 
     if user and user["state"] == "active":
         conn = get_db()
 
-        usage_count, usage_limit = get_monthly_usage(conn, user["id"])
+        usage_count, usage_limit, usage_window_start, usage_window_end = get_monthly_usage(conn, user["id"])
         usage_limit_reached = usage_count >= usage_limit
 
         studies_page = max(1, int(request.args.get("studies_page", "1") or "1"))
@@ -727,6 +733,8 @@ def index():
         usage_count=usage_count,
         usage_limit=usage_limit,
         usage_limit_reached=usage_limit_reached,
+        usage_window_start=usage_window_start,
+        usage_window_end=usage_window_end,
     )
 
 
@@ -850,7 +858,7 @@ def create_study():
         return render_error("You must be an active user to create a study.")
 
     conn_check = get_db()
-    used, limit = get_monthly_usage(conn_check, user["id"])
+    used, limit, _, _ = get_monthly_usage(conn_check, user["id"])
     conn_check.close()
     if used >= limit:
         return render_error(f"Monthly study limit reached ({used}/{limit}). You cannot create new studies until next month.")
@@ -948,7 +956,7 @@ def create_study_tbd():
         return render_error("You must be an active user to create a study.")
 
     conn_check = get_db()
-    used, limit = get_monthly_usage(conn_check, user["id"])
+    used, limit, _, _ = get_monthly_usage(conn_check, user["id"])
     conn_check.close()
     if used >= limit:
         return render_error(f"Monthly study limit reached ({used}/{limit}). You cannot create new studies until next month.")
@@ -2652,6 +2660,8 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         usage_count=0,
         usage_limit=FREE_TIER_MONTHLY_LIMIT,
         usage_limit_reached=False,
+        usage_window_start="",
+        usage_window_end="",
     )
 
 
