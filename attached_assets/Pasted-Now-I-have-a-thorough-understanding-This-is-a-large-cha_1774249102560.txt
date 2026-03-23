@@ -1,0 +1,105 @@
+Now I have a thorough understanding. This is a large change. Let me implement it systematically:
+
+Update constants (limits from 10/1/10 → 5/1/5, add 15MB user cap)
+Migrate user_uploads table (add new columns: status, deleted_at, content_sha256, retained_excerpt_text, retained_excerpt_bytes)
+Create study_documents join table
+Update upload/attach/detach routes
+Add My Documents section with search, pagination, usage meter
+Implement soft delete with retention
+Update Study Detail uploads section for attach/detach
+Update report sources to handle deleted docs
+Update render_error and template vars
+Let me start implementing:
+
+Now update the user_uploads table creation (keeping old schema for CREATE TABLE IF NOT EXISTS since it won't run on existing DB, but migration will add columns) and add the study_documents table:
+
+Now update migrate_db to add new columns and migrate existing data:
+
+Now add migration logic at the end of migrate_db:
+
+Now I need to add hashlib import and rewrite the upload routes. Let me also update the index() function to load the new "My Documents" data:
+
+Now let me update the index() function to add My Documents data loading and update the study_uploads to use the new join table:
+
+Now let me update the index() function. I need to:
+
+Add variables for docs_page, docs_q, docs_list, docs_total, etc.
+Update study_uploads to use study_documents join table
+Update report sources to use study_documents join table
+Now update the study_uploads loading in the configure_study section to use the join table:
+
+The study_attachable_docs list comprehension has a bug - the if r["id"] not in attached_doc_ids won't work as a filter on fetchall(). Let me fix that:
+
+Now update the report sources loading to use the join table:
+
+Now I need to add My Documents data loading. Let me find where the personas pagination is and add the docs pagination after it:
+
+Now add docs pagination loading after the personas section (before view_pid):
+
+Now update the render_template call and render_error to include the new variables:
+
+Now rewrite the upload routes. Replace upload_study_file with the new logic (upload to library, optionally auto-attach to study):
+
+Now update the PDF download route to use the join table:
+
+Now update the render_error function to include the new template vars:
+
+Now update the template. I need to:
+
+Update the Study Detail uploads section (replace upload form with attach-from-library + upload-new, change delete to detach)
+Add the "My Documents (Grounding Library)" section after My Personas
+Let me update the Study Detail uploads section first:
+
+Now add the "My Documents (Grounding Library)" section after the My Personas section. Let me find where the personas section ends:
+
+Let me find exactly where the "My Personas" card ends:
+
+Now insert the "My Documents" section right after the My Personas card closing div (line 1448):
+
+Now let me restart and run tests:
+
+Server is running. Now let me run the comprehensive test suite:
+
+The existing DB still has the study_id column with NOT NULL constraint. The migration adds the new columns but doesn't handle removing the NOT NULL on study_id. Since the existing table has study_id NOT NULL, I need to handle this in the migration - either by dropping the constraint or by providing a default. The simplest approach is to handle this in migration:
+
+FK constraint issue - study_documents references user_uploads. Need to disable FK enforcement during migration:
+
+The PRAGMA foreign_keys = OFF in SQLite only works if it's the first statement in a transaction, or if executed outside a transaction. The issue is that the study_documents table now has FK references to user_uploads. Let me drop study_documents first, then recreate after:
+
+Server is running. Now run the tests:
+
+T7 fails. The detach is working but the 5th upload is being blocked because the study already has 5 attachments (it couldn't be detached since those test files were uploaded via upload-study-file which auto-attaches). Let me debug:
+
+I see - the med_overflow.txt was uploaded (went to library) and auto-attached because the upload only checks per-study count and total, and if the 5th file fits (4 + 1 = 5), then the 5th uploads fine. The T7 test logic was wrong - it tried 5 x ~1MB files. 4 x ~1MB = ~4MB, the 5th was ~1MB which made ~5MB total = exactly at the limit, so it succeeded. The test needs adjusting. But first let me clean up and fix the test:
+
+Now let me run the fixed test with better T7 logic (the total size test needs to attach files that exceed 5MB total):
+
+OK so T7 - the 5th upload succeeded (302 redirect = success). That's because 4 files * ~1MB + 5th ~1MB = ~5MB which is exactly the limit (5MB). The 5MB cap is 5 * 1024 * 1024 = 5242880 and each file is 1048576 - 100 = 1048476. 5 * 1048476 = 5242380 < 5242880. So it fits. The test needs to use slightly bigger files. Let me simplify T7:
+
+So 5 files of ~1MB each (about 5MB total) is still under the 5MB cap. The issue is that 5 * (1024*1024 - 10) = 5242790 < 5242880 = 5*1024*1024. The file count limit of 5 is hit first, and the total size of nearly 5MB fits. This is actually correct behavior - the limit of 5 files AND 5MB are both working correctly. Let me fix the test to properly exceed the size limit:
+
+Good - the limits are coherent by design. Now let me run the full test suite with the corrected T7:
+
+All 17 tests passed. Let me take a screenshot to verify the UI:
+
+All 17 tests passed and the app is running. The DB migration fix removed the FK constraints from study_documents (which was causing the SQLite foreign key issue during migration) and reordered the migration steps properly.
+
+Here's a summary of PROMPT 21 Grounding Library completion:
+
+All 17 tests passed:
+
+T1-T4: Upload from study (auto-attach), library visibility, library upload, attach from library
+T5-T7: File count limit (5/study), file size limit (1MB), combined limits enforcement
+T8: Detach from study
+T9-T10: Soft delete (retains metadata), deleted docs visible with "Deleted" badge
+T11: Storage meter shows usage out of 15MB cap
+T12-T13: User storage cap enforced, delete frees space for new uploads
+T14-T15: Pagination (10 docs/page), search by filename
+T16: Auto-detach from draft studies on delete
+T17: Completed study preserves document references
+PROMPT 21 is complete. Ready for your permission to proceed with PROMPT 22 (Admin Model Configuration).
+
+
+Scroll to latest
+
+Make, test, iterate…
