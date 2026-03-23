@@ -1745,8 +1745,9 @@ def download_pdf(study_id):
     version = int(version_param) if version_param and version_param.isdigit() else None
     sections = build_structured_report(study_dict, followups=followups, version=version)
     pdf_bytes = generate_report_pdf(study_dict, sections)
-    safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in (study_dict.get("title") or "report")).strip().replace(" ", "_")
-    filename = f"brainstorm_report_{safe_title}_{study_id}.pdf"
+    report_version = sections.get("version", 1)
+    safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in (study_dict.get("title") or f"study_{study_id}")).strip().replace(" ", "_")
+    filename = f"{safe_title}_{study_id}_V{report_version}.pdf"
     return send_file(
         io.BytesIO(pdf_bytes),
         mimetype="application/pdf",
