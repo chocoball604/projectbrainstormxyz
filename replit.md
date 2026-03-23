@@ -51,8 +51,8 @@ Python Flask + SQLite single-page app for AI-Native Market Research.
 
 - **Auth**: Token-based (URL query param `?token=xxx`) — needed because Replit preview iframe blocks cookies. Sessions stored in `sessions` table.
 - **Admin password**: `admin123` (env var `ADMIN_PASSWORD`)
-- **DB tables**: `users`, `sessions`, `studies`, `personas`, `admin_web_sources`, `grounding_traces`
-- **Prompt progress**: Prompts 1–8 complete
+- **DB tables**: `users`, `sessions`, `studies`, `personas`, `admin_web_sources`, `grounding_traces`, `cost_telemetry`, `chat_messages`, `followups`, `user_uploads`, `study_documents`, `admin_uploads`, `model_config`, `allowed_models`, `persona_model_pool`
+- **Prompt progress**: Prompts 1–22 complete
   - P1: Auth/signup/admin approval
   - P2: Study list + "New Research" button
   - P3: Research Brief with 6 required anchors
@@ -76,6 +76,8 @@ Python Flask + SQLite single-page app for AI-Native Market Research.
   - P19: Follow-ups for IDI/FG — `followups` table with `UNIQUE(study_id, followup_round)` and `CHECK(1..2)`. Max 2 follow-up rounds per study, only for completed `synthetic_idi`/`synthetic_focus_group`. `/submit-followup/<id>` route validates ownership, study type, status, and round limit. Each follow-up routed through `run_ben_qa()` with full study context. UI shows follow-up history + input box (or limit message). Surveys show no follow-up UI.
   - P20: Usage meters + limit enforcement — `BILLABLE_STATUSES` = completed, qa_blocked, terminated_system, terminated_user. `get_monthly_usage(conn, user_id)` counts studies with billable status created this month. `FREE_TIER_MONTHLY_LIMIT = 6`. Dashboard shows usage meter ("Studies used this month: X of Y") with color-coded progress bar (blue → yellow at 75% → red at limit). "New Research" disabled when limit reached. Server-side enforcement in `/create-study` and `/create-study-tbd`. Draft and in_progress do NOT count.
   - Bug Fix: PDF filenames now include report version — `{title}_{id}_V{version}.pdf`.
+  - P21: Document Grounding Library — `user_uploads` (user-scoped, soft delete with metadata retention), `study_documents` join table for study↔doc attachments, `admin_uploads` for global admin documents. My Documents section with search, pagination, storage meter. Limits: 5 files/5MB per study, 1MB per file, 15MB user storage cap. Routes: `/upload-study-file/<id>`, `/upload-user-doc`, `/attach-doc-to-study/<id>`, `/detach-doc-from-study/<id>`, `/delete-user-doc/<id>`.
+  - P22: Admin Model Configuration — `model_config` table (mark_model, lisa_model, ben_model), `allowed_models` table (7 seed models from replit_openrouter), `persona_model_pool` table (random selection for persona creation). Admin UI: Model Config selectors, Allowed Models CRUD with OpenRouter import, Persona Pool editor. Validation: Mark/Lisa/Ben must use active allowed models. Persona creation records provenance with model ID and selection method. Empty pool blocks persona creation.
 - **Personas**: Each persona has a unique immutable `persona_instance_id` (e.g. `P-5EB8581A`). Clone creates a new persona. Delete auto-detaches from non-completed studies. Delete blocked if used in completed study.
 - **Grounding Traces**: Recorded on persona creation (and study execution when implemented). Schema follows `grounding_trace.schema.json`. Reason code required when `admin_sources_used_in_output` is false.
 - **Admin Web Sources**: Admin can add/toggle/delete web sources. Active sources set `admin_sources_configured=true` and `admin_sources_queried=true` in grounding traces.

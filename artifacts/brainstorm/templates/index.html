@@ -1877,6 +1877,179 @@
         </div>
 
         <div class="card">
+            <h2>Model Configuration (Mark / Lisa / Ben)</h2>
+            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
+                Set which model each agent uses. Only active models from the Allowed Models list can be selected.
+            </p>
+            <form action="/admin/set-model-config" method="POST">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                    <div>
+                        <label class="form-label">Mark (Discovery) Model</label>
+                        <select name="mark_model" class="form-input" style="width: 100%;">
+                            {% for am in allowed_models_list %}
+                            {% if am.status == 'active' %}
+                            <option value="{{ am.model_id }}" {% if model_config.get('mark_model') == am.model_id %}selected{% endif %}>{{ am.model_id }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Lisa (Analysis) Model</label>
+                        <select name="lisa_model" class="form-input" style="width: 100%;">
+                            {% for am in allowed_models_list %}
+                            {% if am.status == 'active' %}
+                            <option value="{{ am.model_id }}" {% if model_config.get('lisa_model') == am.model_id %}selected{% endif %}>{{ am.model_id }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Ben (QA) Model</label>
+                        <select name="ben_model" class="form-input" style="width: 100%;">
+                            {% for am in allowed_models_list %}
+                            {% if am.status == 'active' %}
+                            <option value="{{ am.model_id }}" {% if model_config.get('ben_model') == am.model_id %}selected{% endif %}>{{ am.model_id }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <p style="font-size: 12px; color: #999; margin-bottom: 8px;">
+                    Current: Mark = <code>{{ model_config.get('mark_model', 'not set') }}</code> |
+                    Lisa = <code>{{ model_config.get('lisa_model', 'not set') }}</code> |
+                    Ben = <code>{{ model_config.get('ben_model', 'not set') }}</code>
+                </p>
+                <button type="submit" class="btn btn-success">Save Model Configuration</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Allowed Models</h2>
+            <p style="font-size: 13px; color: #777; margin-bottom: 8px;">
+                Models available for Mark/Lisa/Ben selection and persona pool. Only active models can be assigned.
+            </p>
+            <p style="font-size: 12px; color: #666; margin-bottom: 16px;">
+                <a href="https://docs.replit.com/category/ai-integrations" target="_blank" style="color: #3b82f6;">Replit AI Integrations docs</a> |
+                <a href="https://openrouter.ai/models" target="_blank" style="color: #3b82f6;">OpenRouter Models catalog</a>
+            </p>
+
+            {% if allowed_models_list %}
+            <table style="margin-bottom: 20px; font-size: 13px;">
+                <thead>
+                    <tr>
+                        <th>Model ID</th>
+                        <th>Source</th>
+                        <th>Status</th>
+                        <th>Added</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for am in allowed_models_list %}
+                    <tr>
+                        <td><code>{{ am.model_id }}</code></td>
+                        <td>{{ am.source }}</td>
+                        <td><span class="badge badge-{{ 'active' if am.status == 'active' else 'disabled' }}">{{ am.status }}</span></td>
+                        <td style="font-size: 12px;">{{ am.added_at }}</td>
+                        <td>
+                            <form action="/admin/toggle-allowed-model/{{ am.id }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-primary btn-small">{{ 'Disable' if am.status == 'active' else 'Enable' }}</button>
+                            </form>
+                            <form action="/admin/delete-allowed-model/{{ am.id }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Remove this model?');">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No allowed models configured.</p>
+            {% endif %}
+
+            <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add New Model</h3>
+            <form action="/admin/add-allowed-model" method="POST" style="display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="flex: 1;">
+                    <label class="form-label">Model ID</label>
+                    <input type="text" name="model_id" required class="form-input" placeholder="e.g. openai/gpt-5.4-mini">
+                </div>
+                <div>
+                    <label class="form-label">Source</label>
+                    <input type="text" name="source" class="form-input" value="replit_openrouter" placeholder="replit_openrouter">
+                </div>
+                <button type="submit" class="btn btn-success">Add Model</button>
+            </form>
+
+            <form action="/admin/import-openrouter-models" method="POST" style="display: inline;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <button type="submit" class="btn btn-primary btn-small">Import from OpenRouter API</button>
+            </form>
+            <span style="font-size: 12px; color: #999; margin-left: 8px;">Fetches model IDs from OpenRouter /api/v1/models endpoint</span>
+        </div>
+
+        <div class="card">
+            <h2>Persona Model Pool</h2>
+            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
+                When a user creates a persona, one model is randomly selected from the active pool entries. Models must first be in the Allowed Models list.
+            </p>
+
+            {% if persona_pool_list %}
+            <table style="margin-bottom: 20px; font-size: 13px;">
+                <thead>
+                    <tr>
+                        <th>Model ID</th>
+                        <th>Status</th>
+                        <th>Added</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pm in persona_pool_list %}
+                    <tr>
+                        <td><code>{{ pm.model_id }}</code></td>
+                        <td><span class="badge badge-{{ 'active' if pm.status == 'active' else 'disabled' }}">{{ pm.status }}</span></td>
+                        <td style="font-size: 12px;">{{ pm.added_at }}</td>
+                        <td>
+                            <form action="/admin/toggle-pool-model/{{ pm.id }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-primary btn-small">{{ 'Disable' if pm.status == 'active' else 'Enable' }}</button>
+                            </form>
+                            <form action="/admin/remove-pool-model/{{ pm.id }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-danger btn-small">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: #f59e0b; font-size: 13px; margin-bottom: 16px;">⚠ No models in persona pool. Users cannot create personas until at least one active model is added.</p>
+            {% endif %}
+
+            <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add Model to Pool</h3>
+            <form action="/admin/add-pool-model" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="flex: 1;">
+                    <label class="form-label">Select Active Model</label>
+                    <select name="model_id" required class="form-input" style="width: 100%;">
+                        <option value="">-- Select a model --</option>
+                        {% for am in allowed_models_list %}
+                        {% if am.status == 'active' %}
+                        <option value="{{ am.model_id }}">{{ am.model_id }}</option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-success">Add to Pool</button>
+            </form>
+        </div>
+
+        <div class="card">
             <h2>Grounding Traces (Recent 50)</h2>
             {% if grounding_traces %}
             <div style="overflow-x: auto;">

@@ -65,6 +65,16 @@ ADMIN_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "up
 os.makedirs(USER_UPLOADS_DIR, exist_ok=True)
 os.makedirs(ADMIN_UPLOADS_DIR, exist_ok=True)
 
+SEED_ALLOWED_MODELS = [
+    "openai/gpt-5.4-mini",
+    "openai/gpt-5.4-nano",
+    "mistral/mistral-small-4",
+    "anthropic/claude-opus-4.6",
+    "google/gemini-3.1-pro-preview",
+    "minimax/minimax-m2.7",
+    "openrouter/free",
+]
+
 
 def get_monthly_usage(conn, user_id):
     import calendar
@@ -282,6 +292,44 @@ def init_db():
             status          TEXT    NOT NULL DEFAULT 'active'
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS model_config (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS allowed_models (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id   TEXT NOT NULL UNIQUE,
+            source     TEXT NOT NULL DEFAULT 'replit_openrouter',
+            status     TEXT NOT NULL DEFAULT 'active',
+            added_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS persona_model_pool (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id TEXT NOT NULL UNIQUE,
+            status   TEXT NOT NULL DEFAULT 'active',
+            added_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    seed_count = conn.execute("SELECT COUNT(*) FROM allowed_models").fetchone()[0]
+    if seed_count == 0:
+        for m in SEED_ALLOWED_MODELS:
+            conn.execute(
+                "INSERT OR IGNORE INTO allowed_models (model_id, source, status) VALUES (?, 'replit_openrouter', 'active')",
+                (m,),
+            )
+        for m in SEED_ALLOWED_MODELS[:3]:
+            conn.execute(
+                "INSERT OR IGNORE INTO persona_model_pool (model_id, status) VALUES (?, 'active')",
+                (m,),
+            )
+        conn.execute("INSERT OR IGNORE INTO model_config (key, value) VALUES ('mark_model', ?)", (SEED_ALLOWED_MODELS[0],))
+        conn.execute("INSERT OR IGNORE INTO model_config (key, value) VALUES ('lisa_model', ?)", (SEED_ALLOWED_MODELS[1],))
+        conn.execute("INSERT OR IGNORE INTO model_config (key, value) VALUES ('ben_model', ?)", (SEED_ALLOWED_MODELS[2],))
     migrate_db(conn)
     conn.commit()
     conn.close()
@@ -617,6 +665,9 @@ def index():
     grounding_traces = []
     cost_telemetry_rows = []
     admin_uploads_list = []
+    model_config = {}
+    allowed_models_list = []
+    persona_pool_list = []
     docs_list = []
     docs_page = 1
     docs_q = ""
@@ -642,6 +693,14 @@ def index():
         ).fetchall()]
         admin_uploads_list = [dict(r) for r in conn.execute(
             "SELECT * FROM admin_uploads ORDER BY uploaded_at DESC"
+        ).fetchall()]
+        for row in conn.execute("SELECT key, value FROM model_config").fetchall():
+            model_config[row["key"]] = row["value"]
+        allowed_models_list = [dict(r) for r in conn.execute(
+            "SELECT * FROM allowed_models ORDER BY model_id"
+        ).fetchall()]
+        persona_pool_list = [dict(r) for r in conn.execute(
+            "SELECT * FROM persona_model_pool ORDER BY model_id"
         ).fetchall()]
         conn.close()
 
@@ -917,6 +976,9 @@ def index():
         admin_web_sources=admin_web_sources,
         grounding_traces=grounding_traces,
         cost_telemetry_rows=cost_telemetry_rows,
+        model_config=model_config,
+        allowed_models_list=allowed_models_list,
+        persona_pool_list=persona_pool_list,
         mark_recommendation=mark_recommendation,
         mark_recommendation_label=mark_recommendation_label,
         mark_recommendation_reason=mark_recommendation_reason,
@@ -3046,19 +3108,31 @@ def create_persona():
     if not name:
         return render_error("Persona name is required.", show_new_persona=True)
 
+    import random as _random
+    conn = get_db()
+    pool_models = [r["model_id"] for r in conn.execute(
+        "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
+    ).fetchall()]
+    if not pool_models:
+        conn.close()
+        return render_error("Cannot create persona: no active models in the persona model pool. An admin must configure at least one pool model.", show_new_persona=True)
+
     dossier = {}
     for field_key, field_label in PERSONA_DOSSIER_FIELDS:
         val = (request.form.get(field_key) or "").strip()
         if not val:
+            conn.close()
             return render_error(
                 f'"{field_label}" is required. All dossier fields must be filled.',
                 show_new_persona=True,
             )
         dossier[field_key] = val
 
+    selected_model = _random.choice(pool_models)
+    provenance = f"{dossier['ai_model_provenance']} [model={selected_model}, selection_method=random from pool]"
+
     new_instance_id = f"P-{secrets.token_hex(4).upper()}"
 
-    conn = get_db()
     conn.execute(
         """INSERT INTO personas
            (user_id, persona_id, version, persona_instance_id, name,
@@ -3070,7 +3144,7 @@ def create_persona():
             user["id"], new_instance_id, new_instance_id, name,
             dossier["persona_summary"], dossier["demographic_frame"],
             dossier["psychographic_profile"], dossier["contextual_constraints"],
-            dossier["behavioural_tendencies"], dossier["ai_model_provenance"],
+            dossier["behavioural_tendencies"], provenance,
             dossier["grounding_sources"], dossier["confidence_and_limits"],
         ),
     )
@@ -3102,6 +3176,171 @@ def delete_persona(instance_id):
     conn.commit()
     conn.close()
     return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/set-model-config", methods=["POST"])
+def admin_set_model_config():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    conn = get_db()
+    active_models = {r["model_id"] for r in conn.execute(
+        "SELECT model_id FROM allowed_models WHERE status = 'active'"
+    ).fetchall()}
+    for key in ("mark_model", "lisa_model", "ben_model"):
+        val = (request.form.get(key) or "").strip()
+        if val:
+            if val not in active_models:
+                conn.close()
+                return render_error(f"Model '{val}' is not in the active allowed models list.")
+            conn.execute(
+                "INSERT INTO model_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
+                (key, val, val),
+            )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/add-allowed-model", methods=["POST"])
+def admin_add_allowed_model():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    model_id = (request.form.get("model_id") or "").strip()
+    source = (request.form.get("source") or "replit_openrouter").strip()
+    if not model_id:
+        return render_error("Model ID is required.")
+    conn = get_db()
+    existing = conn.execute("SELECT id FROM allowed_models WHERE model_id = ?", (model_id,)).fetchone()
+    if existing:
+        conn.close()
+        return render_error(f"Model '{model_id}' already exists in allowed models.")
+    conn.execute(
+        "INSERT INTO allowed_models (model_id, source, status) VALUES (?, ?, 'active')",
+        (model_id, source),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/toggle-allowed-model/<int:model_db_id>", methods=["POST"])
+def admin_toggle_allowed_model(model_db_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    conn = get_db()
+    row = conn.execute("SELECT status FROM allowed_models WHERE id = ?", (model_db_id,)).fetchone()
+    if row:
+        new_status = "disabled" if row["status"] == "active" else "active"
+        conn.execute("UPDATE allowed_models SET status = ? WHERE id = ?", (new_status, model_db_id))
+        conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/delete-allowed-model/<int:model_db_id>", methods=["POST"])
+def admin_delete_allowed_model(model_db_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    conn = get_db()
+    conn.execute("DELETE FROM allowed_models WHERE id = ?", (model_db_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/add-pool-model", methods=["POST"])
+def admin_add_pool_model():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    model_id = (request.form.get("model_id") or "").strip()
+    if not model_id:
+        return render_error("Model ID is required.")
+    conn = get_db()
+    allowed = conn.execute("SELECT id FROM allowed_models WHERE model_id = ? AND status = 'active'", (model_id,)).fetchone()
+    if not allowed:
+        conn.close()
+        return render_error(f"Model '{model_id}' must be in the active allowed models list before adding to persona pool.")
+    existing = conn.execute("SELECT id FROM persona_model_pool WHERE model_id = ?", (model_id,)).fetchone()
+    if existing:
+        conn.close()
+        return render_error(f"Model '{model_id}' is already in the persona model pool.")
+    conn.execute(
+        "INSERT INTO persona_model_pool (model_id, status) VALUES (?, 'active')",
+        (model_id,),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/toggle-pool-model/<int:pool_id>", methods=["POST"])
+def admin_toggle_pool_model(pool_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    conn = get_db()
+    row = conn.execute("SELECT status FROM persona_model_pool WHERE id = ?", (pool_id,)).fetchone()
+    if row:
+        new_status = "disabled" if row["status"] == "active" else "active"
+        conn.execute("UPDATE persona_model_pool SET status = ? WHERE id = ?", (new_status, pool_id))
+        conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/remove-pool-model/<int:pool_id>", methods=["POST"])
+def admin_remove_pool_model(pool_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    conn = get_db()
+    conn.execute("DELETE FROM persona_model_pool WHERE id = ?", (pool_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/import-openrouter-models", methods=["POST"])
+def admin_import_openrouter_models():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    import urllib.request as ur
+    try:
+        req = ur.Request("https://openrouter.ai/api/v1/models", headers={"User-Agent": "ProjectBrainstorm/1.0"})
+        resp = ur.urlopen(req, timeout=10)
+        data = json.loads(resp.read().decode())
+        models = data.get("data", [])
+        conn = get_db()
+        added = 0
+        for m in models:
+            mid = m.get("id", "")
+            if mid:
+                existing = conn.execute("SELECT id FROM allowed_models WHERE model_id = ?", (mid,)).fetchone()
+                if not existing:
+                    conn.execute(
+                        "INSERT INTO allowed_models (model_id, source, status) VALUES (?, 'openrouter', 'active')",
+                        (mid,),
+                    )
+                    added += 1
+        conn.commit()
+        conn.close()
+        return redirect(url_for("index", token=token))
+    except Exception:
+        return render_error("Failed to fetch models from OpenRouter API. Please use the OpenRouter Models catalog link to browse model IDs manually.")
 
 
 @app.route("/admin/add-source", methods=["POST"])
@@ -3191,6 +3430,9 @@ def render_error(message, show_new_research=False, show_new_persona=False):
     admin_web_sources = []
     grounding_traces = []
     cost_telemetry_rows = []
+    model_config = {}
+    allowed_models_list = []
+    persona_pool_list = []
     if is_admin:
         conn2 = get_db()
         admin_web_sources = get_admin_web_sources(conn2)
@@ -3199,6 +3441,14 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         ).fetchall()]
         cost_telemetry_rows = [dict(r) for r in conn2.execute(
             "SELECT * FROM cost_telemetry ORDER BY id DESC LIMIT 50"
+        ).fetchall()]
+        for row in conn2.execute("SELECT key, value FROM model_config").fetchall():
+            model_config[row["key"]] = row["value"]
+        allowed_models_list = [dict(r) for r in conn2.execute(
+            "SELECT * FROM allowed_models ORDER BY model_id"
+        ).fetchall()]
+        persona_pool_list = [dict(r) for r in conn2.execute(
+            "SELECT * FROM persona_model_pool ORDER BY model_id"
         ).fetchall()]
         conn2.close()
     return render_template(
@@ -3224,6 +3474,9 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         admin_web_sources=admin_web_sources,
         grounding_traces=grounding_traces,
         cost_telemetry_rows=cost_telemetry_rows,
+        model_config=model_config,
+        allowed_models_list=allowed_models_list,
+        persona_pool_list=persona_pool_list,
         mark_recommendation="",
         mark_recommendation_label="",
         mark_recommendation_reason="",
