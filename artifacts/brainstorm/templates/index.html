@@ -937,6 +937,55 @@
                 <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; line-height: 1.6; margin-top: 8px;">{{ view_study_output.study_output }}</pre>
             </details>
             {% endif %}
+
+            {% if view_study_output.study_type in ['synthetic_idi', 'synthetic_focus_group'] and view_study_output.status == 'completed' %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Follow-up Questions</h3>
+
+            {% if view_study_output.followups %}
+            {% for fu in view_study_output.followups %}
+            <div style="background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 14px; font-weight: 600; color: #1a1a2e;">Follow-up Round {{ fu.followup_round }}</span>
+                    <span style="font-size: 12px; color: #999;">{{ fu.timestamp_utc }}</span>
+                </div>
+                <div style="background: #4361ee; color: #fff; padding: 10px 14px; border-radius: 8px; border-bottom-right-radius: 4px; margin-bottom: 10px; font-size: 14px;">
+                    {{ fu.user_question }}
+                </div>
+                {% if fu.qa_status == 'fail' %}
+                <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 6px; padding: 12px; font-size: 13px; color: #721c24;">
+                    <strong>Follow-up QA blocked</strong><br>
+                    {{ fu.qa_notes or 'No notes provided.' }}
+                </div>
+                {% else %}
+                {% if fu.qa_status == 'downgrade' %}
+                <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 6px 10px; margin-bottom: 8px; font-size: 12px; color: #856404;">
+                    QA: DOWNGRADE — {{ fu.qa_notes or '' }}
+                </div>
+                {% endif %}
+                <pre style="background: #fff; border: 1px solid #e9ecef; border-radius: 6px; padding: 12px; font-size: 13px; white-space: pre-wrap; line-height: 1.6;">{{ fu.generated_output }}</pre>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {% if view_study_output.followup_count < 2 %}
+            <form action="/submit-followup/{{ view_study_output.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="flex: 1;">
+                    <label style="font-size: 13px; font-weight: 500; color: #555; display: block; margin-bottom: 4px;">
+                        Ask a follow-up question ({{ 2 - view_study_output.followup_count }} remaining)
+                    </label>
+                    <input type="text" name="followup_question" required placeholder="e.g. Can you elaborate on the pricing concerns?" style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                </div>
+                <button type="submit" class="btn btn-primary" style="white-space: nowrap;">Submit Follow-up</button>
+            </form>
+            {% else %}
+            <div style="background: #e8f4fd; border: 1px solid #b8daff; border-radius: 6px; padding: 12px; font-size: 13px; color: #004085;">
+                Maximum of 2 follow-up rounds reached for this study. No further follow-ups are allowed.
+            </div>
+            {% endif %}
+            {% endif %}
         </div>
         {% endif %}
 

@@ -200,6 +200,19 @@ def init_db():
             timestamp_utc TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS followups (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            study_id            INTEGER NOT NULL,
+            followup_round      INTEGER NOT NULL CHECK (followup_round BETWEEN 1 AND 2),
+            user_question       TEXT NOT NULL,
+            generated_output    TEXT,
+            qa_status           TEXT,
+            qa_notes            TEXT,
+            timestamp_utc       TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(study_id, followup_round)
+        )
+    """)
     migrate_db(conn)
     conn.commit()
     conn.close()
@@ -236,6 +249,24 @@ def migrate_db(conn):
         conn.execute("ALTER TABLE studies ADD COLUMN confidence_summary TEXT")
     if "final_report" not in study_cols:
         conn.execute("ALTER TABLE studies ADD COLUMN final_report TEXT")
+
+    fu_info = conn.execute("PRAGMA table_info(followups)").fetchall()
+    fu_cols = [r[1] for r in fu_info]
+    if fu_cols and "qa_status" not in fu_cols:
+        conn.execute("DROP TABLE followups")
+        conn.execute("""
+            CREATE TABLE followups (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                study_id            INTEGER NOT NULL,
+                followup_round      INTEGER NOT NULL CHECK (followup_round BETWEEN 1 AND 2),
+                user_question       TEXT NOT NULL,
+                generated_output    TEXT,
+                qa_status           TEXT,
+                qa_notes            TEXT,
+                timestamp_utc       TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(study_id, followup_round)
+            )
+        """)
 
     rows = conn.execute(
         "SELECT id, persona_versions_used, personas_used FROM studies"
@@ -563,6 +594,12 @@ def index():
                 else:
                     view_study_output["confidence_parsed"] = None
                 view_study_output["report_sections"] = build_structured_report(view_study_output)
+                followup_rows = conn.execute(
+                    "SELECT * FROM followups WHERE study_id = ? ORDER BY followup_round ASC",
+                    (view_study_output["id"],),
+                ).fetchall()
+                view_study_output["followups"] = [dict(f) for f in followup_rows]
+                view_study_output["followup_count"] = len(followup_rows)
 
         conn.close()
 
@@ -1585,6 +1622,95 @@ def download_pdf(study_id):
         as_attachment=True,
         download_name=filename,
     )
+
+
+MAX_FOLLOWUP_ROUNDS = 2
+
+
+def generate_followup_placeholder(study, user_question, round_num):
+    st = study.get("study_type", "")
+    header = "*** SIMULATED FOLLOW-UP PLACEHOLDER ***"
+    if st == "synthetic_idi":
+        return (
+            f"{header}\n\n"
+            f"Follow-up Round {round_num} for IDI study: {study.get('title', '')}\n"
+            f"User asked: {user_question}\n\n"
+            f"[Simulated IDI follow-up response]\n"
+            f"The respondent provided additional context on this topic. "
+            f"Key themes include deepening the original insights and uncovering "
+            f"new angles related to the follow-up question.\n"
+        )
+    else:
+        return (
+            f"{header}\n\n"
+            f"Follow-up Round {round_num} for Focus Group study: {study.get('title', '')}\n"
+            f"User asked: {user_question}\n\n"
+            f"[Simulated Focus Group follow-up response]\n"
+            f"The group engaged with the follow-up topic. "
+            f"Multiple participants offered perspectives that build on the "
+            f"original discussion and introduce new considerations.\n"
+        )
+
+
+@app.route("/submit-followup/<int:study_id>", methods=["POST"])
+def submit_followup(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("Unauthorized.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Study not found.")
+
+    if study["status"] != "completed":
+        conn.close()
+        return render_error("Follow-ups are only allowed for completed studies.")
+
+    if study["study_type"] not in ("synthetic_idi", "synthetic_focus_group"):
+        conn.close()
+        return render_error("Follow-ups are only available for IDI and Focus Group studies.")
+
+    existing_count = conn.execute(
+        "SELECT COUNT(*) FROM followups WHERE study_id = ?",
+        (study_id,),
+    ).fetchone()[0]
+
+    if existing_count >= MAX_FOLLOWUP_ROUNDS:
+        conn.close()
+        return render_error(
+            f"Maximum of {MAX_FOLLOWUP_ROUNDS} follow-up rounds reached for this study. "
+            f"No further follow-ups are allowed."
+        )
+
+    user_question = (request.form.get("followup_question") or "").strip()
+    if not user_question:
+        conn.close()
+        return render_error("Follow-up question cannot be empty.")
+
+    round_num = existing_count + 1
+    study_dict = dict(study)
+    followup_output = generate_followup_placeholder(study_dict, user_question, round_num)
+
+    qa_input = dict(study_dict)
+    qa_input["study_output"] = followup_output
+    fu_qa = run_ben_qa(qa_input)
+    fu_qa_status = fu_qa["decision"].lower()
+    fu_qa_notes = fu_qa["notes"]
+
+    conn.execute(
+        """INSERT INTO followups (study_id, followup_round, user_question, generated_output, qa_status, qa_notes)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (study_id, round_num, user_question, followup_output, fu_qa_status, fu_qa_notes),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(f"/?token={token}&view_output={study_id}")
 
 
 def get_save_buttons(study):
