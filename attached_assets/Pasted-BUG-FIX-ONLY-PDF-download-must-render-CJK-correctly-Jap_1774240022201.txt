@@ -1,0 +1,57 @@
+BUG FIX ONLY: PDF download must render CJK correctly (Japanese + Simplified Chinese + Traditional Chinese).
+
+Problem:
+PDFs currently show blanks/boxes for CJK characters. This happens if core fonts are used or if the chosen font lacks glyphs. fpdf2 requires embedding Unicode fonts via add_font() + set_font(); it also supports TTC font collections using collection_font_number.
+
+Goal:
+Make /download-pdf/<id> generate PDFs that correctly display:
+- Simplified Chinese (简体中文): 汉语、欢迎、测试
+- Traditional Chinese (繁體中文): 漢語、歡迎、測試
+- Japanese (日本語): こんにちは世界、自転車
+
+Constraints:
+- Fix only PDF generation. Do NOT change QA/telemetry/grounding/export/study flows.
+- Do NOT reset/delete DB.
+
+Implementation option (preferred): Use ONE Noto CJK TTC collection
+1) Add a single TTC font file to the repo under:
+   artifacts/brainstorm/fonts/
+   Recommended: NotoSansCJK-Regular.ttc (covers JP/KR/SC/TC/HK in one file)
+
+2) Register 3 font faces from that TTC with fpdf2:
+   - CJK_JP (collection_font_number = face for Japanese)
+   - CJK_SC (collection_font_number = face for Simplified Chinese)
+   - CJK_TC (collection_font_number = face for Traditional Chinese)
+   Note: fpdf2 supports TTC/OTC and selection by collection_font_number.
+
+3) Modify generate_report_pdf():
+   - Always use CJK fonts when any non-ASCII characters appear OR when any CJK characters appear.
+   - Use a simple, reliable font selection per paragraph:
+       a) If text contains Hiragana/Katakana -> use CJK_JP
+       b) Else if text contains any of these Traditional markers -> use CJK_TC:
+          ['漢','歡','測','臺','體','繁','廣']
+       c) Else if text contains any of these Simplified markers -> use CJK_SC:
+          ['汉','欢','测','台','体','简']
+       d) Else default to CJK_TC (it renders Han + also supports kana in many fonts, but JP rule above handles kana)
+   - IMPORTANT: do NOT fall back to Helvetica/Times for these sections.
+
+4) Add a robust fallback:
+   - If rendering throws an encoding/glyph exception, catch it and retry with another CJK font:
+     Try JP -> SC -> TC (or SC -> TC -> JP depending on detected script).
+   This guarantees coverage even if heuristics miss.
+
+5) Add an admin/dev test route (dev-only):
+   - /admin/dev-cjk-pdf-test (admin-only)
+   - Generates a small PDF containing 3 lines:
+     1) Simplified: "简体中文：汉语、欢迎、测试"
+     2) Traditional: "繁體中文：漢語、歡迎、測試"
+     3) Japanese: "日本語：こんにちは世界、自転車"
+   - Download the PDF and visually confirm characters render (not boxes).
+
+Deliverables:
+- Files changed
+- Which font file you added + where it lives
+- How to test:
+  A) Hit /admin/dev-cjk-pdf-test and confirm all 3 lines render correctly
+  B) Create a study whose report contains any of the above characters and download PDF
+  C) Confirm PDF renders the same correctly
