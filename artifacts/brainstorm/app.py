@@ -50,6 +50,20 @@ VALID_STUDY_STATUSES = [
 
 VALID_STUDY_TYPES = ["synthetic_survey", "synthetic_idi", "synthetic_focus_group"]
 
+BILLABLE_STATUSES = ("completed", "qa_blocked", "terminated_system", "terminated_user")
+FREE_TIER_MONTHLY_LIMIT = 6
+
+
+def get_monthly_usage(conn, user_id):
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+    placeholders = ",".join("?" for _ in BILLABLE_STATUSES)
+    count = conn.execute(
+        f"SELECT COUNT(*) FROM studies WHERE user_id = ? AND status IN ({placeholders}) AND created_at >= ?",
+        (user_id, *BILLABLE_STATUSES, month_start),
+    ).fetchone()[0]
+    return count, FREE_TIER_MONTHLY_LIMIT
+
 STUDY_TYPE_LIMITS = {
     "synthetic_survey": {"max_questions": 12, "max_respondents": 400},
     "synthetic_idi": {"min_personas": 1, "max_personas": 3},
@@ -496,9 +510,15 @@ def index():
     personas_total_pages = 1
     personas_total = 0
     PAGE_SIZE = 10
+    usage_count = 0
+    usage_limit = FREE_TIER_MONTHLY_LIMIT
+    usage_limit_reached = False
 
     if user and user["state"] == "active":
         conn = get_db()
+
+        usage_count, usage_limit = get_monthly_usage(conn, user["id"])
+        usage_limit_reached = usage_count >= usage_limit
 
         studies_page = max(1, int(request.args.get("studies_page", "1") or "1"))
         studies_q = (request.args.get("studies_q") or "").strip()
@@ -704,6 +724,9 @@ def index():
         personas_q=personas_q,
         personas_total_pages=personas_total_pages,
         personas_total=personas_total,
+        usage_count=usage_count,
+        usage_limit=usage_limit,
+        usage_limit_reached=usage_limit_reached,
     )
 
 
@@ -826,6 +849,12 @@ def create_study():
     if not user or user["state"] != "active":
         return render_error("You must be an active user to create a study.")
 
+    conn_check = get_db()
+    used, limit = get_monthly_usage(conn_check, user["id"])
+    conn_check.close()
+    if used >= limit:
+        return render_error(f"Monthly study limit reached ({used}/{limit}). You cannot create new studies until next month.")
+
     title = (request.form.get("title") or "").strip()
     study_type = (request.form.get("study_type") or "").strip()
 
@@ -917,6 +946,12 @@ def create_study_tbd():
     user, _ = get_session_data(token)
     if not user or user["state"] != "active":
         return render_error("You must be an active user to create a study.")
+
+    conn_check = get_db()
+    used, limit = get_monthly_usage(conn_check, user["id"])
+    conn_check.close()
+    if used >= limit:
+        return render_error(f"Monthly study limit reached ({used}/{limit}). You cannot create new studies until next month.")
 
     title = (request.form.get("title") or "").strip()
     if not title:
@@ -2614,6 +2649,9 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         personas_q="",
         personas_total_pages=1,
         personas_total=0,
+        usage_count=0,
+        usage_limit=FREE_TIER_MONTHLY_LIMIT,
+        usage_limit_reached=False,
     )
 
 

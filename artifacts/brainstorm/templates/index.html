@@ -284,10 +284,33 @@
         </div>
         {% endif %}
 
+        <div class="card" style="margin-bottom: 16px; padding: 14px 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 13px; font-weight: 600; color: #1a1a2e;">Studies used this month: {{ usage_count }} of {{ usage_limit }}</span>
+                {% if usage_limit_reached %}
+                <span style="font-size: 12px; color: #dc3545; font-weight: 600;">Limit reached</span>
+                {% endif %}
+            </div>
+            <div style="background: #e9ecef; border-radius: 6px; height: 10px; overflow: hidden;">
+                {% set pct = ((usage_count / usage_limit) * 100) if usage_limit > 0 else 0 %}
+                {% set bar_color = '#dc3545' if usage_limit_reached else ('#ffc107' if pct >= 75 else '#4361ee') %}
+                <div style="width: {{ [pct, 100]|min }}%; height: 100%; background: {{ bar_color }}; border-radius: 6px; transition: width 0.3s;"></div>
+            </div>
+            {% if usage_limit_reached %}
+            <div style="margin-top: 6px; font-size: 12px; color: #dc3545;">
+                You have reached your monthly limit of {{ usage_limit }} studies. New studies will be available next month.
+            </div>
+            {% endif %}
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <h2>My Studies</h2>
+                {% if usage_limit_reached %}
+                <span class="btn btn-primary" style="opacity: 0.5; cursor: not-allowed; pointer-events: none;">New Research</span>
+                {% else %}
                 <a href="/?token={{ token }}&new_research=1" class="btn btn-primary">New Research</a>
+                {% endif %}
             </div>
 
             <form method="GET" action="/" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
