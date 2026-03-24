@@ -28,10 +28,12 @@ from datetime import datetime
 
 from flask import (
     Flask,
+    jsonify,
     redirect,
     render_template,
     request,
     send_file,
+    send_from_directory,
     url_for,
 )
 from fpdf import FPDF
@@ -64,6 +66,11 @@ USER_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "upl
 ADMIN_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "admin")
 os.makedirs(USER_UPLOADS_DIR, exist_ok=True)
 os.makedirs(ADMIN_UPLOADS_DIR, exist_ok=True)
+
+BLOG_IMAGE_MAX_SIZE = 300 * 1024
+BLOG_IMAGE_ALLOWED = {"png", "jpg", "jpeg"}
+BLOG_STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "blog")
+os.makedirs(BLOG_STATIC_DIR, exist_ok=True)
 
 def call_llm(model_id, messages, purpose=""):
     """Single wrapper for all LLM calls. Future integration point."""
@@ -499,6 +506,19 @@ def init_db():
             report_text     TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS blog_posts (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            title            TEXT NOT NULL,
+            slug             TEXT,
+            body             TEXT NOT NULL,
+            status           TEXT NOT NULL DEFAULT 'published',
+            image_path       TEXT,
+            image_type       TEXT,
+            image_size_bytes INTEGER,
+            created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
     seed_count = conn.execute("SELECT COUNT(*) FROM allowed_models").fetchone()[0]
     if seed_count == 0:
         for m in SEED_ALLOWED_MODELS:
@@ -830,7 +850,7 @@ def index():
     if not user and not is_admin:
         error = request.args.get("error")
         show_auth_tab = request.args.get("show_auth_tab", "signup")
-        return render_template("landing.html", error=error, show_auth_tab=show_auth_tab)
+        return render_template("landing.html", error=error, show_auth_tab=show_auth_tab, latest_blog_posts=get_latest_blog_posts(2))
 
     pending_users = []
     all_users = []
@@ -1227,6 +1247,7 @@ def index():
         user_storage_used=user_storage_used,
         user_storage_cap_mb=user_storage_cap_mb,
         user_storage_cap=UPLOAD_USER_STORAGE_CAP,
+        latest_blog_posts=get_latest_blog_posts(2),
     )
 
 
@@ -1300,12 +1321,92 @@ def logout():
 def landing_page():
     error = request.args.get("error")
     show_auth_tab = request.args.get("show_auth_tab", "signup")
-    return render_template("landing.html", error=error, show_auth_tab=show_auth_tab)
+    return render_template("landing.html", error=error, show_auth_tab=show_auth_tab, latest_blog_posts=get_latest_blog_posts(2))
+
+
+@app.route("/static/blog/<path:filename>")
+def blog_static(filename):
+    return send_from_directory(BLOG_STATIC_DIR, filename)
+
+
+def get_latest_blog_posts(limit=2):
+    conn = get_db()
+    posts = [dict(r) for r in conn.execute(
+        "SELECT id, title, slug, body, image_path, created_at FROM blog_posts WHERE status = 'published' ORDER BY created_at DESC, id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()]
+    conn.close()
+    return posts
 
 
 @app.route("/blog")
 def blog_page():
-    return render_template("landing.html", error=None, show_auth_tab="signup")
+    conn = get_db()
+    posts = [dict(r) for r in conn.execute(
+        "SELECT * FROM blog_posts WHERE status = 'published' ORDER BY created_at DESC, id DESC"
+    ).fetchall()]
+    conn.close()
+    return render_template("blog_list.html", posts=posts)
+
+
+@app.route("/blog/<int:post_id>")
+def blog_post(post_id):
+    conn = get_db()
+    post = conn.execute("SELECT * FROM blog_posts WHERE id = ? AND status = 'published'", (post_id,)).fetchone()
+    conn.close()
+    if not post:
+        return render_template("blog_list.html", posts=[], error="Post not found."), 404
+    return render_template("blog_post.html", post=dict(post))
+
+
+@app.route("/admin/create-blog-post", methods=["POST"])
+def admin_create_blog_post():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    title = (request.form.get("blog_title") or "").strip()
+    body = (request.form.get("blog_body") or "").strip()
+    status = request.form.get("blog_status", "published").strip()
+    if status not in ("published", "draft"):
+        status = "published"
+
+    if not title or not body:
+        return render_error("Blog post title and body are required.")
+
+    slug = title.lower().replace(" ", "-")
+    slug = "".join(c for c in slug if c.isalnum() or c == "-")[:80]
+
+    image_path = None
+    image_type = None
+    image_size_bytes = None
+
+    img_file = request.files.get("blog_image")
+    if img_file and img_file.filename:
+        fname = img_file.filename
+        ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+        if ext not in BLOG_IMAGE_ALLOWED:
+            return render_error(f"Blog image must be PNG or JPG. Got: .{ext}")
+        img_data = img_file.read()
+        if len(img_data) > BLOG_IMAGE_MAX_SIZE:
+            return render_error(f"Blog image must be under 300KB. Got: {len(img_data) // 1024}KB")
+        safe_name = f"{int(datetime.utcnow().timestamp())}_{secrets.token_hex(4)}.{ext}"
+        dest = os.path.join(BLOG_STATIC_DIR, safe_name)
+        with open(dest, "wb") as f:
+            f.write(img_data)
+        image_path = safe_name
+        image_type = ext
+        image_size_bytes = len(img_data)
+
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO blog_posts (title, slug, body, status, image_path, image_type, image_size_bytes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (title, slug, body, status, image_path, image_type, image_size_bytes),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
 
 
 @app.route("/admin/approve/<int:user_id>", methods=["POST"])
@@ -3577,7 +3678,6 @@ def admin_model_health_run():
         return render_error("Admin access required.")
     result = run_model_health_check("manual")
     if request.headers.get("Accept") == "application/json":
-        from flask import jsonify
         return jsonify(result)
     return redirect(url_for("index", token=token))
 
@@ -3592,7 +3692,6 @@ def admin_model_health_status():
     rows = [dict(r) for r in conn.execute("SELECT * FROM model_health_status ORDER BY model_id").fetchall()]
     last_check = conn.execute("SELECT * FROM model_health_checks ORDER BY id DESC LIMIT 1").fetchone()
     conn.close()
-    from flask import jsonify
     return jsonify({
         "models": rows,
         "last_check": dict(last_check) if last_check else None,
@@ -3608,7 +3707,6 @@ def admin_weekly_qa_report_latest():
     conn = get_db()
     row = conn.execute("SELECT * FROM weekly_qa_reports ORDER BY id DESC LIMIT 1").fetchone()
     conn.close()
-    from flask import jsonify
     if row:
         return jsonify(dict(row))
     return jsonify({"message": "No weekly QA reports yet."})
@@ -3682,7 +3780,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
             show_tab = "login"
         else:
             show_tab = "signup"
-        return render_template("landing.html", error=message, show_auth_tab=show_tab)
+        return render_template("landing.html", error=message, show_auth_tab=show_tab, latest_blog_posts=get_latest_blog_posts(2))
     pending_users = []
     all_users = []
     studies = []
@@ -3793,6 +3891,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         user_storage_used=0,
         user_storage_cap_mb=UPLOAD_USER_STORAGE_CAP // (1024 * 1024),
         user_storage_cap=UPLOAD_USER_STORAGE_CAP,
+        latest_blog_posts=get_latest_blog_posts(2),
     )
 
 

@@ -378,11 +378,9 @@
         <a href="/blog">Blog / News</a>
         <select class="lang-selector" aria-label="Language">
             <option value="en" selected>English</option>
-            <option value="zh">中文</option>
-            <option value="ja">日本語</option>
-            <option value="ko">한국어</option>
-            <option value="th">ภาษาไทย</option>
-            <option value="id">Bahasa Indonesia</option>
+            <option value="zh-CN">CN-Simplified</option>
+            <option value="zh-TW">CN-Traditional</option>
+            <option value="ja">Japanese</option>
         </select>
         <a href="#" onclick="openAuthModal('login'); return false;">Login</a>
         <a href="#" class="btn-header" onclick="openAuthModal('signup'); return false;">Sign Up</a>
@@ -617,13 +615,32 @@
     </div>
 </section>
 
-<!-- Section 12: Blog/News (blue, placeholder) -->
+<!-- Section 12: Blog/News (blue) -->
 <section class="landing-section section-blue" id="section-blog">
     <div class="landing-section-inner">
         <h2>Blog / News</h2>
+        {% if latest_blog_posts %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-top: 24px;">
+            {% for post in latest_blog_posts %}
+            <a href="/blog/{{ post.id }}" style="text-decoration: none; color: inherit;">
+                <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; transition: background 0.2s;">
+                    {% if post.image_path %}
+                    <img src="/static/blog/{{ post.image_path }}" alt="{{ post.title }}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px; margin-bottom: 12px;">
+                    {% endif %}
+                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 8px; color: #fff;">{{ post.title }}</h3>
+                    <p style="font-size: 13px; color: rgba(255,255,255,0.6);">{{ post.created_at }}</p>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        <div style="text-align: center; margin-top: 24px;">
+            <a href="/blog" style="color: #7ec8e3; font-weight: 600; text-decoration: none; font-size: 15px;">Read more &rarr;</a>
+        </div>
+        {% else %}
         <div class="blog-placeholder">
             <p>Coming soon</p>
         </div>
+        {% endif %}
     </div>
 </section>
 

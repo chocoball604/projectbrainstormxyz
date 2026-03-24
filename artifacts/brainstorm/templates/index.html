@@ -308,6 +308,24 @@
             {% endif %}
         </div>
 
+        {% if latest_blog_posts %}
+        <div class="card" style="margin-bottom: 16px; padding: 18px;">
+            <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Latest from the Blog</h3>
+            {% for bp in latest_blog_posts %}
+            <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 8px;">
+                {% if bp.image_path %}
+                <img src="/static/blog/{{ bp.image_path }}" alt="{{ bp.title }}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 6px; flex-shrink: 0;">
+                {% endif %}
+                <div>
+                    <a href="/blog/{{ bp.id }}" style="font-size: 14px; font-weight: 600; color: #1a1a2e; text-decoration: none;">{{ bp.title }}</a>
+                    <div style="font-size: 12px; color: #999;">{{ bp.created_at }}</div>
+                </div>
+            </div>
+            {% endfor %}
+            <a href="/blog" style="font-size: 13px; color: #3498db; text-decoration: none; font-weight: 500;">View all posts &rarr;</a>
+        </div>
+        {% endif %}
+
         <div class="card">
             <div class="card-header">
                 <h2>My Studies</h2>
@@ -1817,6 +1835,34 @@
                     </div>
                 </div>
                 <button type="submit" class="btn btn-success">Add Source</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Blog / News Management</h2>
+            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">Create blog posts visible on the public blog page and landing page.</p>
+            <form action="/admin/create-blog-post" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div class="form-group">
+                    <label for="blog-title">Post Title</label>
+                    <input type="text" id="blog-title" name="blog_title" required style="width: 100%;">
+                </div>
+                <div class="form-group">
+                    <label for="blog-body">Post Body</label>
+                    <textarea id="blog-body" name="blog_body" rows="8" required style="width: 100%; font-family: inherit; font-size: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 6px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="blog-image">Thumbnail Image (optional, PNG/JPG, max 300KB)</label>
+                    <input type="file" id="blog-image" name="blog_image" accept=".png,.jpg,.jpeg">
+                </div>
+                <div class="form-group">
+                    <label for="blog-status">Status</label>
+                    <select id="blog-status" name="blog_status" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px;">
+                        <option value="published">Published</option>
+                        <option value="draft">Draft</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Post</button>
             </form>
         </div>
 

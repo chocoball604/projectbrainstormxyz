@@ -1,0 +1,91 @@
+PROMPT 24 — Blog/News (public list + post view + previews) + small V1 deltas
+Implement ONLY this prompt (plus the two explicit deltas below). Do NOT implement Prompt 25.
+
+Reference requirements:
+PROMPT 24 requirements are defined in [PROMPT_SEQUENCE_CHAT_V1.md](https://onedrive.live.com?cid=BFEC441E4A44D47E&id=BFEC441E4A44D47E!sbdc62f3d96064104bd57f7ef4aec7815&EntityRepresentationId=d2d60a76-a676-46af-85c3-a4ce3cee8e2e).
+PROMPT 23 requires a language selector for unauth users; we are constraining its options for V1 here.
+
+Hard constraints:
+- Do NOT change study/chat/QA/report/upload/model config features.
+- Do NOT reset/delete DB.
+- If /blog route already exists from Prompt 23, upgrade it—do not break existing routing.
+- Keep the landing page (Prompt 23) intact.
+
+==================================================
+A) Implement PROMPT 24 exactly (base requirements)
+==================================================
+Requirements (from prompt pack):
+1) Public /blog page listing posts (title + date).
+2) Public /blog/<id> page showing full post.
+3) Store blog posts in DB table blog_posts (id, title, slug, body, created_at, status).
+4) Admin-only: minimal way to create a post (simple form is fine).
+5) Landing page section #12 shows 1–2 latest posts.
+6) User dashboard shows 1–2 latest posts.
+Order all blog lists by created_at DESC (newest first).
+
+==================================================
+B) Small change #1: allow small image upload per blog post
+==================================================
+Add OPTIONAL thumbnail image upload to the admin create-post form:
+
+1) Data model:
+- Extend blog_posts table with:
+  - image_path TEXT NULL
+  - image_type TEXT NULL
+  - image_size_bytes INTEGER NULL
+(Alternative: separate blog_images table OK, but simplest is columns.)
+
+2) Upload constraints (V1):
+- Allowed image types: PNG, JPG/JPEG only
+- Max image file size: 300KB (small pic)
+- Store on disk under a safe static folder, e.g. artifacts/brainstorm/static/blog/
+- Filename should be sanitized + unique (prefix with post id or timestamp)
+
+3) UI:
+- Admin create post form includes:
+  - title
+  - body (textarea)
+  - status (draft/published) OR default published (keep minimal)
+  - optional image upload input
+- Public /blog list:
+  - show title + date
+  - if image exists, show a small thumbnail (optional but preferred)
+- /blog/<id> post view:
+  - show title, date, image (if exists), and full body
+
+==================================================
+C) Small change #2: Language selector options reduced for V1
+==================================================
+In the unauthenticated header language selector (landing page header from Prompt 23):
+- Restrict dropdown options to ONLY:
+  - English
+  - CN-Simplified
+  - CN-Traditional
+  - Japanese
+Remove any other APAC languages from the dropdown for V1.
+No i18n implementation needed—this is just the selector options list.
+
+Make sure:
+- Landing page still renders correctly
+- Header still contains Sign Up / Login / Blog/News / Language selector as required by Prompt 23
+
+==================================================
+D) Deliverables
+==================================================
+- Files changed
+- How to test (must include):
+
+TEST 1: Blog CRUD minimal
+1) Admin creates a post with title/body and no image -> post appears on /blog and /blog/<id>
+2) Admin creates a post with title/body and a PNG/JPG image under 300KB -> image displays on /blog/<id> and optionally as thumbnail on /blog list
+3) Upload a non-image or >300KB image -> blocked with clear error
+4) /blog lists posts sorted newest-first by created_at
+
+TEST 2: Previews
+1) Landing page section #12 shows 1–2 latest posts (title + date, thumbnail optional)
+2) User dashboard shows 1–2 latest posts (title + date, thumbnail optional)
+
+TEST 3: Language dropdown
+1) Logged out landing page header language selector shows ONLY 4 options:
+   English, CN-Simplified, CN-Traditional, Japanese
+2) No other language options appear anywhere in unauth header
