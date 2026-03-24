@@ -1,0 +1,126 @@
+FINAL V1 STEP: PROMPT 25 + ENABLE REPLIT AI INTEGRATIONS + TESTING
+Implement ONLY what is specified here. Do NOT refactor unrelated study/report logic.
+
+Context:
+- Prompt 25 is the last prompt in PROMPT_SEQUENCE_CHAT_V1.md.
+- The app already has:
+  - model_config + allowed_models + persona_model_pool
+  - call_llm(model_id, messages, purpose) wrapper currently raises NotImplementedError
+  - model health checks + weekly QA report logging
+- Study execution and persona generation are currently placeholder/simulated outputs.
+
+Goal:
+1) Implement Prompt 25 (Manage Account + email verification cadence).
+2) Enable real LLM calls via Replit AI Integrations (Replit-managed credentials) so call_llm works.
+3) Update model health checks to perform real smoke tests in live mode.
+4) Add/extend automated tests so integration breakage is detected.
+
+Important constraints:
+- Use Replit AI Integrations (OpenAI/Anthropic/Google/OpenRouter Replit-managed). Do NOT require the user to paste API keys. [1](https://docs.replit.com/replitai/replit-ai-integrations)
+- If using OpenRouter models, use chat completions only (that’s what the integration supports). [2](https://skillsmp.com/skills/devinvista-fisiogest-local-skills-ai-integrations-openrouter-skill-md)
+- Keep call_llm as the ONE AND ONLY model-call path (no duplicate functions).
+
+=========================================================
+PART A — PROMPT 25: Manage Account + email verification
+=========================================================
+A1) Manage Account page
+- Add /account (or equivalent) accessible only to logged-in users:
+  - view/edit: name, company, role, location, LinkedIn(optional)
+  - change password: requires current password
+  - enforce password length 6–10 (already added earlier) — ensure consistent here too
+
+A2) Email verification cadence (prototype, in-app code)
+- Add last_email_verification_timestamp field in user table (if missing).
+- Verification required:
+  - on first login (timestamp is null)
+  - and at least once every 7 days
+- Implement verification screen:
+  - show a one-time code in-app (prototype; no email sending)
+  - user must enter code to proceed
+- If verification is required and not completed:
+  - block dashboard access and redirect to verification screen
+
+A3) Tests for Prompt 25
+- First login forces verification.
+- Completing verification sets timestamp and allows dashboard.
+- Simulate 7 days (set timestamp back) forces verification again.
+- Manage Account edits persist.
+- Change password enforces current password + 6–10 length.
+
+=========================================================
+PART B — ENABLE Replit AI Integrations for live model calls
+=========================================================
+B1) Integrations wiring rule
+- call_llm(model_id, messages, purpose) must become REAL:
+  - No longer raises NotImplementedError when integrations are enabled.
+  - Uses Replit AI Integrations (Replit-managed credentials).
+  - Must support chat completions (messages array) at minimum. [2](https://skillsmp.com/skills/devinvista-fisiogest-local-skills-ai-integrations-openrouter-skill-md)
+
+B2) How to implement without guessing undocumented endpoints
+- Use Replit Agent’s built-in capability to set up AI Integrations:
+  - In Replit, Agent can add “OpenRouter (Replit managed)” integration and generate the correct client/request code.
+  - You must incorporate that generated code inside call_llm, so this app uses the same supported integration path. [1](https://docs.replit.com/replitai/replit-ai-integrations)
+- Do NOT hardcode an OpenRouter API key or external endpoint requiring BYOK unless you also add a BYOK option (out of scope).
+
+B3) call_llm behavior (minimum)
+- Input: model_id (string), messages (list of {role, content}), purpose (string)
+- Output: assistant text (string)
+- Error handling:
+  - timeouts, non-200 responses: raise a clear exception and include provider error text (truncate)
+- Keep payload minimal: model + messages (+ max_tokens optional)
+- Record minimal observability:
+  - purpose may be passed into logs or request metadata if supported (optional)
+
+B4) Minimal runtime integration usage (so “enabled” is real)
+- Update ONE existing user-visible flow to use call_llm (minimal and safe):
+  Option 1 (recommended): Mark’s chat reply (Prompt 14/15 path)
+    - Instead of canned reply, call call_llm(mark_model, conversation messages)
+    - Keep Mark’s “coaching nudge” policy as system prompt; still only suggest next missing item and show save buttons.
+  Option 2: /admin/model-health/run smoke tests already exercise call_llm once integration is enabled.
+
+Keep it minimal to avoid destabilizing the study pipeline.
+
+=========================================================
+PART C — Update Model Health Check to work in LIVE mode
+=========================================================
+C1) After call_llm is live, model health check must:
+- Detect live_calls_enabled (no NotImplementedError)
+- For each configured model (Mark/Lisa/Ben) and active persona pool models:
+  - send: “Reply with the single word OK”
+  - PASS if response contains “OK” (case-insensitive)
+- Store PASS/FAIL in model_health_status
+- Weekly QA report must include:
+  - integration_mode
+  - pass/fail counts and failing model IDs
+
+(You already have this structure; it should now naturally flip into live mode.)
+
+=========================================================
+PART D — Automated testing (integration break detection)
+=========================================================
+D1) Extend existing test suite / curl tests
+- Add an automated test that calls:
+  POST /admin/model-health/run
+  and asserts:
+   - integration_mode == live_calls_enabled
+   - at least 1 model returns PASS
+   - no models fail due to “not connected”
+(Use your existing JSON endpoints.)
+
+D2) Add a safe “single-model smoke test” endpoint (admin-only, optional)
+- POST /admin/llm-smoke?model_id=...
+- Calls call_llm with “OK” prompt and returns result
+- Used for debugging when one model fails.
+
+=========================================================
+Deliverables
+=========================================================
+- Files changed
+- DB migrations (if any)
+- How to test (must include):
+  1) Prompt 25 verification flow (first login + 7-day cadence)
+  2) Manage Account edit + password change
+  3) call_llm no longer NotImplementedError (live)
+  4) /admin/model-health/run returns live_calls_enabled and PASS for at least one model
+  5) Weekly QA report includes “System Model Health” with live status
+  6) Automated curl test checks integration health

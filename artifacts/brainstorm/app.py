@@ -54,6 +54,30 @@ def inject_lang():
     return dict(lang=lang)
 
 
+VERIFY_EXEMPT_ENDPOINTS = {
+    "index", "verify_email", "login", "signup", "admin_login", "logout",
+    "landing_page", "blog_list", "blog_single", "set_language",
+    "static", "serve_blog_image",
+}
+
+
+@app.before_request
+def enforce_email_verification():
+    endpoint = request.endpoint
+    if endpoint in VERIFY_EXEMPT_ENDPOINTS or endpoint is None:
+        return None
+    if request.path.startswith("/static/"):
+        return None
+    token = request.args.get("token") or request.form.get("token") or ""
+    if not token:
+        return None
+    user, is_admin = get_session_data(token)
+    redir = require_verified_user(token, user, is_admin)
+    if redir:
+        return redir
+    return None
+
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "brainstorm.db")
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
@@ -85,8 +109,26 @@ BLOG_STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stat
 os.makedirs(BLOG_STATIC_DIR, exist_ok=True)
 
 def call_llm(model_id, messages, purpose=""):
-    """Single wrapper for all LLM calls. Future integration point."""
-    raise NotImplementedError("LLM integration not connected yet")
+    """Single wrapper for all LLM calls via Replit AI Integrations (OpenRouter)."""
+    import openai as _openai
+
+    base_url = os.environ.get("AI_INTEGRATIONS_OPENROUTER_BASE_URL")
+    api_key = os.environ.get("AI_INTEGRATIONS_OPENROUTER_API_KEY")
+    if not base_url or not api_key:
+        raise NotImplementedError("LLM integration not connected yet")
+
+    client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=60)
+    try:
+        resp = client.chat.completions.create(
+            model=model_id,
+            messages=messages,
+            max_tokens=8192,
+        )
+        return resp.choices[0].message.content or ""
+    except _openai.APITimeoutError as e:
+        raise RuntimeError(f"LLM timeout for {model_id}: {str(e)[:200]}")
+    except _openai.APIError as e:
+        raise RuntimeError(f"LLM error for {model_id}: {str(e)[:200]}")
 
 
 def run_model_health_check(run_type="manual"):
@@ -240,6 +282,8 @@ def generate_weekly_qa_report():
     return report_text
 
 
+EMAIL_VERIFY_INTERVAL_DAYS = 7
+
 SEED_ALLOWED_MODELS = [
     "openai/gpt-5.4-mini",
     "openai/gpt-5.4-nano",
@@ -312,9 +356,27 @@ def init_db():
             username      TEXT    NOT NULL,
             password_hash TEXT    NOT NULL,
             state         TEXT    NOT NULL DEFAULT 'pending',
-            created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+            created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+            name          TEXT    NOT NULL DEFAULT '',
+            company       TEXT    NOT NULL DEFAULT '',
+            role          TEXT    NOT NULL DEFAULT '',
+            location      TEXT    NOT NULL DEFAULT '',
+            linkedin      TEXT    NOT NULL DEFAULT '',
+            last_email_verification_timestamp TEXT
         )
     """)
+    for col_def in [
+        ("name", "TEXT NOT NULL DEFAULT ''"),
+        ("company", "TEXT NOT NULL DEFAULT ''"),
+        ("role", "TEXT NOT NULL DEFAULT ''"),
+        ("location", "TEXT NOT NULL DEFAULT ''"),
+        ("linkedin", "TEXT NOT NULL DEFAULT ''"),
+        ("last_email_verification_timestamp", "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col_def[0]} {col_def[1]}")
+        except Exception:
+            pass
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             token      TEXT PRIMARY KEY,
@@ -734,6 +796,28 @@ def get_session_data(token):
     return user, bool(row["is_admin"])
 
 
+def user_needs_verification(user):
+    if not user or user.get("state") != "active":
+        return False
+    last_ts = user.get("last_email_verification_timestamp")
+    if not last_ts:
+        return True
+    try:
+        last_dt = datetime.strptime(last_ts, "%Y-%m-%d %H:%M:%S")
+        from datetime import timedelta
+        return (datetime.utcnow() - last_dt).days >= EMAIL_VERIFY_INTERVAL_DAYS
+    except (ValueError, TypeError):
+        return True
+
+
+def require_verified_user(token, user, is_admin):
+    if is_admin:
+        return None
+    if user and user_needs_verification(user):
+        return redirect(url_for("verify_email", token=token))
+    return None
+
+
 def delete_session(token):
     if token:
         conn = get_db()
@@ -871,6 +955,10 @@ def index():
         error = request.args.get("error")
         show_auth_tab = request.args.get("show_auth_tab", "signup")
         return render_template("landing.html", error=error, show_auth_tab=show_auth_tab, latest_blog_posts=get_latest_blog_posts(2))
+
+    verify_redirect = require_verified_user(token, user, is_admin)
+    if verify_redirect:
+        return verify_redirect
 
     pending_users = []
     all_users = []
@@ -4249,6 +4337,139 @@ def admin_export_grounding_traces_csv():
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
     resp.headers["Content-Disposition"] = "attachment; filename=grounding_traces.csv"
     return resp
+
+
+_verification_codes = {}
+
+
+@app.route("/verify-email", methods=["GET", "POST"])
+def verify_email():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    if not user or user["state"] != "active":
+        return redirect(url_for("index"))
+
+    user_id = user["id"]
+    if request.method == "POST":
+        entered = (request.form.get("code") or "").strip()
+        expected = _verification_codes.get(user_id)
+        if expected and entered == expected:
+            conn = get_db()
+            now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            conn.execute(
+                "UPDATE users SET last_email_verification_timestamp = ? WHERE id = ?",
+                (now_str, user_id),
+            )
+            conn.commit()
+            conn.close()
+            _verification_codes.pop(user_id, None)
+            return redirect(url_for("index", token=token))
+        return render_template(
+            "verify_email.html",
+            token=token,
+            user=user,
+            code=_verification_codes.get(user_id, ""),
+            error="Invalid code. Please try again.",
+        )
+
+    import random
+    code = str(random.randint(100000, 999999))
+    _verification_codes[user_id] = code
+    return render_template(
+        "verify_email.html",
+        token=token,
+        user=user,
+        code=code,
+        error=None,
+    )
+
+
+@app.route("/account", methods=["GET", "POST"])
+def manage_account():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    if not user or user["state"] != "active":
+        return redirect(url_for("index"))
+
+    success_msg = None
+    error_msg = None
+
+    if request.method == "POST":
+        name = (request.form.get("name") or "").strip()
+        company = (request.form.get("company") or "").strip()
+        role = (request.form.get("role") or "").strip()
+        location = (request.form.get("location") or "").strip()
+        linkedin = (request.form.get("linkedin") or "").strip()
+
+        conn = get_db()
+        conn.execute(
+            "UPDATE users SET name=?, company=?, role=?, location=?, linkedin=? WHERE id=?",
+            (name, company, role, location, linkedin, user["id"]),
+        )
+        conn.commit()
+        user = dict(conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone())
+        conn.close()
+        success_msg = "Profile updated successfully."
+
+    return render_template(
+        "account.html",
+        token=token,
+        user=user,
+        success=success_msg,
+        error=error_msg,
+    )
+
+
+@app.route("/change-password", methods=["POST"])
+def change_password():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    if not user or user["state"] != "active":
+        return redirect(url_for("index"))
+
+    current_pw = request.form.get("current_password") or ""
+    new_pw = request.form.get("new_password") or ""
+
+    if not check_password_hash(user["password_hash"], current_pw):
+        return render_template(
+            "account.html", token=token, user=user, success=None,
+            error="Current password is incorrect.",
+        )
+    if len(new_pw) < 6 or len(new_pw) > 10:
+        return render_template(
+            "account.html", token=token, user=user, success=None,
+            error="New password must be 6–10 characters.",
+        )
+
+    conn = get_db()
+    conn.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (generate_password_hash(new_pw), user["id"]),
+    )
+    conn.commit()
+    conn.close()
+    return render_template(
+        "account.html", token=token, user=user, success="Password changed successfully.",
+        error=None,
+    )
+
+
+@app.route("/admin/llm-smoke", methods=["POST"])
+def admin_llm_smoke():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+
+    model_id = request.args.get("model_id") or request.form.get("model_id") or ""
+    if not model_id:
+        return jsonify({"error": "model_id is required"}), 400
+
+    try:
+        result = call_llm(model_id, [{"role": "user", "content": "Reply with the single word OK"}], purpose="smoke_test")
+        return jsonify({"model_id": model_id, "status": "ok", "response": result[:500]})
+    except Exception as e:
+        return jsonify({"model_id": model_id, "status": "error", "error": str(e)[:500]})
 
 
 if __name__ == "__main__":

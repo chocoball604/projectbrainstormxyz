@@ -209,6 +209,7 @@
             </form>
         {% elif user %}
             <span>{{ user.email }}</span>
+            <a href="/account?token={{ token }}" style="color: var(--pb-text); text-decoration: none; font-size: 11px; font-weight: 500; opacity: 0.8;">Account</a>
             <form action="/logout" method="POST" class="logout-form">
                 <input type="hidden" name="token" value="{{ token }}">
                 <button type="submit" class="btn btn-secondary btn-small">Logout</button>
