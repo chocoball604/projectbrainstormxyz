@@ -1862,8 +1862,63 @@
                         <option value="draft">Draft</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label><input type="checkbox" name="blog_pin" value="1" id="blog-pin-checkbox" onchange="document.getElementById('blog-pin-rank-group').style.display=this.checked?'block':'none'"> Pin this post</label>
+                </div>
+                <div class="form-group" id="blog-pin-rank-group" style="display:none;">
+                    <label for="blog-pin-rank">Pin position</label>
+                    <select id="blog-pin-rank" name="blog_pin_rank" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px;">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                    </select>
+                </div>
                 <button type="submit" class="btn btn-primary">Create Post</button>
             </form>
+
+            {% if all_blog_posts %}
+            <h3 style="margin-top: 24px;">Existing Posts</h3>
+            <table style="font-size: 13px; width: 100%;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Title</th>
+                        <th>Status</th>
+                        <th>Pinned</th>
+                        <th>Created</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bp in all_blog_posts %}
+                    <tr>
+                        <td>{{ bp.id }}</td>
+                        <td>{{ bp.title[:50] }}</td>
+                        <td>{{ bp.status }}</td>
+                        <td>{% if bp.is_pinned %}📌 #{{ bp.pinned_rank }}{% else %}—{% endif %}</td>
+                        <td>{{ bp.created_at[:16] }}</td>
+                        <td>
+                            <form action="/admin/toggle-pin/{{ bp.id }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                {% if bp.is_pinned %}
+                                <input type="hidden" name="pin_action" value="unpin">
+                                <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px;">Unpin</button>
+                                {% else %}
+                                <input type="hidden" name="pin_action" value="pin">
+                                <select name="pin_rank" style="padding: 2px 6px; font-size: 12px;">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                </select>
+                                <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px;">Pin</button>
+                                {% endif %}
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
         </div>
 
         <div class="card">

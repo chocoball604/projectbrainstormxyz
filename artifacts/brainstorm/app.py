@@ -516,6 +516,8 @@ def init_db():
             image_path       TEXT,
             image_type       TEXT,
             image_size_bytes INTEGER,
+            is_pinned        INTEGER NOT NULL DEFAULT 0,
+            pinned_rank      INTEGER,
             created_at       TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
@@ -683,6 +685,12 @@ def migrate_db(conn):
             UNIQUE(study_id, user_doc_id)
         )
     """)
+
+    bp_cols = [row[1] for row in conn.execute("PRAGMA table_info(blog_posts)").fetchall()]
+    if "is_pinned" not in bp_cols:
+        conn.execute("ALTER TABLE blog_posts ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
+    if "pinned_rank" not in bp_cols:
+        conn.execute("ALTER TABLE blog_posts ADD COLUMN pinned_rank INTEGER")
 
 
 def create_session(user_id=None, is_admin=False):
@@ -874,6 +882,7 @@ def index():
     grounding_traces = []
     cost_telemetry_rows = []
     admin_uploads_list = []
+    all_blog_posts = []
     model_config = {}
     allowed_models_list = []
     persona_pool_list = []
@@ -904,6 +913,9 @@ def index():
         ).fetchall()]
         admin_uploads_list = [dict(r) for r in conn.execute(
             "SELECT * FROM admin_uploads ORDER BY uploaded_at DESC"
+        ).fetchall()]
+        all_blog_posts = [dict(r) for r in conn.execute(
+            "SELECT * FROM blog_posts ORDER BY is_pinned DESC, pinned_rank ASC, created_at DESC, id DESC"
         ).fetchall()]
         for row in conn.execute("SELECT key, value FROM model_config").fetchall():
             model_config[row["key"]] = row["value"]
@@ -1239,6 +1251,7 @@ def index():
         upload_max_total_mb=UPLOAD_MAX_TOTAL_PER_STUDY // (1024 * 1024),
         upload_allowed_extensions=", ".join(sorted(UPLOAD_ALLOWED_EXTENSIONS)),
         admin_uploads_list=admin_uploads_list,
+        all_blog_posts=all_blog_posts,
         docs_list=docs_list,
         docs_page=docs_page,
         docs_q=docs_q,
@@ -1329,10 +1342,15 @@ def blog_static(filename):
     return send_from_directory(BLOG_STATIC_DIR, filename)
 
 
+BLOG_PAGE_SIZE = 10
+
+
 def get_latest_blog_posts(limit=2):
     conn = get_db()
     posts = [dict(r) for r in conn.execute(
-        "SELECT id, title, slug, body, image_path, created_at FROM blog_posts WHERE status = 'published' ORDER BY created_at DESC, id DESC LIMIT ?",
+        """SELECT id, title, slug, body, image_path, is_pinned, pinned_rank, created_at FROM blog_posts
+           WHERE status = 'published'
+           ORDER BY is_pinned DESC, pinned_rank ASC, created_at DESC, id DESC LIMIT ?""",
         (limit,),
     ).fetchall()]
     conn.close()
@@ -1341,12 +1359,39 @@ def get_latest_blog_posts(limit=2):
 
 @app.route("/blog")
 def blog_page():
+    page = max(1, int(request.args.get("page", "1") or "1"))
     conn = get_db()
-    posts = [dict(r) for r in conn.execute(
-        "SELECT * FROM blog_posts WHERE status = 'published' ORDER BY created_at DESC, id DESC"
+    pinned = []
+    if page == 1:
+        pinned = [dict(r) for r in conn.execute(
+            "SELECT * FROM blog_posts WHERE status = 'published' AND is_pinned = 1 ORDER BY pinned_rank ASC"
+        ).fetchall()]
+    pinned_count = conn.execute(
+        "SELECT COUNT(*) FROM blog_posts WHERE status = 'published' AND is_pinned = 1"
+    ).fetchone()[0]
+    unpinned_total = conn.execute(
+        "SELECT COUNT(*) FROM blog_posts WHERE status = 'published' AND is_pinned = 0"
+    ).fetchone()[0]
+    first_page_unpinned = max(0, BLOG_PAGE_SIZE - pinned_count)
+    if unpinned_total <= first_page_unpinned:
+        total_pages = 1
+    else:
+        remaining = unpinned_total - first_page_unpinned
+        total_pages = 1 + max(1, (remaining + BLOG_PAGE_SIZE - 1) // BLOG_PAGE_SIZE)
+    page = min(page, total_pages)
+    if page == 1:
+        unpinned_limit = first_page_unpinned
+        unpinned_offset = 0
+    else:
+        unpinned_limit = BLOG_PAGE_SIZE
+        unpinned_offset = first_page_unpinned + (page - 2) * BLOG_PAGE_SIZE
+    unpinned = [dict(r) for r in conn.execute(
+        "SELECT * FROM blog_posts WHERE status = 'published' AND is_pinned = 0 ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+        (unpinned_limit, unpinned_offset),
     ).fetchall()]
     conn.close()
-    return render_template("blog_list.html", posts=posts)
+    posts = pinned + unpinned
+    return render_template("blog_list.html", posts=posts, page=page, total_pages=total_pages)
 
 
 @app.route("/blog/<int:post_id>")
@@ -1399,14 +1444,71 @@ def admin_create_blog_post():
         image_type = ext
         image_size_bytes = len(img_data)
 
+    is_pinned = 1 if request.form.get("blog_pin") else 0
+    pinned_rank = None
+    if is_pinned:
+        rank_val = request.form.get("blog_pin_rank", "").strip()
+        if rank_val not in ("1", "2", "3"):
+            return render_error("Pin position must be 1, 2, or 3.")
+        pinned_rank = int(rank_val)
+        conn = get_db()
+        pin_count = conn.execute("SELECT COUNT(*) FROM blog_posts WHERE is_pinned = 1").fetchone()[0]
+        if pin_count >= 3:
+            conn.close()
+            return render_error("You can pin up to 3 posts. Unpin another post first.")
+        existing_rank = conn.execute("SELECT id FROM blog_posts WHERE is_pinned = 1 AND pinned_rank = ?", (pinned_rank,)).fetchone()
+        if existing_rank:
+            conn.close()
+            return render_error("Pin position already in use. Choose another position or unpin the existing one.")
+        conn.close()
+
     conn = get_db()
     conn.execute(
-        "INSERT INTO blog_posts (title, slug, body, status, image_path, image_type, image_size_bytes) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (title, slug, body, status, image_path, image_type, image_size_bytes),
+        "INSERT INTO blog_posts (title, slug, body, status, image_path, image_type, image_size_bytes, is_pinned, pinned_rank) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (title, slug, body, status, image_path, image_type, image_size_bytes, is_pinned, pinned_rank),
     )
     conn.commit()
     conn.close()
     return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/toggle-pin/<int:post_id>", methods=["POST"])
+def admin_toggle_pin(post_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    action = request.form.get("pin_action", "").strip()
+    conn = get_db()
+    post = conn.execute("SELECT * FROM blog_posts WHERE id = ?", (post_id,)).fetchone()
+    if not post:
+        conn.close()
+        return render_error("Blog post not found.")
+    if action == "unpin":
+        conn.execute("UPDATE blog_posts SET is_pinned = 0, pinned_rank = NULL WHERE id = ?", (post_id,))
+        conn.commit()
+        conn.close()
+        return redirect(url_for("index", token=token))
+    elif action == "pin":
+        rank_val = request.form.get("pin_rank", "").strip()
+        if rank_val not in ("1", "2", "3"):
+            conn.close()
+            return render_error("Pin position must be 1, 2, or 3.")
+        pinned_rank = int(rank_val)
+        pin_count = conn.execute("SELECT COUNT(*) FROM blog_posts WHERE is_pinned = 1 AND id != ?", (post_id,)).fetchone()[0]
+        if pin_count >= 3:
+            conn.close()
+            return render_error("You can pin up to 3 posts. Unpin another post first.")
+        existing_rank = conn.execute("SELECT id FROM blog_posts WHERE is_pinned = 1 AND pinned_rank = ? AND id != ?", (pinned_rank, post_id)).fetchone()
+        if existing_rank:
+            conn.close()
+            return render_error("Pin position already in use. Choose another position or unpin the existing one.")
+        conn.execute("UPDATE blog_posts SET is_pinned = 1, pinned_rank = ? WHERE id = ?", (pinned_rank, post_id))
+        conn.commit()
+        conn.close()
+        return redirect(url_for("index", token=token))
+    conn.close()
+    return render_error("Invalid pin action.")
 
 
 @app.route("/admin/approve/<int:user_id>", methods=["POST"])
@@ -3829,6 +3931,13 @@ def render_error(message, show_new_research=False, show_new_persona=False):
             "SELECT * FROM persona_model_pool ORDER BY model_id"
         ).fetchall()]
         conn2.close()
+    all_blog_posts_err = []
+    if is_admin:
+        conn3 = get_db()
+        all_blog_posts_err = [dict(r) for r in conn3.execute(
+            "SELECT * FROM blog_posts ORDER BY is_pinned DESC, pinned_rank ASC, created_at DESC, id DESC"
+        ).fetchall()]
+        conn3.close()
     return render_template(
         "index.html",
         user=user,
@@ -3883,6 +3992,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         upload_max_total_mb=UPLOAD_MAX_TOTAL_PER_STUDY // (1024 * 1024),
         upload_allowed_extensions=", ".join(sorted(UPLOAD_ALLOWED_EXTENSIONS)),
         admin_uploads_list=[],
+        all_blog_posts=all_blog_posts_err,
         docs_list=[],
         docs_page=1,
         docs_q="",

@@ -1,0 +1,92 @@
+BLOG UX UPGRADE + LANGUAGE DROPDOWN LABEL TWEAK (Prompt 24 delta)
+Implement ONLY this change. Do not modify study/chat/QA/report/uploads/model-config features.
+
+Part 1 — Blog: pin up to 3 posts + ordering + pagination
+-------------------------------------------------------
+
+Requirements:
+
+A) Data model change
+1) Extend blog_posts table with:
+- is_pinned INTEGER NOT NULL DEFAULT 0
+- pinned_rank INTEGER NULL   (1..3)
+(optional) updated_at TEXT (timestamp_utc)
+
+Migration:
+- ALTER TABLE blog_posts ADD COLUMN is_pinned INTEGER DEFAULT 0
+- ALTER TABLE blog_posts ADD COLUMN pinned_rank INTEGER
+- (optional) updated_at
+
+B) Admin UI: pin controls
+2) In the existing admin create/edit post form:
+- Add checkbox: “Pin this post”
+- If checked, show dropdown: “Pin position” with values 1, 2, 3
+- Allow unpinning.
+
+3) Enforce rule: max 3 pinned posts total
+- If admin tries to pin a 4th post, reject with:
+  “You can pin up to 3 posts. Unpin another post first.”
+- Enforce pinned_rank uniqueness (only one post per rank 1/2/3).
+  - If selected rank already used, reject with:
+    “Pin position already in use. Choose another position or unpin the existing one.”
+
+C) Public ordering rule (IMPORTANT)
+4) Ordering MUST be:
+- Pinned posts first, ordered by pinned_rank ASC (1,2,3)
+- Then ALL remaining posts ordered by created_at DESC (latest first)
+This ordering applies to:
+- /blog list
+- landing preview (1–2 latest)
+- dashboard preview (1–2 latest)
+
+D) Pagination (10 per page)
+5) Public /blog:
+- Show 10 posts per page, newest-first after pins.
+- Page 1:
+   - Show pinned posts at top (max 3)
+   - Fill remaining slots up to 10 with unpinned posts (created_at DESC)
+- Page 2+:
+   - Show ONLY unpinned posts, 10 per page, created_at DESC
+   - Do NOT repeat pinned posts on later pages
+- Add Prev/Next and Page X of Y
+- Use query param: /blog?page=1
+
+E) Deliverables/tests
+- Files changed
+- How to test:
+
+TEST 1: Pinning
+1) Pin 3 posts ranks 1/2/3 -> ok
+2) Pin 4th -> blocked
+3) Duplicate rank -> blocked
+4) Unpin -> can pin new one
+
+TEST 2: /blog ordering + pagination
+1) Have >15 posts with 2–3 pinned
+2) /blog?page=1 shows pinned first (rank order) then latest unpinned, total 10 items
+3) /blog?page=2 shows ONLY unpinned next 10 (latest-first), pinned not repeated
+4) Prev/Next works
+
+TEST 3: Previews
+1) Landing section #12 shows 1–2 posts: pinned first, else latest-first
+2) Dashboard preview shows 1–2 posts: pinned first, else latest-first
+
+
+Part 2 — Language dropdown label tweaks (V1)
+--------------------------------------------
+
+Requirement:
+In the unauthenticated header language selector (landing page header from Prompt 23), keep ONLY these 4 options but adjust their display labels exactly to:
+
+- English
+- CN-Simplified简
+- CN-Traditional繁
+- Japanese日
+
+Implementation notes:
+- Only change the visible labels in the dropdown; no i18n behavior required.
+- Keep any underlying value keys stable if already used (e.g., "en", "zh-Hans", "zh-Hant", "ja"), but the displayed text must match exactly.
+
+Tests:
+1) Logged out landing page header language selector shows ONLY 4 options with exact labels above.
+2) No other language options appear.

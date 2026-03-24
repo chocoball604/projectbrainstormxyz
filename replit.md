@@ -1,149 +1,79 @@
-# Workspace
+# Overview
 
-## Overview
+This is a pnpm workspace monorepo using TypeScript, designed for building AI-Native Market Research applications. The project aims to provide a robust and scalable platform for conducting various types of market research, including synthetic surveys, in-depth interviews (IDIs), and focus groups, leveraging AI for efficiency and advanced insights.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+The core of the project is the "Brainstorm App," a Python Flask application that facilitates the entire research lifecycle from study creation and persona management to report generation and follow-up analysis. This platform focuses on streamlining the market research process, enabling rapid iteration, and delivering actionable intelligence.
 
-## Stack
+Key capabilities include:
+- Token-based authentication for secure access.
+- Comprehensive study management with various statuses and types.
+- AI-powered persona generation and management.
+- Detailed grounding trace logging for transparency.
+- Cost telemetry and budget enforcement for resource management.
+- Admin functionalities for model configuration, web sources, and usage monitoring.
+- Document grounding library for attaching and managing research materials.
+- Structured report generation with PDF export.
+- Follow-up mechanisms for iterative research.
+- Usage metering and limits to manage resource consumption.
+- Health checks for integrated AI models.
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+The project emphasizes a modular architecture, utilizing pnpm workspaces to manage different applications and shared libraries, ensuring maintainability and scalability.
 
-## Structure
+# User Preferences
 
-```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   ├── api-server/         # Express API server
-│   └── brainstorm/         # Project Brainstorm V1 — Flask + SQLite single-page app
-│       ├── app.py          # Flask backend (token-based auth, studies, admin)
-│       ├── templates/
-│       │   └── index.html  # Single-page template with section switching
-│       └── brainstorm.db   # SQLite database (auto-created)
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts
-├── brainstorm_v1_replit_singlepage_pack/  # Frozen rules, schemas, task files
-│   ├── 00_FROZEN_RULES_FROM_PRD.md
-│   ├── PROMPT_SEQUENCE_SINGLE_PAGE.md
-│   ├── budget_limits.yaml
-│   └── schemas/
-├── pnpm-workspace.yaml
-├── tsconfig.base.json
-├── tsconfig.json
-└── package.json
-```
+I want iterative development.
+Ask before making major changes.
+I prefer detailed explanations.
+Do not make changes to the folder `brainstorm_v1_replit_singlepage_pack/`.
+Do not make changes to the file `artifacts/brainstorm/brainstorm.db`.
 
-## Brainstorm App (artifacts/brainstorm)
+# System Architecture
 
-Python Flask + SQLite single-page app for AI-Native Market Research.
+The project is structured as a pnpm workspace monorepo. It leverages Node.js 24 and TypeScript 5.9 for backend services and shared libraries.
 
-- **Auth**: Token-based (URL query param `?token=xxx`) — needed because Replit preview iframe blocks cookies. Sessions stored in `sessions` table.
-- **Admin password**: `admin123` (env var `ADMIN_PASSWORD`)
-- **DB tables**: `users`, `sessions`, `studies`, `personas`, `admin_web_sources`, `grounding_traces`, `cost_telemetry`, `chat_messages`, `followups`, `user_uploads`, `study_documents`, `admin_uploads`, `model_config`, `allowed_models`, `persona_model_pool`
-- **Prompt progress**: Prompts 1–22 complete
-  - P1: Auth/signup/admin approval
-  - P2: Study list + "New Research" button
-  - P3: Research Brief with 6 required anchors
-  - P4: Study type selector + limits
-  - P5: Personas — immutable, clone-as-new, no versioning, `persona_instance_id` model
-  - P6: Grounding Trace logging + Admin-Directed Web Sources
-  - P7: Execute studies with placeholder outputs, branching new research flow, UX fixes
-  - P8: Ben QA Gate — PASS/FAIL/DOWNGRADE decisions, confidence labels (Strong/Indicative/Exploratory), qa_blocked status, final_report
-  - P9: Cost telemetry + budget ceilings (100K survey, 150K IDI, 300K FG). `cost_telemetry` table. Admin telemetry view.
-  - P10: Admin-only CSV export — 3 routes for studies, cost_telemetry, grounding_traces.
-  - Flow Change: New Research now offers "Let Mark recommend" (creates TBD study → discovery → recommendation) or "I already know" (existing flow).
-  - Bug Fix: Survey branch now requires entering exactly `question_count` questions via `/save-survey-questions`. IDI/FG branch now requires completing all 6 Research Brief anchors via `/save-remaining-anchors`. Run Study gated on completeness in both UI and server-side.
-  - P11: Study Selection Funnel — dashboard shows 2-step guide, "Open Study" replaces "Configure", Study Detail view, no chat on dashboard.
-  - P12: Study-scoped chat — `chat_messages` table (id, study_id, sender, message_text, timestamp_utc). Chat thread + input in Study Detail only. Canned Mark reply on each message. `/send-chat/<id>` route.
-  - P13: Side panel "Brief So Far" — right-side panel in Study Detail with title/type/status + checklist. Survey: respondent_count, question_count, questions match. IDI/FG: 6 anchors + persona bounds. "Ready for QA Review" button disabled until complete. `/ready-for-qa/<id>` route sets `qa_status=pending_review`.
-  - P14: Mark coaching nudges — `get_coaching_nudge()` returns one nudge per missing item. Survey: respondent_count → question_count → questions match. IDI/FG: anchors one-by-one → personas. TBD: BP → DS. No auto-writing.
-  - P15: Inline "Save this as…" buttons — context-aware buttons after Mark's reply. `/save-chat-field/<id>` saves user's last message into the chosen field. Survey: "Save as Survey Question" (append). IDI/FG: up to 3 missing anchor buttons. TBD: BP/DS only. Side panel updates after save.
-  - P16: Branching setup — Survey shows respondent_count + question_count + questions builder, NO persona UI. IDI/FG shows anchors + persona attach/detach with filtered dropdown. Side panel + Ready button + chat + save buttons all preserved.
-  - P17: Ben pre-execution QA gate — `ben_precheck(study, persona_count)` validates completeness before Run Study. Survey: respondent_count + question_count + questions match. IDI/FG: 6 anchors + persona bounds. FAIL → `qa_status=precheck_failed` + `qa_notes` JSON list of issues. PASS → `qa_status=precheck_passed`. Side panel shows PASS/FAIL with details. Run Study button only shows when precheck_passed. Re-run button on FAIL.
-  - P18: Report Viewer + PDF download — `build_structured_report(study)` generates 5-section report (Executive Summary, What Was Studied, Key Findings with confidence labels, Risks/Limits/Unknowns, Sources/Citations). Output view renders structured report + Download PDF button. `/download-pdf/<id>` generates PDF via fpdf2. Draft studies blocked from PDF. Raw output in collapsible details. CJK support via NotoSansCJK-Regular.ttc (JP/SC/TC auto-detected). Admin test route: `/admin/dev-cjk-pdf-test`.
-  - P19: Follow-ups for IDI/FG — `followups` table with `UNIQUE(study_id, followup_round)` and `CHECK(1..2)`. Max 2 follow-up rounds per study, only for completed `synthetic_idi`/`synthetic_focus_group`. `/submit-followup/<id>` route validates ownership, study type, status, and round limit. Each follow-up routed through `run_ben_qa()` with full study context. UI shows follow-up history + input box (or limit message). Surveys show no follow-up UI.
-  - P20: Usage meters + limit enforcement — `BILLABLE_STATUSES` = completed, qa_blocked, terminated_system, terminated_user. `get_monthly_usage(conn, user_id)` counts studies with billable status created this month. `FREE_TIER_MONTHLY_LIMIT = 6`. Dashboard shows usage meter ("Studies used this month: X of Y") with color-coded progress bar (blue → yellow at 75% → red at limit). "New Research" disabled when limit reached. Server-side enforcement in `/create-study` and `/create-study-tbd`. Draft and in_progress do NOT count.
-  - Bug Fix: PDF filenames now include report version — `{title}_{id}_V{version}.pdf`.
-  - P21: Document Grounding Library — `user_uploads` (user-scoped, soft delete with metadata retention), `study_documents` join table for study↔doc attachments, `admin_uploads` for global admin documents. My Documents section with search, pagination, storage meter. Limits: 5 files/5MB per study, 1MB per file, 15MB user storage cap. Routes: `/upload-study-file/<id>`, `/upload-user-doc`, `/attach-doc-to-study/<id>`, `/detach-doc-from-study/<id>`, `/delete-user-doc/<id>`.
-  - P22: Admin Model Configuration — `model_config` table (mark_model, lisa_model, ben_model), `allowed_models` table (7 seed models from replit_openrouter), `persona_model_pool` table (random selection for persona creation). Admin UI: Model Config selectors, Allowed Models CRUD with OpenRouter import, Persona Pool editor. Validation: Mark/Lisa/Ben must use active allowed models. Persona creation records provenance with model ID and selection method. Empty pool blocks persona creation.
-  - P22+: Model Health Check + Weekly QA — `call_llm()` wrapper (NotImplementedError until integration connected), `model_health_checks` + `model_health_status` tables, `weekly_qa_reports` table. Auto-daily health check on admin dashboard load (once/day). Weekly QA report auto-generated. Admin UI: Model Health section with per-model status badges (PASS/FAIL/NOT CONNECTED/UNKNOWN), "Run Health Check Now" button, latest weekly report display. JSON APIs: POST `/admin/model-health/run`, GET `/admin/model-health/status`, GET `/admin/weekly-qa-report/latest`.
-  - P23: Marketing Landing Page — `landing.html` template with 12 sections (verbatim Appendix 2 text). Unauthenticated `/` serves landing page; authenticated users still see dashboard. Alternating white/#064273 backgrounds. Header: Sign Up, Login, Blog/News, Language selector. Buttons: "Run a Simulation" + "Get Started With Mark" → signup modal, "See How It Works" → anchor scroll. Section 11: HTML/CSS flow diagram (5 steps: Business Question → Mark → Lisa → Ben → Decision-ready insights). Section 12: shows latest blog posts (or "Coming soon" if none). Routes: `/landing` (alias). `render_error()` updated to show landing page for unauthenticated errors.
-  - P24: Blog/News — `blog_posts` table (id, title, slug, body, status, image_path, image_type, image_size_bytes, created_at). Public `/blog` list page, `/blog/<id>` post view. Admin create-post form with optional image upload (PNG/JPG, max 300KB, stored in `static/blog/`). Landing page section 12 shows 1-2 latest posts. User dashboard shows 1-2 latest posts. Posts ordered by `created_at DESC, id DESC`. Draft posts hidden from public. Language selector reduced to 4 options: English, CN-Simplified, CN-Traditional, Japanese.
-- **Personas**: Each persona has a unique immutable `persona_instance_id` (e.g. `P-5EB8581A`). Clone creates a new persona. Delete auto-detaches from non-completed studies. Delete blocked if used in completed study.
-- **Grounding Traces**: Recorded on persona creation (and study execution when implemented). Schema follows `grounding_trace.schema.json`. Reason code required when `admin_sources_used_in_output` is false.
-- **Admin Web Sources**: Admin can add/toggle/delete web sources. Active sources set `admin_sources_configured=true` and `admin_sources_queried=true` in grounding traces.
-- **Study statuses**: draft, in_progress, qa_blocked, terminated_system, terminated_user, completed
-- **Study types**: synthetic_survey (max 12Q/400R), synthetic_idi (1-3 personas), synthetic_focus_group (4-6 personas)
-- **Run**: `python artifacts/brainstorm/app.py` (port from `PORT` env var, default 5000)
+**Core Applications:**
+- **`api-server`**: An Express 5 API server handling primary API requests, utilizing `@workspace/api-zod` for validation and `@workspace/db` for data persistence.
+- **`brainstorm`**: A Python Flask + SQLite single-page application focused on AI-Native Market Research. It manages studies, personas, reports, and user interactions.
 
-## TypeScript & Composite Projects
+**Shared Libraries (`lib/`):**
+- **`api-spec`**: Manages the OpenAPI 3.1 specification (`openapi.yaml`) and Orval configuration for API client and schema generation.
+- **`api-client-react`**: Generates React Query hooks and a fetch client from the OpenAPI spec for frontend consumption.
+- **`api-zod`**: Generates Zod schemas from the OpenAPI spec for request and response validation, ensuring data integrity across services.
+- **`db`**: Encapsulates the database layer using Drizzle ORM with PostgreSQL, providing a centralized way to interact with the database schema.
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+**Build and Type-checking:**
+- **`esbuild`**: Used for bundling CJS modules.
+- **TypeScript Composite Projects**: All packages extend a base `tsconfig.base.json` with `composite: true`, enabling efficient type-checking and dependency resolution across the monorepo. Type-checking is performed from the root using `tsc --build --emitDeclarationOnly`.
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+**Feature Specifications (Brainstorm App):**
+- **Authentication**: Token-based authentication (URL query parameter `?token=xxx`).
+- **Database**: Uses SQLite with a predefined set of tables for users, sessions, studies, personas, chat messages, cost telemetry, and more.
+- **Study Types**: Supports `synthetic_survey`, `synthetic_idi`, and `synthetic_focus_group`, each with specific configurations and limits.
+- **Persona Management**: Immutable personas with unique `persona_instance_id`s; cloning creates new instances.
+- **Grounding Traces**: Records detailed traces of AI model interactions, including sources used.
+- **Admin Features**: Includes capabilities for managing admin web sources, configuring AI models (`mark_model`, `lisa_model`, `ben_model`), managing allowed models, and editing persona model pools.
+- **Reporting**: Generates structured reports with confidence labels and supports PDF download.
+- **Follow-ups**: Allows up to two follow-up rounds for completed IDI/FG studies.
+- **Usage Monitoring**: Implements monthly usage meters and enforces free-tier limits for study creation.
+- **Document Management**: Provides a document grounding library for user and admin uploads, with file size and storage limits.
+- **Model Health Checks**: Includes a system for daily model health checks and weekly QA reports for AI models.
+- **Marketing Landing Page**: A dedicated landing page (`landing.html`) for unauthenticated users, providing an overview of the platform.
+- **Blog/News**: A blogging platform with public list and detail views, admin capabilities for post creation and image uploads, post pinning (up to 3 pinned posts with rank 1-3), and paginated blog listing (10 per page). Pinned posts appear first in rank order on page 1, followed by unpinned posts in reverse chronological order. Language selector on landing page shows 4 options: English, CN-Simplified简, CN-Traditional繁, Japanese日.
 
-## Root Scripts
+# External Dependencies
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
-
-## Packages
-
-### `artifacts/api-server` (`@workspace/api-server`)
-
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
-
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
-
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+- **Node.js**: Version 24
+- **pnpm**: Package manager
+- **TypeScript**: Version 5.9
+- **Express**: Version 5 (API framework)
+- **PostgreSQL**: Database
+- **Drizzle ORM**: Object-relational mapper for PostgreSQL
+- **Zod**: Validation library (`zod/v4`)
+- **`drizzle-zod`**: Integration for Zod with Drizzle ORM
+- **Orval**: API codegen tool (from OpenAPI spec)
+- **esbuild**: JavaScript bundler
+- **Python Flask**: Web framework for the Brainstorm app
+- **SQLite**: Database for the Brainstorm app
+- **fpdf2**: Python library for PDF generation (used in Brainstorm app)
+- **React Query**: For client-side data fetching and caching (in `api-client-react`)
+- **OpenRouter**: Integrated for AI model selection and management (`replit_openrouter`)
