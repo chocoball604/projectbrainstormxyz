@@ -40,21 +40,27 @@
         .brand-lockup img { height: 32px; width: 32px; object-fit: contain; }
         .brand-wordmark { font-size: var(--font-brand); font-weight: 700; white-space: nowrap; }
         .blog-header {
-            background: #1a1a2e;
-            color: #fff;
+            background: var(--pb-white);
+            color: var(--pb-text);
             padding: 12px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom: 1px solid var(--pb-lightgrey);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.06);
         }
-        .blog-header .brand-wordmark { color: #fff; }
+        .blog-header .brand-lockup {
+            padding-bottom: 4px;
+            border-bottom: 2px solid var(--pb-accent);
+        }
+        .blog-header .brand-wordmark { color: var(--pb-text); }
         .blog-header-right { display: flex; align-items: center; gap: 14px; }
         .blog-header-right a {
-            color: #fff;
+            color: var(--pb-text);
             text-decoration: none;
             font-size: var(--font-small);
             font-weight: 500;
-            opacity: 0.9;
+            opacity: 0.8;
         }
         .blog-header-right a:hover { opacity: 1; }
         .container {
