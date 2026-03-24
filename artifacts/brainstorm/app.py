@@ -29,6 +29,7 @@ from datetime import datetime
 from flask import (
     Flask,
     jsonify,
+    make_response,
     redirect,
     render_template,
     request,
@@ -41,6 +42,17 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-fallback-key")
+
+VALID_LANGS = {"en", "zh-Hans", "zh-Hant", "ja"}
+
+
+@app.context_processor
+def inject_lang():
+    lang = request.cookies.get("pb_lang", "en")
+    if lang not in VALID_LANGS:
+        lang = "en"
+    return dict(lang=lang)
+
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "brainstorm.db")
 
@@ -1272,8 +1284,8 @@ def signup():
 
     if not email or not username or not password:
         return render_error("All fields are required.")
-    if len(password) < 6:
-        return render_error("Password must be at least 6 characters.")
+    if len(password) < 6 or len(password) > 10:
+        return render_error("Password must be 6–10 characters.")
 
     conn = get_db()
     existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()

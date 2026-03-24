@@ -1,0 +1,262 @@
+CONSOLIDATED CHANGESET — Branding + Theme + Typography + Password Rules + Language Selector + Blog Enhancements
+Implement ONLY the changes in this prompt. Do NOT implement unrelated prompts/features.
+
+Hard constraints:
+- Do NOT reset/delete DB.
+- Do NOT change study execution logic, QA decision logic, grounding trace logic, telemetry, report versioning, or follow-up mechanics beyond display/styling.
+- Keep routing behavior: unauthenticated / -> landing; authenticated / -> dashboard.
+- Keep token-based sessions working.
+
+============================================================
+0) Input assets (I will upload at same time)
+============================================================
+I will upload logo files into Replit under:
+artifacts/brainstorm/static/brand/enso_logo_256.png
+(optional)
+artifacts/brainstorm/static/brand/enso_logo_1024.png
+artifacts/brainstorm/static/brand/enso_logo_128.png
+
+If logo file is missing, site must degrade gracefully to text-only wordmark (no broken images).
+
+============================================================
+1) BRAND-FIRST RULE (hero-level brand signal everywhere)
+============================================================
+Rule:
+Brand/product name must be a hero-level signal, not just nav text.
+No headline should overpower the brand.
+Therefore, the brand lockup must be visually larger than any headline across branded pages.
+
+A) Create a reusable Brand Lockup component (template partial or shared snippet) used on:
+- landing page header
+- blog list and blog post pages
+- dashboard header
+- admin header
+
+Brand Lockup contains:
+- Logo image (enso_logo_256.png) with alt="Project Brainstorm logo"
+- Wordmark text next to it
+
+B) Wordmark language rule:
+- If language is CN-Simplified (zh-Hans) or CN-Traditional (zh-Hant):
+  Wordmark MUST be exactly: "Project Brainstorm 集思廣益"
+- Else (English and Japanese):
+  Wordmark MUST be: "Project Brainstorm"
+
+C) Brand-first sizing:
+- Brand wordmark must be the largest text element on the page.
+- All headings (hero headline, section headings, page titles) must be <= brand wordmark size.
+
+Implementation:
+- Use global CSS variables (see Typography section) so the brand size is always >= headings.
+
+============================================================
+2) TYPOGRAPHY (EN/JA/CN stacks + unified mixed-page fallback)
+============================================================
+A) Language selector options (V1 only)
+The language dropdown must contain ONLY these 4 options, with EXACT visible labels:
+- English
+- CN-Simplified简
+- CN-Traditional繁
+- Japanese日
+
+Values (recommended):
+- en
+- zh-Hans
+- zh-Hant
+- ja
+
+Persist the selection in cookie or session.
+Apply it as <html data-lang="..."> on every rendered page.
+
+B) Minimum readable size
+No text anywhere should render below 11px.
+Set global base sizes so overall text shrinks slightly but remains readable.
+
+Define global CSS variables:
+--font-small: 11px;
+--font-body: 13px;
+--font-brand: clamp(18px, 2vw, 22px);
+--font-heading: clamp(15px, 1.6vw, 18px);
+--line-body: 1.45;
+--line-heading: 1.25;
+
+Apply:
+- body { font-size: var(--font-body); line-height: var(--line-body); }
+- .small, .meta, .nav, .label { font-size: var(--font-small); }
+- .brand-wordmark { font-size: var(--font-brand); font-weight: 700; }
+- h1,h2,h3,h4,h5 { font-size: var(--font-heading); font-weight: 600; line-height: var(--line-heading); }
+Ensure headings never exceed --font-brand.
+
+C) Font-family stacks (NO web imports required)
+Japanese (system stack, no import):
+" Hiragino Sans" -> "Hiragino Kaku Gothic ProN" -> "Yu Gothic" -> Meiryo -> "MS PGothic" -> sans-serif
+
+Chinese Simplified stack:
+"PingFang SC" -> "Hiragino Sans GB" -> "Microsoft YaHei UI" -> "Microsoft YaHei" -> sans-serif
+
+Chinese Traditional stack:
+"PingFang TC" -> "Microsoft JhengHei UI" -> "Microsoft JhengHei" -> sans-serif
+
+English base:
+Calibri -> "Segoe UI" -> Arial -> sans-serif
+
+D) Apply per-language font-family using html[data-lang="..."]:
+- html[data-lang="ja"] uses Japanese stack
+- html[data-lang="zh-Hans"] uses CN Simplified stack
+- html[data-lang="zh-Hant"] uses CN Traditional stack
+
+E) Unified mixed-page stack for English pages:
+When html[data-lang="en"], keep Calibri first for Latin,
+but allow JP/CN glyphs to fall back cleanly by appending JP/CN stacks:
+
+Calibri, "Segoe UI", Arial,
+"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic",
+"PingFang SC", "PingFang TC", "Hiragino Sans GB",
+"Microsoft YaHei UI", "Microsoft YaHei",
+"Microsoft JhengHei UI", "Microsoft JhengHei",
+sans-serif;
+
+============================================================
+3) COLOR SCHEME UPDATE (site-wide)
+============================================================
+Replace old ocean blue (#064273) everywhere.
+
+Define CSS variables:
+:root {
+  --pb-white: #FFFFFF;
+  --pb-accent: #5C7E8F;     /* grey blue */
+  --pb-grey: #A2A2A2;       /* primary button / accents */
+  --pb-lightgrey: #D4DDE2;  /* secondary surfaces */
+  --pb-text: #111111;
+  --pb-text-on-accent: #FFFFFF;
+}
+
+Rules:
+- Alternating section backgrounds on landing: white and #5C7E8F (not #064273).
+- Primary buttons: bg #A2A2A2, text white
+- Secondary buttons: bg #D4DDE2, text #111
+- Hover states remain within palette (slightly darker/lighter).
+- Ensure brand lockup remains readable on accent backgrounds.
+
+============================================================
+4) PASSWORD RULE ENFORCEMENT (6–10 chars)
+============================================================
+Enforce password length server-side and UI:
+
+- Minimum 6 characters
+- Maximum 10 characters
+
+Apply to:
+- Sign Up
+- Change password (if exists)
+
+Client-side:
+- add minlength=6 maxlength=10 attributes
+
+Server-side:
+- validate and reject with clear message:
+  "Password must be 6–10 characters."
+
+Do NOT change password hashing/auth logic.
+
+============================================================
+5) BLOG ENHANCEMENTS (image + pinning + 10/page pagination)
+============================================================
+A) Base blog requirements:
+- Public /blog page listing posts (title + date), newest first unless pinned.
+- Public /blog/<id> full post view.
+- blog_posts table exists (id, title, slug, body, created_at, status).
+- Admin-only simple form to create post.
+- Landing section #12 preview shows 1–2 latest posts.
+- Dashboard preview shows 1–2 latest posts.
+
+B) Add optional small image upload per post (thumbnail)
+- Add columns to blog_posts:
+  image_path TEXT NULL
+  image_type TEXT NULL
+  image_size_bytes INTEGER NULL
+
+Upload constraints:
+- Only PNG, JPG/JPEG
+- Max 300KB
+- Store under artifacts/brainstorm/static/blog/
+- Sanitize filenames; unique naming (prefix with post id or timestamp)
+
+Display:
+- /blog list: show title + date; show thumbnail if exists (optional but preferred)
+- /blog/<id>: show title + date + image (if exists) + body
+
+C) Pin up to 3 posts to top
+- Add columns to blog_posts:
+  is_pinned INTEGER NOT NULL DEFAULT 0
+  pinned_rank INTEGER NULL (1..3)
+
+Admin form:
+- checkbox “Pin this post”
+- dropdown “Pin position” 1,2,3 when checked
+
+Rules enforced server-side:
+- Maximum 3 pinned posts total
+- pinned_rank must be unique (only one post per rank)
+- If violating:
+  - "You can pin up to 3 posts. Unpin another post first."
+  - "Pin position already in use. Choose another position or unpin the existing one."
+
+D) Ordering rule (IMPORTANT)
+- Pinned posts first, ordered by pinned_rank ASC (1->3)
+- Then remaining posts ordered by created_at DESC (latest first)
+
+E) Pagination rule (10 posts + pagination)
+- /blog shows 10 posts per page (query param ?page=1)
+- Page 1:
+   show pinned posts at top (max 3)
+   then fill remaining slots up to 10 with unpinned newest-first
+- Page 2+:
+   show ONLY unpinned posts (10 per page), newest-first
+   pinned posts should NOT repeat on later pages
+- Add Prev/Next and "Page X of Y"
+
+F) Previews (landing and dashboard) (1–2 posts)
+- Show pinned posts first (rank order), then newest posts.
+
+============================================================
+6) DELIVERABLES + TESTS
+============================================================
+Deliverables:
+- Files changed
+- DB migrations (ALTER TABLE additions)
+- How to test
+
+Tests:
+
+TEST A — Branding
+1) Landing: brand lockup (logo + wordmark) is largest; hero headline is smaller/equal.
+2) Switch language to CN-Simplified or CN-Traditional: wordmark becomes "Project Brainstorm 集思廣益"
+3) English/Japanese: wordmark becomes "Project Brainstorm"
+4) If logo file missing, fallback to text-only wordmark with no broken image
+
+TEST B — Typography
+1) No text < 11px anywhere
+2) English default uses Calibri, and mixed JP/CN glyphs render cleanly on EN pages
+3) Japanese uses Hiragino/Meiryo stack
+4) zh-Hans uses PingFang SC fallback to YaHei
+5) zh-Hant uses PingFang TC fallback to JhengHei
+6) language selection persists after refresh
+
+TEST C — Colors
+1) Landing alternates #FFFFFF and #5C7E8F, no #064273 remains (search/replace)
+2) Buttons use #A2A2A2 / #D4DDE2 and are readable on both backgrounds
+
+TEST D — Password rule
+1) 5-char rejected; 11-char rejected; 6–10 accepted
+
+TEST E — Blog
+1) Create post without image -> shows on /blog and /blog/<id>
+2) Create post with image <300KB -> image displays
+3) Disallowed file type or >300KB -> blocked
+4) Pin 3 posts ranks 1/2/3 -> OK
+5) Attempt 4th pin -> blocked
+6) Duplicate pinned_rank -> blocked
+7) /blog?page=1 shows pinned first then newest unpinned, total 10
+8) /blog?page=2 shows only unpinned next 10, pinned not repeated
+9) Landing + dashboard previews show pinned first, then newest

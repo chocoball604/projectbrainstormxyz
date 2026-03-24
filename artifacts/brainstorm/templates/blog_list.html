@@ -1,120 +1,143 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-lang="{{ lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blog / News — Project Brainstorm</title>
     <style>
+        :root {
+          --pb-white: #FFFFFF;
+          --pb-accent: #5C7E8F;
+          --pb-grey: #A2A2A2;
+          --pb-lightgrey: #D4DDE2;
+          --pb-text: #111111;
+          --font-small: 11px;
+          --font-body: 13px;
+          --font-brand: clamp(18px, 2vw, 22px);
+          --font-heading: clamp(15px, 1.6vw, 18px);
+          --line-body: 1.45;
+          --line-heading: 1.25;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: Calibri, "Segoe UI", Arial, sans-serif;
+            font-size: var(--font-body);
+            line-height: var(--line-body);
             background: #f5f7fa;
-            color: #333;
+            color: var(--pb-text);
             min-height: 100vh;
         }
+        html[data-lang="en"] body {
+            font-family: Calibri, "Segoe UI", Arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic", "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+        }
+        html[data-lang="ja"] body { font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic", sans-serif; }
+        html[data-lang="zh-Hans"] body { font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
+        html[data-lang="zh-Hant"] body { font-family: "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif; }
+        h1,h2,h3,h4,h5 { font-size: var(--font-heading); font-weight: 600; line-height: var(--line-heading); }
+        .brand-lockup {
+            display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;
+        }
+        .brand-lockup img { height: 32px; width: 32px; object-fit: contain; }
+        .brand-wordmark { font-size: var(--font-brand); font-weight: 700; white-space: nowrap; }
         .blog-header {
             background: #1a1a2e;
             color: #fff;
-            padding: 16px 24px;
+            padding: 12px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-        .blog-header h1 { font-size: 20px; font-weight: 700; }
-        .blog-header h1 a { color: #fff; text-decoration: none; }
-        .blog-header-right { display: flex; align-items: center; gap: 16px; }
+        .blog-header .brand-wordmark { color: #fff; }
+        .blog-header-right { display: flex; align-items: center; gap: 14px; }
         .blog-header-right a {
             color: #fff;
             text-decoration: none;
-            font-size: 14px;
+            font-size: var(--font-small);
             font-weight: 500;
             opacity: 0.9;
         }
         .blog-header-right a:hover { opacity: 1; }
         .container {
             max-width: 800px;
-            margin: 40px auto;
+            margin: 32px auto;
             padding: 0 20px;
         }
         .page-title {
-            font-size: 32px;
+            font-size: var(--font-heading);
             font-weight: 700;
-            color: #1a1a2e;
-            margin-bottom: 32px;
+            color: var(--pb-text);
+            margin-bottom: 24px;
         }
         .error-msg {
             background: #fee2e2;
             color: #dc2626;
-            padding: 12px 16px;
+            padding: 11px 14px;
             border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
+            margin-bottom: 18px;
+            font-size: var(--font-body);
         }
         .post-card {
             background: #fff;
-            border-radius: 12px;
+            border-radius: 10px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-            padding: 24px;
-            margin-bottom: 20px;
+            padding: 20px;
+            margin-bottom: 16px;
             transition: box-shadow 0.2s;
             display: flex;
-            gap: 20px;
+            gap: 16px;
             align-items: flex-start;
         }
         .post-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
         .post-card.pinned { border-left: 4px solid #f59e0b; }
         .post-thumbnail {
-            width: 120px;
-            height: 80px;
+            width: 100px;
+            height: 68px;
             object-fit: cover;
-            border-radius: 8px;
+            border-radius: 6px;
             flex-shrink: 0;
         }
         .post-content { flex: 1; }
         .post-card h2 {
-            font-size: 20px;
+            font-size: var(--font-heading);
             font-weight: 600;
-            color: #1a1a2e;
-            margin-bottom: 8px;
+            color: var(--pb-text);
+            margin-bottom: 6px;
         }
-        .post-card h2 a {
-            color: inherit;
-            text-decoration: none;
-        }
-        .post-card h2 a:hover { color: #3498db; }
+        .post-card h2 a { color: inherit; text-decoration: none; }
+        .post-card h2 a:hover { color: var(--pb-accent); }
         .post-date {
-            font-size: 13px;
+            font-size: var(--font-small);
             color: #999;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         .pin-badge {
             display: inline-block;
             background: #fef3c7;
             color: #92400e;
-            font-size: 11px;
+            font-size: var(--font-small);
             font-weight: 600;
-            padding: 2px 8px;
+            padding: 1px 7px;
             border-radius: 4px;
-            margin-left: 8px;
+            margin-left: 6px;
             vertical-align: middle;
         }
         .post-excerpt {
-            font-size: 15px;
+            font-size: var(--font-body);
             color: #555;
-            line-height: 1.5;
+            line-height: var(--line-body);
         }
         .empty-state {
             text-align: center;
-            padding: 60px 20px;
+            padding: 48px 20px;
             color: #999;
-            font-size: 16px;
+            font-size: var(--font-body);
         }
         .back-link {
             display: inline-block;
-            margin-bottom: 24px;
-            color: #3498db;
+            margin-bottom: 20px;
+            color: var(--pb-accent);
             text-decoration: none;
-            font-size: 14px;
+            font-size: var(--font-body);
             font-weight: 500;
         }
         .back-link:hover { text-decoration: underline; }
@@ -122,26 +145,29 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 16px;
-            margin-top: 32px;
-            font-size: 14px;
+            gap: 14px;
+            margin-top: 28px;
+            font-size: var(--font-body);
         }
         .pagination a {
-            color: #3498db;
+            color: var(--pb-accent);
             text-decoration: none;
             font-weight: 500;
-            padding: 8px 16px;
-            border: 1px solid #3498db;
+            padding: 7px 14px;
+            border: 1px solid var(--pb-accent);
             border-radius: 6px;
         }
-        .pagination a:hover { background: #3498db; color: #fff; }
+        .pagination a:hover { background: var(--pb-accent); color: #fff; }
         .pagination .page-info { color: #666; }
     </style>
 </head>
 <body>
 
 <div class="blog-header">
-    <h1><a href="/">Project Brainstorm</a></h1>
+    <a href="/" class="brand-lockup">
+        <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
+        <span class="brand-wordmark" id="brand-wordmark">Project Brainstorm</span>
+    </a>
     <div class="blog-header-right">
         <a href="/">Home</a>
         <a href="/blog">Blog / News</a>
@@ -163,7 +189,7 @@
             <img src="/static/blog/{{ post.image_path }}" alt="{{ post.title }}" class="post-thumbnail">
             {% endif %}
             <div class="post-content">
-                <h2><a href="/blog/{{ post.id }}">{{ post.title }}</a>{% if post.is_pinned %}<span class="pin-badge">📌 Pinned</span>{% endif %}</h2>
+                <h2><a href="/blog/{{ post.id }}">{{ post.title }}</a>{% if post.is_pinned %}<span class="pin-badge">Pinned</span>{% endif %}</h2>
                 <div class="post-date">{{ post.created_at }}</div>
                 <p class="post-excerpt">{{ post.body[:200] }}{% if post.body|length > 200 %}...{% endif %}</p>
             </div>
@@ -185,6 +211,16 @@
         </div>
     {% endif %}
 </div>
+
+<script>
+(function(){
+    var lang = document.documentElement.getAttribute('data-lang') || 'en';
+    var wm = document.getElementById('brand-wordmark');
+    if (wm && (lang === 'zh-Hans' || lang === 'zh-Hant' || lang === 'ja')) {
+        wm.textContent = 'Project Brainstorm \u96C6\u601D\u5EE3\u76CA';
+    }
+})();
+</script>
 
 </body>
 </html>

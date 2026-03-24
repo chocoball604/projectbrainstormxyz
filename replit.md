@@ -59,6 +59,7 @@ The project is structured as a pnpm workspace monorepo. It leverages Node.js 24 
 - **Model Health Checks**: Includes a system for daily model health checks and weekly QA reports for AI models.
 - **Marketing Landing Page**: A dedicated landing page (`landing.html`) for unauthenticated users, providing an overview of the platform.
 - **Blog/News**: A blogging platform with public list and detail views, admin capabilities for post creation and image uploads, post pinning (up to 3 pinned posts with rank 1-3), and paginated blog listing (10 per page). Pinned posts appear first in rank order on page 1, followed by unpinned posts in reverse chronological order. Language selector on landing page shows 4 options: English, CN-Simplified简, CN-Traditional繁, Japanese日.
+- **Branding & Theme**: Brand lockup (Enso logo `static/brand/enso_logo_256.png` + "Project Brainstorm" wordmark) in all page headers. CJK wordmark variant ("Project Brainstorm 集思廣益") shown for zh-Hans/zh-Hant/ja languages via client-side JS. CSS variables define palette: `--pb-accent: #5C7E8F`, `--pb-grey: #A2A2A2`, `--pb-lightgrey: #D4DDE2`. Typography uses Calibri base with CJK-specific font stacks via `html[data-lang]` selectors. Language persisted in `pb_lang` cookie, read by Flask context processor `inject_lang()` and applied as `data-lang` attribute on `<html>`. Password validation enforces 6–10 characters (backend + frontend `maxlength=10`).
 
 # External Dependencies
 
