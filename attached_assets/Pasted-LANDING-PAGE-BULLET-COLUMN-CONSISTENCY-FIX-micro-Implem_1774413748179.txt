@@ -1,0 +1,67 @@
+LANDING PAGE BULLET COLUMN CONSISTENCY FIX (micro)
+Implement ONLY this change. Do not change any copy text.
+
+Problem:
+Bullet group blocks are individually centered, but different bullet sections (and multiple bullet groups within the same section) are not aligned consistently. The bullet column “left edge” shifts across sections, which looks odd.
+
+Goal:
+All bullet sections should share one consistent centered column width and alignment:
+- Section titles and short lead sentences can remain centered.
+- Bullet lists (and any related lines like “Yet most decisions…”) must align to the same left edge within a consistent column across all bullet sections.
+
+Implementation approach:
+A) Add a reusable wrapper for bullet-style sections:
+- Wrap the bullet content (including any related “lead-in” lines before/after lists) in:
+  <div class="bullet-col">
+     ... (text + ul + text + ul)
+  </div>
+
+B) CSS: define a single shared bullet column width and consistent list indentation
+Add these CSS rules (global or landing template):
+
+:root{
+  --bullet-col-width: min(520px, 90vw);
+  --bullet-indent: 1.4em;
+}
+
+.section .bullet-col{
+  width: var(--bullet-col-width);
+  margin: 0 auto;
+  text-align: left;              /* bullet column is left aligned */
+}
+
+.section .bullet-col p,
+.section .bullet-col .bullet-lead{
+  margin: 0.6rem 0;
+}
+
+.section .bullet-col ul{
+  width: 100%;
+  margin: 0.35rem 0 0.8rem 0;
+  padding-left: var(--bullet-indent);
+  list-style-position: outside;
+}
+
+.section .bullet-col li{
+  margin: 0.25rem 0;
+}
+
+C) Keep section title centered, but keep bullet column left-aligned
+Example:
+.section-title { text-align: center; }
+.section-subtitle { text-align: center; }
+(but bullet-col itself is left aligned)
+
+D) Apply to all landing sections that include bullets
+At minimum:
+- “The World’s Most Important Region…” section (shown in screenshot)
+- “The Insight Gap…”
+- “Why Use…”
+- “What You Get…”
+and any other list-heavy section.
+
+How to test:
+1) Open landing page and visually compare bullet sections:
+   - The “16+ major markets” line and “Slow, biased surveys” list should share the same left edge alignment within the bullet column.
+2) Confirm multiple bullet groups within the same section are aligned to the same column (no shifting).
+3) Confirm mobile: bullet column shrinks via min(520px, 90vw) and remains readable.
