@@ -790,6 +790,8 @@
 
 <div class="landing-footer">
     &copy; 2026 Project Brainstorm. All rights reserved.
+    &nbsp;&nbsp;&middot;&nbsp;&nbsp;
+    <a href="#" onclick="openAuthModal('admin'); return false;" style="color: rgba(255,255,255,0.3); text-decoration: none; font-size: var(--font-small);">Admin</a>
 </div>
 
 <!-- Sign Up Modal -->
@@ -837,6 +839,21 @@
         <div class="switch-link">
             Don't have an account? <a href="#" onclick="openAuthModal('signup'); return false;">Sign Up</a>
         </div>
+    </div>
+</div>
+
+<!-- Admin Login Modal -->
+<div class="auth-modal-overlay" id="modal-admin">
+    <div class="auth-modal">
+        <button class="close-btn" onclick="closeAuthModals()">&times;</button>
+        <h2>Admin Login</h2>
+        <form action="/admin-login" method="POST">
+            <div class="form-group">
+                <label for="admin-password">Admin Password</label>
+                <input type="password" id="admin-password" name="admin_password" required>
+            </div>
+            <button type="submit" class="btn-submit">Login as Admin</button>
+        </form>
     </div>
 </div>
 
