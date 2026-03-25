@@ -145,6 +145,39 @@
             line-height: var(--line-body);
             margin-bottom: 14px;
         }
+        .bullet-group {
+            text-align: center;
+            margin-bottom: 14px;
+        }
+        .bullet-group ul {
+            display: inline-block;
+            text-align: left;
+            margin: 0 auto;
+            padding-left: 1.4em;
+            max-width: 640px;
+            list-style: none;
+        }
+        .bullet-group li {
+            font-size: var(--font-body);
+            line-height: 1.6;
+            padding-left: 20px;
+            position: relative;
+            margin: 0.25rem 0;
+        }
+        .section-white .bullet-group li::before {
+            content: "\2022";
+            position: absolute;
+            left: 6px;
+            color: var(--pb-accent);
+            font-weight: 700;
+        }
+        .section-accent .bullet-group li::before {
+            content: "\2022";
+            position: absolute;
+            left: 6px;
+            color: var(--pb-lightgrey);
+            font-weight: 700;
+        }
         .landing-section ul {
             list-style: none;
             padding: 0;
@@ -485,17 +518,21 @@
     <div class="landing-section-inner">
         <h2>The World's Most Important Region Is the Hardest to Understand</h2>
         <p>Asia&#8209;Pacific is fast&#8209;growing, culturally complex, and unforgiving.</p>
+        <div class="bullet-group">
         <ul>
             <li>16+ major markets</li>
             <li>41+ languages</li>
             <li>Rapidly shifting consumers and regulations</li>
         </ul>
+        </div>
         <p>Yet most decisions are still made using:</p>
+        <div class="bullet-group">
         <ul>
             <li>Slow, biased surveys</li>
             <li>Incomplete panels</li>
             <li>Gut feel and "experience"</li>
         </ul>
+        </div>
         <p class="callout-sentence">The result: cultural misfires, failed launches, and billions in lost value.</p>
     </div>
 </section>
@@ -507,19 +544,23 @@
         <div class="two-col">
             <div>
                 <h3>Legacy market research</h3>
+                <div class="bullet-group">
                 <ul>
                     <li>Takes weeks or months</li>
                     <li>Is expensive and episodic</li>
                     <li>Breaks down in APAC</li>
                 </ul>
+                </div>
             </div>
             <div>
                 <h3>Generic AI tools</h3>
+                <div class="bullet-group">
                 <ul>
                     <li>Are fast but opaque</li>
                     <li>Lack cultural depth and focus</li>
                     <li>Cannot be audited or trusted</li>
                 </ul>
+                </div>
             </div>
         </div>
         <p class="callout-sentence">Speed without trust isn't insight, it's risk.</p>
@@ -532,18 +573,22 @@
         <h2>AI&#8209;Native Market Intelligence Through Simulation</h2>
         <p>Project Brainstorm replaces traditional surveys and focus groups with grounded simulations using synthetic consumers.</p>
         <h3 style="color: var(--pb-lightgrey);">Synthetic consumers are:</h3>
+        <div class="bullet-group">
         <ul>
             <li>Lifelike AI personas</li>
             <li>Statistically plausible representations of real people</li>
             <li>Grounded in trusted local journalism and regional data</li>
         </ul>
+        </div>
         <p>You interact through <strong>Mark</strong>, our Market Intelligence Copilot, who helps you:</p>
+        <div class="bullet-group">
         <ul>
             <li>Frame the business problem</li>
             <li>Design the research</li>
             <li>Run simulations</li>
             <li>Turn results into decision&#8209;ready insights</li>
         </ul>
+        </div>
     </div>
 </section>
 
@@ -551,12 +596,14 @@
 <section class="landing-section section-white" id="section-who">
     <div class="landing-section-inner">
         <h2>Built for Teams That Can't Afford to Get APAC Wrong</h2>
+        <div class="bullet-group">
         <ul>
             <li>Global and regional brand leaders</li>
             <li>Consultancies and agencies</li>
             <li>Investors and financial institutions</li>
             <li>Public sector and policy teams</li>
         </ul>
+        </div>
         <p class="callout-sentence">If your decisions carry reputational, financial, or strategic risk. this is for you.</p>
     </div>
 </section>
@@ -567,12 +614,14 @@
         <h2>Continuous Market Testing — Without the Friction</h2>
         <p>In a perfect world, teams would run constant research before every major decision.</p>
         <p>We make that possible by delivering:</p>
+        <div class="bullet-group">
         <ul>
             <li><strong>Speed:</strong> insights in minutes, not weeks</li>
             <li><strong>Cultural fidelity:</strong> grounded in local sources, not assumptions</li>
             <li><strong>Auditability:</strong> every output is source&#8209;cited and explainable</li>
             <li><strong>Cost efficiency:</strong> SaaS subscriptions, not open&#8209;ended consulting</li>
         </ul>
+        </div>
         <p class="callout-sentence">Market research becomes a daily decision tool, not a last-minute expense.</p>
     </div>
 </section>
@@ -582,11 +631,13 @@
     <div class="landing-section-inner">
         <h2>Trust Is Designed In — Not Assumed</h2>
         <p>Unlike chatbots, Project Brainstorm is not a black box.</p>
+        <div class="bullet-group">
         <ul>
             <li>Every persona is grounded</li>
             <li>Every insight is labeled by confidence</li>
             <li>Every claim is traceable to real sources</li>
         </ul>
+        </div>
         <p class="callout-sentence">We don't ask you to "trust the model". We make trust verifiable.</p>
     </div>
 </section>
@@ -595,6 +646,7 @@
 <section class="landing-section section-accent" id="section-outputs">
     <div class="landing-section-inner">
         <h2>Familiar Research Outputs — Generated in a New Way</h2>
+        <div class="bullet-group">
         <ul>
             <li>Synthetic survey results</li>
             <li>Synthetic focus group and in-depth interview transcripts</li>
@@ -602,6 +654,7 @@
             <li>Recommendations, risks, and unknowns</li>
             <li>Full citations and audit trails</li>
         </ul>
+        </div>
         <p class="callout-sentence">Same outputs decision-makers expect, delivered faster, cheaper, and with cultural precision.</p>
     </div>
 </section>
