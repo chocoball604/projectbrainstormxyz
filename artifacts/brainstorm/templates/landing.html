@@ -150,32 +150,35 @@
             line-height: var(--line-body);
             margin-bottom: 14px;
         }
-        .bullet-col {
-            width: min(520px, 90vw);
+        .landing-section .bullet-rail {
+            width: min(680px, 92vw);
             margin: 0 auto;
             text-align: left;
         }
-        .bullet-col p {
+        .bullet-rail p {
             margin: 0.6rem 0;
             font-size: var(--font-body);
             line-height: var(--line-body);
         }
-        .bullet-col h3 {
+        .bullet-rail h3 {
             margin: 0.6rem 0;
         }
-        .bullet-col ul {
+        .bullet-rail ul,
+        .bullet-grid ul {
             list-style: none;
             padding: 0;
             margin: 0.4rem 0 0.9rem 0;
         }
-        .bullet-col li {
+        .bullet-rail li,
+        .bullet-grid li {
             font-size: var(--font-body);
             line-height: 1.6;
             position: relative;
             padding-left: 1.25em;
             margin: 0.25rem 0;
         }
-        .bullet-col li::before {
+        .bullet-rail li::before,
+        .bullet-grid li::before {
             content: "\2022";
             position: absolute;
             left: 0;
@@ -184,14 +187,29 @@
             text-align: center;
             font-weight: 700;
         }
-        .section-white .bullet-col li::before {
+        .section-white .bullet-rail li::before,
+        .section-white .bullet-grid li::before {
             color: var(--pb-accent);
         }
-        .section-accent .bullet-col li::before {
+        .section-accent .bullet-rail li::before,
+        .section-accent .bullet-grid li::before {
             color: var(--pb-lightgrey);
         }
-        .two-col .bullet-col {
-            width: 100%;
+
+        .landing-section .bullet-grid {
+            display: inline-grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 56px;
+            align-items: start;
+            margin: 0.5rem auto 0 auto;
+            text-align: left;
+            width: min(680px, 92vw);
+        }
+        @media (max-width: 720px) {
+            .landing-section .bullet-grid {
+                display: block;
+                width: 100%;
+            }
         }
 
         .btn-landing {
@@ -254,14 +272,7 @@
         .cta-section h2 { margin-bottom: 24px; }
         .cta-section p { font-size: var(--font-body); margin-bottom: 8px; }
 
-        .two-col {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 32px;
-            margin-top: 20px;
-        }
         @media (max-width: 700px) {
-            .two-col { grid-template-columns: 1fr; gap: 16px; }
             .landing-header-right { gap: 8px; }
             .landing-header-right a { font-size: var(--font-small); }
         }
@@ -356,7 +367,7 @@
             line-height: 1;
         }
 
-        .section-accent .two-col-title { color: var(--pb-lightgrey); }
+
 
         .blog-placeholder {
             text-align: center;
@@ -505,7 +516,7 @@
 <section class="landing-section section-accent" id="section-problem">
     <div class="landing-section-inner">
         <h2>The World's Most Important Region Is the Hardest to Understand</h2>
-        <div class="bullet-col">
+        <div class="bullet-rail">
             <p>Asia&#8209;Pacific is fast&#8209;growing, culturally complex, and unforgiving.</p>
             <ul>
                 <li>16+ major markets</li>
@@ -527,26 +538,22 @@
 <section class="landing-section section-white" id="section-insight-gap">
     <div class="landing-section-inner">
         <h2>Traditional Research Is Too Slow. Generic AI Is Not Trustworthy.</h2>
-        <div class="two-col">
+        <div class="bullet-grid">
             <div>
-                <div class="bullet-col">
-                    <h3>Legacy market research</h3>
-                    <ul>
-                        <li>Takes weeks or months</li>
-                        <li>Is expensive and episodic</li>
-                        <li>Breaks down in APAC</li>
-                    </ul>
-                </div>
+                <h3>Legacy market research</h3>
+                <ul>
+                    <li>Takes weeks or months</li>
+                    <li>Is expensive and episodic</li>
+                    <li>Breaks down in APAC</li>
+                </ul>
             </div>
             <div>
-                <div class="bullet-col">
-                    <h3>Generic AI tools</h3>
-                    <ul>
-                        <li>Are fast but opaque</li>
-                        <li>Lack cultural depth and focus</li>
-                        <li>Cannot be audited or trusted</li>
-                    </ul>
-                </div>
+                <h3>Generic AI tools</h3>
+                <ul>
+                    <li>Are fast but opaque</li>
+                    <li>Lack cultural depth and focus</li>
+                    <li>Cannot be audited or trusted</li>
+                </ul>
             </div>
         </div>
         <p class="callout-sentence">Speed without trust isn't insight, it's risk.</p>
@@ -557,7 +564,7 @@
 <section class="landing-section section-accent" id="section-solution">
     <div class="landing-section-inner">
         <h2>AI&#8209;Native Market Intelligence Through Simulation</h2>
-        <div class="bullet-col">
+        <div class="bullet-rail">
             <p>Project Brainstorm replaces traditional surveys and focus groups with grounded simulations using synthetic consumers.</p>
             <h3 style="color: var(--pb-lightgrey);">Synthetic consumers are:</h3>
             <ul>
@@ -580,7 +587,7 @@
 <section class="landing-section section-white" id="section-who">
     <div class="landing-section-inner">
         <h2>Built for Teams That Can't Afford to Get APAC Wrong</h2>
-        <div class="bullet-col">
+        <div class="bullet-rail">
             <ul>
                 <li>Global and regional brand leaders</li>
                 <li>Consultancies and agencies</li>
@@ -596,7 +603,7 @@
 <section class="landing-section section-accent" id="section-why">
     <div class="landing-section-inner">
         <h2>Continuous Market Testing — Without the Friction</h2>
-        <div class="bullet-col">
+        <div class="bullet-rail">
             <p>In a perfect world, teams would run constant research before every major decision.</p>
             <p>We make that possible by delivering:</p>
             <ul>
@@ -614,7 +621,7 @@
 <section class="landing-section section-white" id="section-different">
     <div class="landing-section-inner">
         <h2>Trust Is Designed In — Not Assumed</h2>
-        <div class="bullet-col">
+        <div class="bullet-rail">
             <p>Unlike chatbots, Project Brainstorm is not a black box.</p>
             <ul>
                 <li>Every persona is grounded</li>
@@ -630,7 +637,7 @@
 <section class="landing-section section-accent" id="section-outputs">
     <div class="landing-section-inner">
         <h2>Familiar Research Outputs — Generated in a New Way</h2>
-        <div class="bullet-col">
+        <div class="bullet-rail">
             <ul>
                 <li>Synthetic survey results</li>
                 <li>Synthetic focus group and in-depth interview transcripts</li>
