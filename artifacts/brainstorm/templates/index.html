@@ -198,7 +198,7 @@
 <div class="header">
     <a href="/" class="brand-lockup">
         <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
-        <span class="brand-wordmark" id="brand-wordmark">Project Brainstorm</span>
+        <span class="brand-wordmark" id="brand-wordmark">Project Brainstorm</span><span id="brand-cjk-suffix" style="font-family: 'PingFang TC','Microsoft JhengHei UI','Microsoft JhengHei',sans-serif; display:none;"> 集思廣益</span>
     </a>
     <div class="header-right">
         {% if is_admin %}
@@ -2358,9 +2358,9 @@
     }
     (function(){
         var lang = document.documentElement.getAttribute('data-lang') || 'en';
-        var wm = document.getElementById('brand-wordmark');
-        if (wm && (lang === 'zh-Hans' || lang === 'zh-Hant' || lang === 'ja')) {
-            wm.textContent = 'Project Brainstorm \u96C6\u601D\u5EE3\u76CA';
+        var suffix = document.getElementById('brand-cjk-suffix');
+        if (suffix && (lang === 'zh-Hans' || lang === 'zh-Hant' || lang === 'ja')) {
+            suffix.style.display = 'inline';
         }
     })();
 </script>

@@ -118,7 +118,8 @@
         .lang-selector option { color: #333; background: #fff; }
 
         .landing-section {
-            padding: 64px 24px;
+            padding: 45px 24px;
+            text-align: center;
         }
         .landing-section-inner {
             max-width: 900px;
@@ -189,7 +190,7 @@
         .section-accent .btn-primary-landing { background: #fff; color: var(--pb-accent); }
 
         .hero-section {
-            padding: 80px 24px 64px;
+            padding: 56px 24px 45px;
             text-align: center;
         }
         .hero-section h2 {
@@ -212,7 +213,7 @@
         .hero-buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
 
         .callout-band {
-            padding: 48px 24px;
+            padding: 34px 24px;
             text-align: center;
         }
         .callout-band p {
@@ -226,7 +227,7 @@
 
         .cta-section {
             text-align: center;
-            padding: 64px 24px;
+            padding: 45px 24px;
         }
         .cta-section h2 { margin-bottom: 24px; }
         .cta-section p { font-size: var(--font-body); margin-bottom: 8px; }
@@ -243,6 +244,14 @@
             .landing-header-right a { font-size: var(--font-small); }
         }
 
+        .callout-sentence {
+            text-align: center;
+            font-weight: 700;
+            font-style: italic;
+            margin-top: 20px;
+            margin-bottom: 0;
+        }
+
         .flow-diagram {
             margin-top: 32px;
         }
@@ -253,61 +262,76 @@
             margin-bottom: 24px;
             font-style: italic;
         }
-        .flow-step {
-            max-width: 560px;
-            margin: 0 auto 0;
-            padding: 20px 24px;
+        .flow-card {
+            max-width: 620px;
+            margin: 0 auto;
+            padding: 16px 20px;
             border-radius: 10px;
-            position: relative;
-        }
-        .flow-step-white {
             background: #fff;
-            color: var(--pb-text);
-            border: 2px solid #e2e8f0;
+            border: 1px solid #D4DDE2;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            text-align: left;
         }
-        .flow-step h4 {
+        .flow-card-output {
+            border-left: 3px solid #5C7E8F;
+        }
+        .flow-num {
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--pb-accent);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .flow-card-body { flex: 1; }
+        .flow-card-title {
             font-size: var(--font-body);
             font-weight: 700;
-            margin-bottom: 6px;
+            color: var(--pb-text);
+            margin-bottom: 4px;
         }
-        .flow-step .flow-role {
+        .flow-card-role {
             font-size: var(--font-small);
             font-weight: 600;
             color: var(--pb-accent);
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
         }
-        .flow-step ul {
-            margin: 6px 0 0 0;
+        .flow-card ul {
+            margin: 4px 0 0 0;
+            padding: 0;
+            list-style: none;
         }
-        .flow-step ul li {
+        .flow-card ul li {
             font-size: var(--font-body);
             line-height: 1.5;
+            padding-left: 14px;
+            position: relative;
+            color: var(--pb-text);
+            margin-bottom: 2px;
         }
-        .flow-step ul li::before {
-            color: var(--pb-accent) !important;
-        }
-        .flow-arrow {
-            text-align: center;
-            padding: 6px 0;
-            font-size: 24px;
-            color: var(--pb-lightgrey);
-            line-height: 1;
-        }
-        .flow-step-number {
-            display: inline-block;
-            background: var(--pb-accent);
-            color: #fff;
-            width: 26px;
-            height: 26px;
-            border-radius: 50%;
-            text-align: center;
-            line-height: 26px;
-            font-size: var(--font-small);
+        .flow-card ul li::before {
+            content: "\2022";
+            position: absolute;
+            left: 2px;
+            color: var(--pb-accent);
             font-weight: 700;
-            margin-right: 8px;
-            vertical-align: middle;
+        }
+        .flow-connector {
+            text-align: center;
+            padding: 4px 0;
+            font-size: 20px;
+            color: #D4DDE2;
+            line-height: 1;
         }
 
         .section-accent .two-col-title { color: var(--pb-lightgrey); }
@@ -424,7 +448,7 @@
 <div class="landing-header">
     <a href="/" class="brand-lockup">
         <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
-        <span class="brand-wordmark" id="brand-wordmark">Project Brainstorm</span>
+        <span class="brand-wordmark" id="brand-wordmark">Project Brainstorm</span><span id="brand-cjk-suffix" style="font-family: 'PingFang TC','Microsoft JhengHei UI','Microsoft JhengHei',sans-serif; display:none;"> 集思廣益</span>
     </a>
     <div class="landing-header-right">
         <a href="/blog">Blog / News</a>
@@ -450,7 +474,7 @@
         <p class="hero-subtitle">AI&#8209;native market intelligence for Asia&#8209;Pacific and beyond.</p>
         <p class="hero-desc">Test strategies, messaging, and decisions with culturally grounded simulations — before committing capital.</p>
         <div class="hero-buttons">
-            <a href="#" class="btn-landing btn-primary-landing" onclick="openAuthModal('signup'); return false;">Run a Simulation</a>
+            <a href="#" class="btn-landing btn-primary-landing" onclick="openAuthModal('signup'); return false;">Free Trial</a>
             <a href="#section-how-it-works" class="btn-landing btn-secondary-landing">See How It Works</a>
         </div>
     </div>
@@ -472,7 +496,7 @@
             <li>Incomplete panels</li>
             <li>Gut feel and "experience"</li>
         </ul>
-        <p>The result: cultural misfires, failed launches, and billions in lost value.</p>
+        <p class="callout-sentence">The result: cultural misfires, failed launches, and billions in lost value.</p>
     </div>
 </section>
 
@@ -498,7 +522,7 @@
                 </ul>
             </div>
         </div>
-        <p style="margin-top: 24px; font-weight: 600; font-style: italic; text-align: center;">Speed without trust isn't insight — it's risk.</p>
+        <p class="callout-sentence">Speed without trust isn't insight, it's risk.</p>
     </div>
 </section>
 
@@ -533,7 +557,7 @@
             <li>Investors and financial institutions</li>
             <li>Public sector and policy teams</li>
         </ul>
-        <p style="margin-top: 18px; font-weight: 500;">If your decisions carry reputational, financial, or strategic risk — this is for you.</p>
+        <p class="callout-sentence">If your decisions carry reputational, financial, or strategic risk. this is for you.</p>
     </div>
 </section>
 
@@ -549,7 +573,7 @@
             <li><strong>Auditability:</strong> every output is source&#8209;cited and explainable</li>
             <li><strong>Cost efficiency:</strong> SaaS subscriptions, not open&#8209;ended consulting</li>
         </ul>
-        <p>Market research becomes a daily decision tool, not a last&#8209;minute expense.</p>
+        <p class="callout-sentence">Market research becomes a daily decision tool, not a last-minute expense.</p>
     </div>
 </section>
 
@@ -563,7 +587,7 @@
             <li>Every insight is labeled by confidence</li>
             <li>Every claim is traceable to real sources</li>
         </ul>
-        <p style="font-weight: 500;">We don't ask you to "trust the model". We make trust verifiable.</p>
+        <p class="callout-sentence">We don't ask you to "trust the model". We make trust verifiable.</p>
     </div>
 </section>
 
@@ -578,14 +602,14 @@
             <li>Recommendations, risks, and unknowns</li>
             <li>Full citations and audit trails</li>
         </ul>
-        <p style="margin-top: 18px; font-weight: 500;">Same outputs decision&#8209;makers expect — delivered faster, cheaper, and with cultural precision.</p>
+        <p class="callout-sentence">Same outputs decision-makers expect, delivered faster, cheaper, and with cultural precision.</p>
     </div>
 </section>
 
 <!-- Section 9: One-Line Differentiator (white, callout band) -->
 <section class="landing-section section-white callout-band" id="section-differentiator">
     <div class="landing-section-inner">
-        <p>From human panels to grounded simulation — market research rebuilt for Asia&#8209;Pacific.</p>
+        <p>From human panels to grounded simulation. Market research rebuilt for Asia-Pacific.</p>
     </div>
 </section>
 
@@ -597,7 +621,7 @@
         <p>Test assumptions.</p>
         <p>Avoid blind spots.</p>
         <div style="margin-top: 28px;">
-            <a href="#" class="btn-landing btn-primary-landing" onclick="openAuthModal('signup'); return false;">Get Started With Mark</a>
+            <a href="#" class="btn-landing btn-primary-landing" onclick="openAuthModal('signup'); return false;">Free Trial</a>
         </div>
     </div>
 </section>
@@ -610,58 +634,68 @@
         <p><strong>Mark</strong> acts like a senior consultant — helping you frame the problem and choose the right research approach.</p>
         <p><strong>Lisa</strong> does the work — running culturally-grounded simulations using synthetic consumers.</p>
         <p><strong>Ben</strong> ensures trust — enforcing rigor, realism, and auditability before anything reaches you.</p>
-        <p>You get insights you can act on, fast — with clarity on what's strong, what's tentative, and what's unknown.</p>
+        <p class="callout-sentence">You get insights you can act on, fast. With clarity on what's strong, what's tentative, and what's unknown.</p>
 
         <div class="flow-diagram">
             <p class="flow-diagram-title">Multi-agent ecosystem. One disciplined flow. No guesswork.</p>
 
-            <div class="flow-step flow-step-white">
-                <span class="flow-step-number">1</span>
-                <h4 style="display: inline;">Your Business Question</h4>
+            <div class="flow-card">
+                <div class="flow-num">1</div>
+                <div class="flow-card-body">
+                    <div class="flow-card-title">Your Business Question</div>
+                </div>
             </div>
-            <div class="flow-arrow">&#9660;</div>
+            <div class="flow-connector">&#9660;</div>
 
-            <div class="flow-step flow-step-white">
-                <span class="flow-step-number">2</span>
-                <div class="flow-role">Mark, Market Intelligence Copilot</div>
-                <ul>
-                    <li>Clarifies the decision</li>
-                    <li>Frames the right questions</li>
-                    <li>Designs the study</li>
-                </ul>
+            <div class="flow-card">
+                <div class="flow-num">2</div>
+                <div class="flow-card-body">
+                    <div class="flow-card-role">Mark, Market Intelligence Copilot</div>
+                    <ul>
+                        <li>Clarifies the decision</li>
+                        <li>Frames the right questions</li>
+                        <li>Designs the study</li>
+                    </ul>
+                </div>
             </div>
-            <div class="flow-arrow">&#9660;</div>
+            <div class="flow-connector">&#9660;</div>
 
-            <div class="flow-step flow-step-white">
-                <span class="flow-step-number">3</span>
-                <div class="flow-role">Lisa, Virtual Consultant</div>
-                <ul>
-                    <li>Builds grounded personas</li>
-                    <li>Runs simulations (surveys, in-depth interviews, focus groups)</li>
-                </ul>
+            <div class="flow-card">
+                <div class="flow-num">3</div>
+                <div class="flow-card-body">
+                    <div class="flow-card-role">Lisa, Virtual Consultant</div>
+                    <ul>
+                        <li>Builds grounded personas</li>
+                        <li>Runs simulations (surveys, in-depth interviews, focus groups)</li>
+                    </ul>
+                </div>
             </div>
-            <div class="flow-arrow">&#9660;</div>
+            <div class="flow-connector">&#9660;</div>
 
-            <div class="flow-step flow-step-white">
-                <span class="flow-step-number">4</span>
-                <div class="flow-role">Ben, QA Sentinel</div>
-                <ul>
-                    <li>Checks realism and grounding</li>
-                    <li>Enforces rigor</li>
-                    <li>Blocks weak outputs</li>
-                </ul>
+            <div class="flow-card">
+                <div class="flow-num">4</div>
+                <div class="flow-card-body">
+                    <div class="flow-card-role">Ben, QA Sentinel</div>
+                    <ul>
+                        <li>Checks realism and grounding</li>
+                        <li>Enforces rigor</li>
+                        <li>Blocks weak outputs</li>
+                    </ul>
+                </div>
             </div>
-            <div class="flow-arrow">&#9660;</div>
+            <div class="flow-connector">&#9660;</div>
 
-            <div class="flow-step flow-step-white" style="border-color: var(--pb-accent);">
-                <span class="flow-step-number">5</span>
-                <div class="flow-role">Decision-ready insights</div>
-                <ul>
-                    <li>Clear findings</li>
-                    <li>Confidence labels</li>
-                    <li>Full source citations</li>
-                    <li>Risks and unknowns</li>
-                </ul>
+            <div class="flow-card flow-card-output">
+                <div class="flow-num">5</div>
+                <div class="flow-card-body">
+                    <div class="flow-card-role">Decision-ready insights</div>
+                    <ul>
+                        <li>Clear findings</li>
+                        <li>Confidence labels</li>
+                        <li>Full source citations</li>
+                        <li>Risks and unknowns</li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
@@ -783,12 +817,12 @@ langSel.addEventListener('change', function() {
 
 function updateWordmark() {
     var lang = document.documentElement.getAttribute('data-lang') || 'en';
-    var wm = document.getElementById('brand-wordmark');
-    if (!wm) return;
+    var suffix = document.getElementById('brand-cjk-suffix');
+    if (!suffix) return;
     if (lang === 'zh-Hans' || lang === 'zh-Hant' || lang === 'ja') {
-        wm.textContent = 'Project Brainstorm \u96C6\u601D\u5EE3\u76CA';
+        suffix.style.display = 'inline';
     } else {
-        wm.textContent = 'Project Brainstorm';
+        suffix.style.display = 'none';
     }
 }
 updateWordmark();
