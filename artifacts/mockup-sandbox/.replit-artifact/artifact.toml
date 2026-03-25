@@ -15,3 +15,15 @@ BASE_PATH = "/__mockup"
 
 [services.development]
 run = "pnpm --filter @workspace/mockup-sandbox run dev"
+
+[[canvas.frames]]
+label = "Variation A — Clear Hierarchy"
+url = "/__mockup/preview/LandingVariationA"
+width = 1280
+height = 900
+
+[[canvas.frames]]
+label = "Variation B — Spatial Polish + CTA Punch"
+url = "/__mockup/preview/LandingVariationB"
+width = 1280
+height = 900
