@@ -150,65 +150,58 @@
             line-height: var(--line-body);
             margin-bottom: 14px;
         }
-        .landing-section .bullet-rail {
+        .pb-bullet-wrap {
+            display: flex;
+            justify-content: center;
+        }
+        .pb-rail {
             width: min(680px, 92vw);
-            margin: 0 auto;
             text-align: left;
         }
-        .bullet-rail p {
-            margin: 0.6rem 0;
+        .pb-bullets {
+            list-style: disc;
+            list-style-position: inside;
+            padding: 0;
+            margin: 0.35rem 0 0.9rem 0;
+        }
+        .pb-bullets li {
+            margin: 0.25rem 0;
+            font-size: var(--font-body);
+            line-height: 1.6;
+        }
+        .pb-lead {
+            margin: 0.6rem 0 0.25rem 0;
             font-size: var(--font-body);
             line-height: var(--line-body);
         }
-        .bullet-rail h3 {
-            margin: 0.6rem 0;
+        .pb-em {
+            font-style: italic;
         }
-        .bullet-rail ul,
-        .bullet-grid ul {
-            list-style: none;
-            padding: 0;
-            margin: 0.4rem 0 0.9rem 0;
+        .pb-two-col {
+            display: flex;
+            justify-content: center;
+            gap: 64px;
+            width: 100%;
         }
-        .bullet-rail li,
-        .bullet-grid li {
-            font-size: var(--font-body);
-            line-height: 1.6;
-            position: relative;
-            padding-left: 1.25em;
-            margin: 0.25rem 0;
+        .pb-col {
+            width: 260px;
         }
-        .bullet-rail li::before,
-        .bullet-grid li::before {
-            content: "\2022";
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 1.25em;
-            text-align: center;
+        .pb-col-title {
             font-weight: 700;
-        }
-        .section-white .bullet-rail li::before,
-        .section-white .bullet-grid li::before {
-            color: var(--pb-accent);
-        }
-        .section-accent .bullet-rail li::before,
-        .section-accent .bullet-grid li::before {
-            color: var(--pb-lightgrey);
-        }
-
-        .landing-section .bullet-grid {
-            display: inline-grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 56px;
-            align-items: start;
-            margin: 0.5rem auto 0 auto;
-            text-align: left;
-            width: min(680px, 92vw);
+            text-align: center;
+            margin-bottom: 0.35rem;
         }
         @media (max-width: 720px) {
-            .landing-section .bullet-grid {
-                display: block;
+            .pb-two-col {
+                flex-direction: column;
+                gap: 18px;
+                align-items: stretch;
+            }
+            .pb-col {
                 width: 100%;
+            }
+            .pb-col-title {
+                text-align: left;
             }
         }
 
@@ -516,19 +509,21 @@
 <section class="landing-section section-accent" id="section-problem">
     <div class="landing-section-inner">
         <h2>The World's Most Important Region Is the Hardest to Understand</h2>
-        <div class="bullet-rail">
-            <p>Asia&#8209;Pacific is fast&#8209;growing, culturally complex, and unforgiving.</p>
-            <ul>
-                <li>16+ major markets</li>
-                <li>41+ languages</li>
-                <li>Rapidly shifting consumers and regulations</li>
-            </ul>
-            <p>Yet most decisions are still made using:</p>
-            <ul>
-                <li>Slow, biased surveys</li>
-                <li>Incomplete panels</li>
-                <li>Gut feel and "experience"</li>
-            </ul>
+        <div class="pb-bullet-wrap">
+            <div class="pb-rail">
+                <p class="pb-lead">Asia&#8209;Pacific is fast&#8209;growing, culturally complex, and unforgiving.</p>
+                <ul class="pb-bullets">
+                    <li>16+ major markets</li>
+                    <li>41+ languages</li>
+                    <li>Rapidly shifting consumers and regulations</li>
+                </ul>
+                <p class="pb-lead">Yet most decisions are still made using:</p>
+                <ul class="pb-bullets">
+                    <li>Slow, biased surveys</li>
+                    <li>Incomplete panels</li>
+                    <li>Gut feel and "experience"</li>
+                </ul>
+            </div>
         </div>
         <p class="callout-sentence">The result: cultural misfires, failed launches, and billions in lost value.</p>
     </div>
@@ -538,22 +533,26 @@
 <section class="landing-section section-white" id="section-insight-gap">
     <div class="landing-section-inner">
         <h2>Traditional Research Is Too Slow. Generic AI Is Not Trustworthy.</h2>
-        <div class="bullet-grid">
-            <div>
-                <h3>Legacy market research</h3>
-                <ul>
-                    <li>Takes weeks or months</li>
-                    <li>Is expensive and episodic</li>
-                    <li>Breaks down in APAC</li>
-                </ul>
-            </div>
-            <div>
-                <h3>Generic AI tools</h3>
-                <ul>
-                    <li>Are fast but opaque</li>
-                    <li>Lack cultural depth and focus</li>
-                    <li>Cannot be audited or trusted</li>
-                </ul>
+        <div class="pb-bullet-wrap">
+            <div class="pb-rail">
+                <div class="pb-two-col">
+                    <div class="pb-col">
+                        <div class="pb-col-title">Legacy market research</div>
+                        <ul class="pb-bullets">
+                            <li>Takes weeks or months</li>
+                            <li>Is expensive and episodic</li>
+                            <li>Breaks down in APAC</li>
+                        </ul>
+                    </div>
+                    <div class="pb-col">
+                        <div class="pb-col-title">Generic AI tools</div>
+                        <ul class="pb-bullets">
+                            <li>Are fast but opaque</li>
+                            <li>Lack cultural depth and focus</li>
+                            <li>Cannot be audited or trusted</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
         <p class="callout-sentence">Speed without trust isn't insight, it's risk.</p>
@@ -564,21 +563,23 @@
 <section class="landing-section section-accent" id="section-solution">
     <div class="landing-section-inner">
         <h2>AI&#8209;Native Market Intelligence Through Simulation</h2>
-        <div class="bullet-rail">
-            <p>Project Brainstorm replaces traditional surveys and focus groups with grounded simulations using synthetic consumers.</p>
-            <h3 style="color: var(--pb-lightgrey);">Synthetic consumers are:</h3>
-            <ul>
-                <li>Lifelike AI personas</li>
-                <li>Statistically plausible representations of real people</li>
-                <li>Grounded in trusted local journalism and regional data</li>
-            </ul>
-            <p>You interact through <strong>Mark</strong>, our Market Intelligence Copilot, who helps you:</p>
-            <ul>
-                <li>Frame the business problem</li>
-                <li>Design the research</li>
-                <li>Run simulations</li>
-                <li>Turn results into decision&#8209;ready insights</li>
-            </ul>
+        <div class="pb-bullet-wrap">
+            <div class="pb-rail">
+                <p class="pb-lead">Project Brainstorm replaces traditional surveys and focus groups with grounded simulations using synthetic consumers.</p>
+                <p class="pb-lead" style="font-weight: 700;">Synthetic consumers are:</p>
+                <ul class="pb-bullets">
+                    <li>Lifelike AI personas</li>
+                    <li>Statistically plausible representations of real people</li>
+                    <li>Grounded in trusted local journalism and regional data</li>
+                </ul>
+                <p class="pb-lead">You interact through <strong>Mark</strong>, our Market Intelligence Copilot, who helps you:</p>
+                <ul class="pb-bullets">
+                    <li>Frame the business problem</li>
+                    <li>Design the research</li>
+                    <li>Run simulations</li>
+                    <li>Turn results into decision&#8209;ready insights</li>
+                </ul>
+            </div>
         </div>
     </div>
 </section>
@@ -587,13 +588,15 @@
 <section class="landing-section section-white" id="section-who">
     <div class="landing-section-inner">
         <h2>Built for Teams That Can't Afford to Get APAC Wrong</h2>
-        <div class="bullet-rail">
-            <ul>
-                <li>Global and regional brand leaders</li>
-                <li>Consultancies and agencies</li>
-                <li>Investors and financial institutions</li>
-                <li>Public sector and policy teams</li>
-            </ul>
+        <div class="pb-bullet-wrap">
+            <div class="pb-rail">
+                <ul class="pb-bullets">
+                    <li>Global and regional brand leaders</li>
+                    <li>Consultancies and agencies</li>
+                    <li>Investors and financial institutions</li>
+                    <li>Public sector and policy teams</li>
+                </ul>
+            </div>
         </div>
         <p class="callout-sentence">Your decisions carry reputational, financial, or strategic risk - this is for you.</p>
     </div>
@@ -603,15 +606,17 @@
 <section class="landing-section section-accent" id="section-why">
     <div class="landing-section-inner">
         <h2>Continuous Market Testing — Without the Friction</h2>
-        <div class="bullet-rail">
-            <p>In a perfect world, teams would run constant research before every major decision.</p>
-            <p>We make that possible by delivering:</p>
-            <ul>
-                <li><strong>Speed:</strong> insights in minutes, not weeks</li>
-                <li><strong>Cultural fidelity:</strong> grounded in local sources, not assumptions</li>
-                <li><strong>Auditability:</strong> every output is source&#8209;cited and explainable</li>
-                <li><strong>Cost efficiency:</strong> SaaS subscriptions, not open&#8209;ended consulting</li>
-            </ul>
+        <div class="pb-bullet-wrap">
+            <div class="pb-rail">
+                <p class="pb-lead">In a perfect world, teams would run constant research before every major decision.</p>
+                <p class="pb-lead">We make that possible by delivering:</p>
+                <ul class="pb-bullets">
+                    <li><strong>Speed:</strong> insights in minutes, not weeks</li>
+                    <li><strong>Cultural fidelity:</strong> grounded in local sources, not assumptions</li>
+                    <li><strong>Auditability:</strong> every output is source&#8209;cited and explainable</li>
+                    <li><strong>Cost efficiency:</strong> SaaS subscriptions, not open&#8209;ended consulting</li>
+                </ul>
+            </div>
         </div>
         <p class="callout-sentence">Market research becomes a daily decision tool, not a last-minute expense.</p>
     </div>
@@ -621,13 +626,15 @@
 <section class="landing-section section-white" id="section-different">
     <div class="landing-section-inner">
         <h2>Trust Is Designed In — Not Assumed</h2>
-        <div class="bullet-rail">
-            <p>Unlike chatbots, Project Brainstorm is not a black box.</p>
-            <ul>
-                <li>Every persona is grounded</li>
-                <li>Every insight is labeled by confidence</li>
-                <li>Every claim is traceable to real sources</li>
-            </ul>
+        <div class="pb-bullet-wrap">
+            <div class="pb-rail">
+                <p class="pb-lead">Unlike chatbots, Project Brainstorm is not a black box.</p>
+                <ul class="pb-bullets">
+                    <li>Every persona is grounded</li>
+                    <li>Every insight is labeled by confidence</li>
+                    <li>Every claim is traceable to real sources</li>
+                </ul>
+            </div>
         </div>
         <p class="callout-sentence">We don't ask you to "trust the model". We make trust verifiable.</p>
     </div>
@@ -637,14 +644,16 @@
 <section class="landing-section section-accent" id="section-outputs">
     <div class="landing-section-inner">
         <h2>Familiar Research Outputs — Generated in a New Way</h2>
-        <div class="bullet-rail">
-            <ul>
-                <li>Synthetic survey results</li>
-                <li>Synthetic focus group and in-depth interview transcripts</li>
-                <li>Structured insight reports</li>
-                <li>Recommendations, risks, and unknowns</li>
-                <li>Full citations and audit trails</li>
-            </ul>
+        <div class="pb-bullet-wrap">
+            <div class="pb-rail">
+                <ul class="pb-bullets">
+                    <li>Synthetic survey results</li>
+                    <li>Synthetic focus group and in-depth interview transcripts</li>
+                    <li>Structured insight reports</li>
+                    <li>Recommendations, risks, and unknowns</li>
+                    <li>Full citations and audit trails</li>
+                </ul>
+            </div>
         </div>
         <p class="callout-sentence">Same outputs decision-makers expect, delivered faster, cheaper, and with cultural precision.</p>
     </div>

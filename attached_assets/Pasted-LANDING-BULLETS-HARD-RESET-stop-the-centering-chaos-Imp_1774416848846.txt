@@ -1,0 +1,142 @@
+LANDING BULLETS HARD RESET (stop the centering chaos)
+Implement ONLY this landing page bullet layout fix. Do not change copy text.
+
+Problem (confirmed by screenshot):
+- Blue section bullet block and the two-column "Legacy / Generic" bullet block are centered differently and look worse than before.
+- Need one consistent system where bullet content is centered as a unit, but aligned cleanly within the bullet grouping. [1](https://onedrive.live.com?cid=BFEC441E4A44D47E&id=BFEC441E4A44D47E!s9260e88c613c4079a594d274aff2322e)
+
+Fix strategy:
+- Center a single rail container using flex (not by centering ULs).
+- Keep bullet content left-aligned inside the rail.
+- Use native bullets with list-style-position: inside to prevent “hanging bullet” visual drift.
+
+Step 1 — In landing.html, wrap the bullet content in a centered rail:
+
+For the BLUE section ("The World’s Most Important Region...") structure should be:
+
+<div class="pb-section">
+  <h2 class="pb-title">...</h2>
+  <p class="pb-subtitle">...</p>
+
+  <div class="pb-bullet-wrap">
+    <div class="pb-rail">
+      <ul class="pb-bullets">
+        <li>16+ major markets</li>
+        <li>41+ languages</li>
+        <li>Rapidly shifting consumers and regulations</li>
+      </ul>
+
+      <p class="pb-lead">Yet most decisions are still made using:</p>
+
+      <ul class="pb-bullets">
+        <li>Slow, biased surveys</li>
+        <li>Incomplete panels</li>
+        <li>Gut feel and "experience"</li>
+      </ul>
+
+      <p class="pb-lead pb-em">The result: cultural misfires, failed launches, and billions in lost value.</p>
+    </div>
+  </div>
+</div>
+
+For the TWO-COLUMN section ("Traditional Research..." with Legacy/Generic):
+
+<div class="pb-bullet-wrap">
+  <div class="pb-rail">
+    <div class="pb-two-col">
+      <div class="pb-col">
+        <div class="pb-col-title">Legacy market research</div>
+        <ul class="pb-bullets">
+          <li>Takes weeks or months</li>
+          <li>Is expensive and episodic</li>
+          <li>Breaks down in APAC</li>
+        </ul>
+      </div>
+
+      <div class="pb-col">
+        <div class="pb-col-title">Generic AI tools</div>
+        <ul class="pb-bullets">
+          <li>Are fast but opaque</li>
+          <li>Lack cultural depth and focus</li>
+          <li>Cannot be audited or trusted</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="pb-lead pb-em">Speed without trust isn’t insight - it’s risk.</p>
+  </div>
+</div>
+
+Step 2 — Replace/override prior bullet CSS with this canonical system (use high specificity on landing page):
+Add to landing.html CSS (or global CSS) and REMOVE old bullet centering hacks (inline-block ULs, bullet-grid, etc.):
+
+.pb-title, .pb-subtitle { text-align: center; }
+
+.pb-bullet-wrap{
+  display: flex;
+  justify-content: center;   /* THIS centers the bullet rail consistently */
+}
+
+.pb-rail{
+  width: min(680px, 92vw);   /* one consistent rail for all bullet areas */
+  text-align: left;
+}
+
+.pb-bullets{
+  list-style: disc;
+  list-style-position: inside;   /* prevents hanging bullets -> keeps visual centering correct */
+  padding: 0;
+  margin: 0.35rem 0 0.9rem 0;
+}
+
+.pb-bullets li{
+  margin: 0.25rem 0;
+}
+
+.pb-lead{
+  margin: 0.6rem 0 0.25rem 0;
+}
+
+.pb-em{
+  font-style: italic;
+}
+
+.pb-two-col{
+  display: flex;
+  justify-content: center;  /* centers the pair of columns as a unit */
+  gap: 64px;
+  width: 100%;
+}
+
+.pb-col{
+  width: 260px;             /* fixed column widths = stable visual centering */
+}
+
+.pb-col-title{
+  font-weight: 700;
+  text-align: center;       /* headings centered above each column */
+  margin-bottom: 0.35rem;
+}
+
+@media (max-width: 720px){
+  .pb-two-col{
+    flex-direction: column;
+    gap: 18px;
+    align-items: stretch;
+  }
+  .pb-col{
+    width: 100%;
+  }
+  .pb-col-title{
+    text-align: left;        /* on mobile, avoid awkward centered titles */
+  }
+}
+
+Step 3 — Remove conflicts:
+- Remove/disable any previous classes like bullet-col / bullet-grid / inline-block UL centering that were added in prior attempts.
+- Ensure only this pb-* system controls landing bullets.
+
+Acceptance tests:
+1) The blue section bullet area is centered as a block under the heading, while bullets are aligned cleanly inside.
+2) The two columns (Legacy vs Generic) are centered as a pair and not skewed left.
+3) Mobile stacks cleanly and remains readable.
