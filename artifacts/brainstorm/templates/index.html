@@ -38,6 +38,7 @@
         }
         .brand-lockup img { height: 28px; width: 28px; object-fit: contain; }
         .brand-wordmark { font-size: 18px; font-weight: 700; white-space: nowrap; }
+        .brand-cn { font-size: 1.05em; margin-left: 0.35em; font-weight: 700; letter-spacing: 0.02em; font-family: 'PingFang TC','Microsoft JhengHei UI','Microsoft JhengHei',sans-serif; }
         .header {
             background: var(--pb-white);
             color: var(--pb-text);
@@ -49,8 +50,6 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.06);
         }
         .header .brand-lockup {
-            padding-bottom: 4px;
-            border-bottom: 2px solid var(--pb-accent);
             color: var(--pb-text);
         }
         .header h1 { font-size: var(--font-brand); font-weight: 600; }
@@ -198,7 +197,7 @@
 <div class="header">
     <a href="/" class="brand-lockup">
         <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
-        <span class="brand-wordmark" id="brand-wordmark">Project Brainstorm</span><span id="brand-cjk-suffix" style="font-family: 'PingFang TC','Microsoft JhengHei UI','Microsoft JhengHei',sans-serif; display:none;"> 集思廣益</span>
+        <span class="brand-wordmark" id="brand-wordmark"><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思廣益</span></span>
     </a>
     <div class="header-right">
         {% if is_admin %}
@@ -1950,6 +1949,10 @@
                                 <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px;">Pin</button>
                                 {% endif %}
                             </form>
+                            <form action="/admin/delete-blog-post/{{ bp.id }}" method="POST" style="display:inline; margin-left: 6px;" onsubmit="return confirm('Are you sure? This will permanently delete the post.');">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px; background: #c0392b; color: #fff;">Delete</button>
+                            </form>
                         </td>
                     </tr>
                     {% endfor %}
@@ -2356,13 +2359,6 @@
             if (buttons[i]) buttons[i].classList.toggle('active', t === tab);
         });
     }
-    (function(){
-        var lang = document.documentElement.getAttribute('data-lang') || 'en';
-        var suffix = document.getElementById('brand-cjk-suffix');
-        if (suffix && (lang === 'zh-Hans' || lang === 'zh-Hant' || lang === 'ja')) {
-            suffix.style.display = 'inline';
-        }
-    })();
 </script>
 
 </body>

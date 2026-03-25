@@ -1,0 +1,117 @@
+MICRO FIX BUNDLE: Bullet blocks visually centered + header brand lockup cleanup (+ CN letter-spacing, JP disabled) + Admin delete blog posts
+Implement ONLY this change set. Do not change any copy text.
+
+A) Landing page bullet sections: aligned AND visually centered
+Problem:
+Bullets are aligned but the bullet sections can appear off-center due to default bullet markers hanging outside the text block. Different bullet sections must share the same centered column and look visually centered.
+
+Fix:
+1) Use a shared bullet column wrapper in landing page sections:
+   <div class="bullet-col"> ... </div>
+   Keep title/intro centered, bullet-col centered.
+
+2) Replace default UL bullets with custom bullets so the visible block centers perfectly:
+CSS rules to add (global or landing.html):
+
+:root{
+  --bullet-col-width: min(520px, 90vw);
+  --bullet-gutter: 1.25em;    /* fixed space for bullet marker */
+}
+
+.section .bullet-col{
+  width: var(--bullet-col-width);
+  margin: 0 auto;
+  text-align: left;
+}
+
+.section .bullet-col ul{
+  list-style: none;           /* remove default bullets */
+  padding: 0;
+  margin: 0.4rem 0 0.9rem 0;
+}
+
+.section .bullet-col li{
+  position: relative;
+  padding-left: var(--bullet-gutter);
+  margin: 0.25rem 0;
+}
+
+.section .bullet-col li::before{
+  content: "•";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--bullet-gutter);
+  text-align: center;         /* keeps bullet centered in gutter */
+  color: currentColor;
+}
+
+3) Apply bullet-col wrapper to ALL sections that use bullet lists (Problem, Insight Gap, Why Use, What You Get, etc.)
+Also: any “in-between” lines like “Yet most decisions are still made using:” must be inside bullet-col so it aligns with bullets.
+
+Acceptance:
+- Bullet blocks share the same left edge across sections
+- Bullet blocks are visually centered under the section title (no hanging-bullet drift)
+- Mobile: bullet-col shrinks to 90vw and remains readable
+
+B) Header brand lockup: remove underline bar + unify bilingual lockup (EN + CN only) + enlarge 集思廣益 + letter-spacing
+Problem:
+Underline bar under the logo/wordmark looks bad. Chinese “集思廣益” appears too small. Want unified wordmark across enabled languages (English + CN Simplified/Traditional). Japanese is disabled for now.
+
+Fix:
+1) Remove the brand underline/bar:
+- Remove border-bottom and extra padding from .brand-lockup used for underline.
+
+2) Unify bilingual wordmark across enabled languages:
+- Wordmark should always render as:
+  "Project Brainstorm 集思廣益"
+  for English, CN-Simplified, CN-Traditional.
+- Japanese is disabled for now, so do not include it in language selector or lockup logic.
+
+3) Split wordmark into two spans for styling:
+<span class="brand-wordmark">
+  <span class="brand-en">Project Brainstorm</span>
+  <span class="brand-cn">集思廣益</span>
+</span>
+
+4) Make Chinese visually same size as English (optical compensation):
+.brand-wordmark { font-weight: 700; }
+.brand-en { font-size: 1em; }
+.brand-cn {
+  font-size: 1.05em;          /* optical compensation */
+  margin-left: 0.35em;
+  font-weight: 700;
+  letter-spacing: 0.02em;     /* subtle premium spacing (must still look clean) */
+}
+
+C) Admin: delete blog posts
+Requirement:
+Admin needs a way to delete blog posts.
+
+Implement:
+1) Add an admin-only delete control:
+- On admin blog management UI (where you create/edit/pin posts), add a “Delete” button next to each post in the list.
+- Also optionally add “Delete this post” on the post edit/view page in admin mode.
+
+2) Delete behavior:
+- On delete, remove the blog_posts row from DB.
+- If the post has an image_path, delete the image file from disk too (best-effort; ignore if missing).
+- If the post is pinned, deletion should free that pin rank automatically.
+
+3) Safety:
+- Require a confirm step (simple JS confirm() is fine):
+  “Are you sure? This will permanently delete the post.”
+
+4) Ensure ordering/pagination still works after deletions.
+
+Deliverables:
+- Files changed
+- How to test:
+  1) Landing page bullet sections: all bullet groups aligned AND visually centered.
+  2) Header: no underline bar; wordmark always “Project Brainstorm 集思廣益”; spacing looks clean.
+  3) Japanese option not shown (disabled).
+  4) Admin deletes a post:
+     - post disappears from /blog
+     - if post had image, image file removed
+     - pinned rank freed (no collisions)
+  5) Blog pagination and pinned ordering still correct after deletion.

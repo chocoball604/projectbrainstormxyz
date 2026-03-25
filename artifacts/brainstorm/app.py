@@ -1611,6 +1611,31 @@ def admin_toggle_pin(post_id):
     return render_error("Invalid pin action.")
 
 
+@app.route("/admin/delete-blog-post/<int:post_id>", methods=["POST"])
+def admin_delete_blog_post(post_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    conn = get_db()
+    post = conn.execute("SELECT * FROM blog_posts WHERE id = ?", (post_id,)).fetchone()
+    if not post:
+        conn.close()
+        return render_error("Blog post not found.")
+    image_path = post["image_path"] if "image_path" in post.keys() else None
+    if image_path:
+        full_path = os.path.join(BLOG_STATIC_DIR, image_path)
+        try:
+            if os.path.exists(full_path):
+                os.remove(full_path)
+        except Exception:
+            pass
+    conn.execute("DELETE FROM blog_posts WHERE id = ?", (post_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token))
+
+
 @app.route("/admin/approve/<int:user_id>", methods=["POST"])
 def admin_approve(user_id):
     token = get_token()
