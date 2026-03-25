@@ -26,6 +26,11 @@ author = "agent"
 task = "workflow.run"
 args = "Component Preview Server"
 
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 app.py"
+waitForPort = 5000
+
 [[workflows.workflow]]
 name = "Component Preview Server"
 author = "agent"
