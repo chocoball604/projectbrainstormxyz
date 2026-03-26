@@ -3392,6 +3392,67 @@ def run_ben_qa(study_dict):
     if study_type == "synthetic_survey":
         study_id_debug = study_dict.get("id", "?")
 
+    study_id_val = str(study_dict.get("id", ""))
+    gov_failures = []
+    try:
+        gov_conn = get_db()
+
+        gt_row = gov_conn.execute(
+            "SELECT * FROM grounding_traces WHERE trigger_event = 'study_executed' AND study_id = ?",
+            (study_id_val,),
+        ).fetchone()
+        if not gt_row:
+            gov_failures.append("Missing Grounding Trace for study_executed.")
+        else:
+            if gt_row["admin_sources_configured"] == 1 and gt_row["admin_sources_queried"] != 1:
+                gov_failures.append("Admin sources configured but not queried.")
+            if (
+                gt_row["admin_sources_configured"] == 1
+                and gt_row["admin_sources_used_in_output"] == 0
+                and not (gt_row["admin_source_reason_code"] or "").strip()
+            ):
+                gov_failures.append("Admin sources unused without reason code.")
+
+        if study_type in ("synthetic_idi", "synthetic_focus_group"):
+            personas = normalize_personas_used(study_dict.get("personas_used"))
+            for pid in personas:
+                p_row = gov_conn.execute(
+                    "SELECT ai_model_provenance FROM personas WHERE persona_instance_id = ?",
+                    (pid,),
+                ).fetchone()
+                if not p_row:
+                    gov_failures.append(f"Persona {pid} not found in database.")
+                    continue
+                prov = (p_row["ai_model_provenance"] or "").strip()
+                if not prov:
+                    gov_failures.append(f"Persona {pid} missing ai_model_provenance.")
+                    continue
+                model_match = ""
+                if "model=" in prov:
+                    model_match = prov.split("model=")[1].split(",")[0].split("]")[0].strip()
+                if model_match and is_gpt_family(model_match):
+                    gov_failures.append(f"Persona {pid} created with GPT-family model ({model_match}) — policy violation.")
+
+                pt_row = gov_conn.execute(
+                    "SELECT id FROM grounding_traces WHERE trigger_event = 'persona_created' AND persona_id = ?",
+                    (pid,),
+                ).fetchone()
+                if not pt_row:
+                    gov_failures.append(f"Missing Grounding Trace for persona_created (persona {pid}).")
+
+        gov_conn.close()
+    except Exception as e:
+        gov_failures.append(f"Governance check error: {e}")
+
+    if gov_failures:
+        summary = "; ".join(gov_failures)
+        print(f"BEN_QA_DECISION=FAIL reason={summary}")
+        return {
+            "decision": "FAIL",
+            "notes": f"Governance check failed: {summary}",
+            "confidence_labels": fail_zero,
+        }
+
     if "SIMULATED PLACEHOLDER" in output:
         if study_type == "synthetic_survey":
             try:
@@ -3413,6 +3474,7 @@ def run_ben_qa(study_dict):
         else:
             n_insights = 3
 
+        print(f"BEN_QA_DECISION=DOWNGRADE reason=placeholder output")
         return {
             "decision": "DOWNGRADE",
             "notes": "Output is placeholder; confidence downgraded.",
@@ -3435,6 +3497,7 @@ def run_ben_qa(study_dict):
     else:
         n_insights = 3
 
+    print(f"BEN_QA_DECISION=PASS reason=all checks passed")
     return {
         "decision": "PASS",
         "notes": "All checks passed. Output meets quality standards.",

@@ -1,0 +1,44 @@
+Edit app.py only. Do not change templates/UI or DB schema.
+Upgrade Ben QA so it enforces governance checks using existing tables (grounding_traces, personas, studies). Keep existing PASS/DOWNGRADE/FAIL decisions and status transitions unchanged.
+1) Add grounding/provenance governance checks to run_ben_qa()
+run_ben_qa(study_dict) currently checks output + counts but does not validate grounding traces or persona provenance. Extend it so that it also checks:
+A) Study grounding trace exists
+
+For any non-empty study_output, require a grounding trace row exists for the study with trigger_event="study_executed" and study_id=str(study_id) (study_id comes from study_dict["id"]).
+If missing: return FAIL with notes: "Missing Grounding Trace for study_executed."
+
+B) Admin web sources governance is coherent
+The grounding trace schema includes these fields: admin_sources_configured, admin_sources_queried, admin_sources_used_in_output, admin_source_reason_code. 
+Add rules: [PRD_Mark-PBXYZ_V4.01 | Word]
+
+If admin_sources_configured == 1 then require admin_sources_queried == 1. If not: FAIL.
+If admin_sources_configured == 1 AND admin_sources_used_in_output == 0 then require admin_source_reason_code is non-empty. If missing: FAIL.
+(Reason codes already exist in code; just enforce presence.) [PRD_Mark-PBXYZ_V4.01 | Word]
+
+C) Persona provenance checks for qual studies
+For synthetic_idi and synthetic_focus_group:
+
+For each persona_instance_id in studies.personas_used, fetch the persona row.
+Require ai_model_provenance is non-empty. If missing: FAIL. [PRD_Mark-PBXYZ_V4.01 | Word], [stackone.com]
+If provenance indicates GPT-family (use the existing is_gpt_family() helper from Prompt 6), FAIL with notes explaining policy violation. [stackone.com]
+Require a grounding trace exists for each persona with trigger_event="persona_created" and persona_id=<persona_instance_id>. If missing: FAIL. [PRD_Mark-PBXYZ_V4.01 | Word]
+
+2) Implementation constraints (keep changes minimal)
+
+Do not refactor the whole pipeline.
+If you need DB access inside run_ben_qa, either:
+
+open a short-lived conn = get_db() inside run_ben_qa() and close it, OR
+add an optional parameter conn=None and use the existing conn from callers when passed (preferred minimal changes).
+
+
+Keep existing structural checks (survey question count, anchor completeness, persona count bounds) intact. [PRD_Mark-PBXYZ_V4.01 | Word]
+Add a console log line at the end: BEN_QA_DECISION=<PASS|DOWNGRADE|FAIL> reason=<short> to help debugging.
+
+3) Provide test steps
+Include steps to test each new FAIL case without changing UI:
+
+Missing study grounding trace → temporarily comment out the create_grounding_trace(...study_executed...) call in run-study, run once, confirm Ben fails, then restore it. [PRD_Mark-PBXYZ_V4.01 | Word]
+Admin sources configured but not queried → temporarily force admin_sources_queried=0 in create_grounding_trace, run, confirm Ben fails, then restore. [PRD_Mark-PBXYZ_V4.01 | Word]
+Persona missing provenance → temporarily blank ai_model_provenance for a test persona in DB (or in code before insert), run IDI, confirm Ben fails, then restore. [PRD_Mark-PBXYZ_V4.01 | Word], [stackone.com]
+Persona missing persona_created trace → temporarily skip create_grounding_trace(...persona_created...) when creating a persona, confirm Ben fails, then restore. [PRD_Mark-PBXYZ_V4.01 | Word]

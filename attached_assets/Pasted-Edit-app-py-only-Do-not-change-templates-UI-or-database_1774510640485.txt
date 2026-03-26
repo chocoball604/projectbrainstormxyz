@@ -1,0 +1,75 @@
+Edit app.py only. Do not change templates/UI or database schema.
+Upgrade Ben QA so it enforces governance checks using existing tables (grounding_traces, personas, studies). Keep existing PASS / DOWNGRADE / FAIL outcomes and existing status transitions.
+
+1) Extend run_ben_qa() with governance checks
+Update run_ben_qa(study_dict) so that, in addition to existing structural checks, it enforces the following:
+A) Study grounding trace must exist
+
+If study_output is non-empty, require a grounding trace row exists with:
+
+trigger_event = "study_executed"
+study_id = str(study_dict["id"])
+
+
+If missing, return FAIL with notes:
+"Missing Grounding Trace for study_executed."
+
+B) Admin web sources governance consistency
+For the study_executed grounding trace:
+
+If admin_sources_configured == 1, then require admin_sources_queried == 1.
+
+If not, FAIL.
+
+
+If admin_sources_configured == 1 AND admin_sources_used_in_output == 0, then require admin_source_reason_code to be non-empty.
+
+If missing, FAIL.
+
+
+
+C) Persona provenance checks (qual studies only)
+For synthetic_idi and synthetic_focus_group:
+
+For each persona_instance_id in studies.personas_used:
+
+Fetch the persona row.
+Require ai_model_provenance is non-empty.
+
+If missing, FAIL.
+
+
+If ai_model_provenance indicates a GPT-family model (use existing is_gpt_family()), FAIL with a policy violation note.
+Require a grounding trace exists with:
+
+trigger_event = "persona_created"
+persona_id = persona_instance_id
+If missing, FAIL.
+
+
+
+
+
+
+2) Implementation constraints
+
+Do not refactor the execution pipeline.
+Open a short-lived DB connection inside run_ben_qa() if needed (or accept an optional conn parameter).
+Keep all existing structural checks intact (anchors, persona counts, survey validation).
+Add one console log at the end of QA:
+BEN_QA_DECISION=<PASS|DOWNGRADE|FAIL> reason=<short summary>
+
+
+
+
+3) Testing instructions to include
+Explain how to test each failure case:
+
+Missing study_executed grounding trace → Ben FAIL
+Admin sources configured but not queried → Ben FAIL
+Admin sources unused without reason code → Ben FAIL
+Persona missing ai_model_provenance → Ben FAIL
+Persona created with GPT-family provenance → Ben FAIL
+Persona missing persona_created grounding trace → Ben FAIL
+
+No UI changes required for testing.
