@@ -398,6 +398,76 @@ def is_gpt_family(model_id: str) -> bool:
     return mid.startswith("openai/gpt-") or mid.startswith("openai/gpt_") or "/gpt-" in mid
 
 
+def lisa_generate_personas(study_dict, n, lisa_model_id):
+    brief_fields = [
+        ("business_problem", "Business Problem"),
+        ("decision_to_support", "Decision to Support"),
+        ("known_vs_unknown", "Known vs Unknown"),
+        ("target_audience", "Target Audience"),
+        ("study_fit", "Study Fit"),
+        ("definition_useful_insight", "Definition of Useful Insight"),
+    ]
+    brief_text = ""
+    for field, label in brief_fields:
+        val = (study_dict.get(field) or "").strip()
+        brief_text += f"{label}: {val or 'Not specified'}\n"
+
+    study_type_label = "In-Depth Interview (IDI)" if study_dict.get("study_type") == "synthetic_idi" else "Focus Group"
+
+    system_prompt = (
+        "You are Lisa, a senior qualitative research analyst at Project Brainstorm. "
+        "Generate realistic, diverse synthetic research personas for a qualitative study.\n\n"
+        "Return STRICT JSON only — no markdown, no commentary, no code fences.\n"
+        "Schema:\n"
+        '{"personas": [{"name": "...", "persona_summary": "...", "demographic_frame": "...", '
+        '"psychographic_profile": "...", "contextual_constraints": "...", '
+        '"behavioural_tendencies": "...", "grounding_sources": "...", '
+        '"confidence_and_limits": "..."}]}\n\n'
+        "RULES:\n"
+        f"1. Generate exactly {n} persona(s).\n"
+        "2. Each persona must be distinct in demographics, psychographics, and behaviour.\n"
+        "3. Personas should be grounded in the target audience and research context.\n"
+        "4. Use realistic names appropriate for the target market.\n"
+        "5. Be culturally grounded for Asia-Pacific markets where relevant.\n"
+        "6. Each field must be substantive (50-200 words), not placeholder text."
+    )
+
+    user_prompt = (
+        f"Study: {study_dict.get('title', 'Untitled Study')}\n"
+        f"Type: {study_type_label}\n\n"
+        f"Research Brief:\n{brief_text}\n"
+        f"Generate {n} persona(s) for this study."
+    )
+
+    raw = call_llm(
+        lisa_model_id,
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        purpose="lisa_auto_persona_generation",
+    )
+
+    if not raw or not raw.strip():
+        raise ValueError("LLM returned empty response for persona generation")
+
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        first_nl = cleaned.find("\n")
+        if first_nl != -1:
+            cleaned = cleaned[first_nl + 1:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+
+    parsed = json.loads(cleaned)
+    personas = parsed.get("personas", [])
+    if not isinstance(personas, list) or len(personas) < 1:
+        raise ValueError(f"Expected {n} personas, got invalid structure")
+
+    return personas[:n]
+
+
 def get_monthly_usage(conn, user_id):
     import calendar
 
@@ -4160,6 +4230,76 @@ def run_study(study_id):
             return render_error(
                 f"Cannot run: the following Research Brief anchors are missing: {', '.join(anchor_missing)}"
             )
+
+        if persona_count == 0:
+            auto_n = 1 if study_type == "synthetic_idi" else 4
+            try:
+                mc = {
+                    r["key"]: r["value"]
+                    for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+                }
+                lisa_mid = mc.get("lisa_model", "")
+                if not lisa_mid:
+                    raise ValueError("lisa_model not configured in model_config")
+                if is_gpt_family(lisa_mid):
+                    raise ValueError(f"Policy: lisa_model '{lisa_mid}' is GPT-family — cannot use for persona generation")
+
+                generated = lisa_generate_personas(dict(study), auto_n, lisa_mid)
+                new_persona_ids = []
+                for p_data in generated:
+                    p_instance_id = f"P-{secrets.token_hex(4).upper()}"
+                    p_persona_id = f"PID-{secrets.token_hex(4).upper()}"
+                    provenance = f"lisa:{lisa_mid}; selection_method=auto"
+                    conn.execute(
+                        """INSERT INTO personas
+                           (user_id, persona_id, version, persona_instance_id, name,
+                            persona_summary, demographic_frame, psychographic_profile,
+                            contextual_constraints, behavioural_tendencies,
+                            ai_model_provenance, grounding_sources, confidence_and_limits)
+                           VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            user["id"],
+                            p_persona_id,
+                            p_instance_id,
+                            p_data.get("name", "Auto-Persona"),
+                            p_data.get("persona_summary", ""),
+                            p_data.get("demographic_frame", ""),
+                            p_data.get("psychographic_profile", ""),
+                            p_data.get("contextual_constraints", ""),
+                            p_data.get("behavioural_tendencies", ""),
+                            provenance,
+                            p_data.get("grounding_sources", ""),
+                            p_data.get("confidence_and_limits", ""),
+                        ),
+                    )
+                    conn.execute(
+                        """INSERT INTO grounding_traces
+                           (study_id, persona_id, trigger_event,
+                            admin_sources_configured, admin_sources_queried,
+                            admin_sources_matched, admin_sources_used_in_output)
+                           VALUES (?, ?, 'persona_created', 0, 0, 0, 0)""",
+                        (str(study_id), p_instance_id),
+                    )
+                    new_persona_ids.append(p_instance_id)
+
+                conn.execute(
+                    "UPDATE studies SET personas_used = ? WHERE id = ?",
+                    (json.dumps(new_persona_ids), study_id),
+                )
+                conn.commit()
+                personas_used = new_persona_ids
+                persona_count = len(personas_used)
+                study = conn.execute(
+                    "SELECT * FROM studies WHERE id = ?", (study_id,)
+                ).fetchone()
+                print(f"AUTO_PERSONAS_GENERATED study={study_id} count={len(new_persona_ids)}")
+            except Exception as e:
+                conn.close()
+                print(f"AUTO_PERSONAS_FAILED study={study_id} reason={e}")
+                return render_error(
+                    f"Auto-persona generation failed: {e}. Please attach personas manually or contact admin."
+                )
+
         if study_type == "synthetic_idi":
             if persona_count < 1:
                 conn.close()
