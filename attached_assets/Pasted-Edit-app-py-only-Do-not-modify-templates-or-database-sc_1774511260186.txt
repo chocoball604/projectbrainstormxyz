@@ -1,0 +1,93 @@
+Edit app.py only. Do not modify templates or database schema.
+Implement automatic persona generation for qualitative studies (IDI / Focus Group) only when no personas are attached.
+
+1) When auto‑generation should occur
+In /run-study/<study_id>:
+
+If study_type is synthetic_idi or synthetic_focus_group
+AND studies.personas_used is empty
+→ Auto‑generate personas before running Lisa qual execution.
+
+Persona counts:
+
+IDI → generate 1 persona
+Focus Group → generate 4 personas
+
+
+2) Persona generation behavior (Lisa)
+Add helper:
+lisa_generate_personas(study_dict, n, lisa_model_id)
+
+Lisa receives:
+
+Study type (IDI or Focus Group)
+The 6-anchor research brief
+Target market / audience text
+
+Lisa must return STRICT JSON only:
+{
+  "personas": [
+    {
+      "name": "...",
+      "persona_summary": "...",
+      "demographic_frame": "...",
+      "psychographic_profile": "...",
+      "contextual_constraints": "...",
+      "behavioural_tendencies": "...",
+      "grounding_sources": "...",
+      "confidence_and_limits": "..."
+    }
+  ]
+}
+
+
+3) Persistence rules
+For each generated persona:
+
+Insert into personas table as a new immutable persona
+Generate:
+
+persona_id
+persona_instance_id
+version = 1
+
+
+Populate ai_model_provenance with:
+lisa:<model_id>; selection_method=auto
+
+
+Create a grounding trace with:
+
+trigger_event = "persona_created"
+persona_id = persona_instance_id
+
+
+
+Update studies.personas_used with the new persona_instance_ids.
+
+4) Governance compatibility (important)
+
+Use the same persona model policy already enforced (non‑GPT only).
+Do not bypass Ben QA.
+If persona generation fails for any reason:
+
+Abort study execution
+Surface a clear error
+Do NOT silently fall back to placeholders
+
+
+
+
+5) Logging
+Add console logs:
+AUTO_PERSONAS_GENERATED study=<id> count=<n>
+
+
+6) Testing instructions to include
+
+Create IDI study with zero personas → Run Study → persona auto‑generated → Lisa qual runs → Ben PASS
+Create FG study with zero personas → Run Study → 4 personas auto‑generated → Lisa qual runs → Ben PASS
+Confirm personas appear in persona list and are reusable
+Confirm Ben FAILS if auto‑generated personas violate provenance or grounding rules
+
+No UI changes required.
