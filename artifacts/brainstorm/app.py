@@ -24,7 +24,7 @@ import json
 import os
 import secrets
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import (
     Flask,
@@ -157,10 +157,197 @@ def call_llm(model_id, messages, purpose=""):
         raise RuntimeError(f"LLM error for {model_id}: {str(e)[:200]}")
 
 
+# from datetime import datetime  ->  from datetime import datetime, timezone
+
+
 def run_model_health_check(run_type="manual"):
-    run_id = secrets.token_hex(8)
-    started_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    conn = get_db()
+    try:
+        run_id = secrets.token_hex(8)
+        started_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        conn = get_db()
+        integration_mode = "placeholder_not_connected"
+
+        try:
+            call_llm(
+                "_probe_",
+                [{"role": "user", "content": "ping"}],
+                purpose="integration_probe",
+            )
+            integration_mode = "live_calls_enabled"
+        except NotImplementedError:
+            integration_mode = "placeholder_not_connected"
+        except Exception:
+            integration_mode = "error_probe_failed"
+
+        mc = {
+            r["key"]: r["value"]
+            for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+        }
+        active_allowed = {
+            r["model_id"]
+            for r in conn.execute(
+                "SELECT model_id FROM allowed_models WHERE status = 'active'"
+            ).fetchall()
+        }
+        pool_models = conn.execute(
+            "SELECT model_id, status FROM persona_model_pool"
+        ).fetchall()
+        active_pool = [r["model_id"] for r in pool_models if r["status"] == "active"]
+
+        config_errors = []
+        for role, key in [
+            ("Mark", "mark_model"),
+            ("Lisa", "lisa_model"),
+            ("Ben", "ben_model"),
+        ]:
+            mid = mc.get(key)
+            if not mid:
+                config_errors.append(f"{role} model not configured")
+            elif mid not in active_allowed:
+                config_errors.append(
+                    f"{role} model '{mid}' not in active allowed models"
+                )
+
+        if not active_pool:
+            config_errors.append("Persona model pool has no active entries")
+        for pm in active_pool:
+            if pm not in active_allowed:
+                config_errors.append(f"Pool model '{pm}' not in active allowed models")
+
+        config_valid = len(config_errors) == 0
+
+        all_model_ids = set()
+        for key in ("mark_model", "lisa_model", "ben_model"):
+            if mc.get(key):
+                all_model_ids.add(mc[key])
+        all_model_ids.update(active_pool)
+
+        per_model = {}
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+        if integration_mode == "placeholder_not_connected":
+            for mid in all_model_ids:
+                if mid in active_allowed:
+                    per_model[mid] = {
+                        "status": "not_connected",
+                        "error": "LLM integration not connected (placeholder mode)",
+                    }
+                else:
+                    per_model[mid] = {
+                        "status": "fail",
+                        "error": "Model not in active allowed list",
+                    }
+
+            summary_status = "fail" if not config_valid else "unknown"
+
+        else:
+            for mid in all_model_ids:
+                if mid not in active_allowed:
+                    per_model[mid] = {
+                        "status": "fail",
+                        "error": "Model not in active allowed list",
+                    }
+                    continue
+                try:
+                    result = call_llm(
+                        mid,
+                        [{"role": "user", "content": "Reply with the single word OK"}],
+                        purpose="health_check",
+                    )
+                    if "ok" in (result or "").lower():
+                        per_model[mid] = {"status": "pass", "error": None}
+                    else:
+                        per_model[mid] = {
+                            "status": "fail",
+                            "error": f"Unexpected response: {(result or '')[:300]}",
+                        }
+                except Exception as e:
+                    per_model[mid] = {"status": "fail", "error": str(e)[:300]}
+
+            if not config_valid:
+                summary_status = "fail"
+            elif any(v["status"] == "fail" for v in per_model.values()):
+                summary_status = "fail"
+            else:
+                summary_status = "pass"
+
+        for mid, info in per_model.items():
+            conn.execute(
+                "INSERT INTO model_health_status (model_id, status, last_tested_at, last_error) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(model_id) DO UPDATE SET status=?, last_tested_at=?, last_error=?",
+                (
+                    mid,
+                    info["status"],
+                    now_str,
+                    info["error"],
+                    info["status"],
+                    now_str,
+                    info["error"],
+                ),
+            )
+
+        finished_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        details = {
+            "config_errors": config_errors,
+            "per_model": per_model,
+            "models_checked": list(all_model_ids),
+        }
+
+        conn.execute(
+            "INSERT INTO model_health_checks "
+            "(run_id, run_type, started_at, finished_at, integration_mode, summary_status, details_json) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (
+                run_id,
+                run_type,
+                started_at,
+                finished_at,
+                integration_mode,
+                summary_status,
+                json.dumps(details),
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return {
+            "run_id": run_id,
+            "run_type": run_type,
+            "integration_mode": integration_mode,
+            "summary_status": summary_status,
+            "details": details,
+        }
+
+    except Exception as e:
+        # Safety net: never let health check crash the admin UI
+        try:
+            conn = get_db()
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            conn.execute(
+                """INSERT INTO model_health_checks
+                (run_id, run_type, started_at, finished_at,
+                 integration_mode, summary_status, details_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    secrets.token_hex(8),
+                    run_type,
+                    now,
+                    now,
+                    "error",
+                    "fail",
+                    json.dumps({"fatal_error": str(e)[:500]}),
+                ),
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+        print("HEALTH_CHECK_FATAL_ERROR", str(e))
+        return {
+            "summary_status": "fail",
+            "error": "Health check encountered an unexpected error",
+        }
 
     integration_mode = "placeholder_not_connected"
     try:
@@ -173,7 +360,7 @@ def run_model_health_check(run_type="manual"):
     except NotImplementedError:
         integration_mode = "placeholder_not_connected"
     except Exception:
-        integration_mode = "live_calls_enabled"
+        integration_mode = "error_probe_failed"
 
     mc = {
         r["key"]: r["value"]
@@ -395,7 +582,9 @@ SEED_ALLOWED_MODELS = [
 
 def is_gpt_family(model_id: str) -> bool:
     mid = model_id.lower().strip()
-    return mid.startswith("openai/gpt-") or mid.startswith("openai/gpt_") or "/gpt-" in mid
+    return (
+        mid.startswith("openai/gpt-") or mid.startswith("openai/gpt_") or "/gpt-" in mid
+    )
 
 
 def lisa_generate_personas(study_dict, n, lisa_model_id):
@@ -412,7 +601,11 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
         val = (study_dict.get(field) or "").strip()
         brief_text += f"{label}: {val or 'Not specified'}\n"
 
-    study_type_label = "In-Depth Interview (IDI)" if study_dict.get("study_type") == "synthetic_idi" else "Focus Group"
+    study_type_label = (
+        "In-Depth Interview (IDI)"
+        if study_dict.get("study_type") == "synthetic_idi"
+        else "Focus Group"
+    )
 
     system_prompt = (
         "You are Lisa, a senior qualitative research analyst at Project Brainstorm. "
@@ -455,7 +648,7 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
     if cleaned.startswith("```"):
         first_nl = cleaned.find("\n")
         if first_nl != -1:
-            cleaned = cleaned[first_nl + 1:]
+            cleaned = cleaned[first_nl + 1 :]
         if cleaned.endswith("```"):
             cleaned = cleaned[:-3]
         cleaned = cleaned.strip()
@@ -3474,7 +3667,10 @@ def run_ben_qa(study_dict):
         if not gt_row:
             gov_failures.append("Missing Grounding Trace for study_executed.")
         else:
-            if gt_row["admin_sources_configured"] == 1 and gt_row["admin_sources_queried"] != 1:
+            if (
+                gt_row["admin_sources_configured"] == 1
+                and gt_row["admin_sources_queried"] != 1
+            ):
                 gov_failures.append("Admin sources configured but not queried.")
             if (
                 gt_row["admin_sources_configured"] == 1
@@ -3499,16 +3695,22 @@ def run_ben_qa(study_dict):
                     continue
                 model_match = ""
                 if "model=" in prov:
-                    model_match = prov.split("model=")[1].split(",")[0].split("]")[0].strip()
+                    model_match = (
+                        prov.split("model=")[1].split(",")[0].split("]")[0].strip()
+                    )
                 if model_match and is_gpt_family(model_match):
-                    gov_failures.append(f"Persona {pid} created with GPT-family model ({model_match}) — policy violation.")
+                    gov_failures.append(
+                        f"Persona {pid} created with GPT-family model ({model_match}) — policy violation."
+                    )
 
                 pt_row = gov_conn.execute(
                     "SELECT id FROM grounding_traces WHERE trigger_event = 'persona_created' AND persona_id = ?",
                     (pid,),
                 ).fetchone()
                 if not pt_row:
-                    gov_failures.append(f"Missing Grounding Trace for persona_created (persona {pid}).")
+                    gov_failures.append(
+                        f"Missing Grounding Trace for persona_created (persona {pid})."
+                    )
 
         gov_conn.close()
     except Exception as e:
@@ -4236,13 +4438,17 @@ def run_study(study_id):
             try:
                 mc = {
                     r["key"]: r["value"]
-                    for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+                    for r in conn.execute(
+                        "SELECT key, value FROM model_config"
+                    ).fetchall()
                 }
                 lisa_mid = mc.get("lisa_model", "")
                 if not lisa_mid:
                     raise ValueError("lisa_model not configured in model_config")
                 if is_gpt_family(lisa_mid):
-                    raise ValueError(f"Policy: lisa_model '{lisa_mid}' is GPT-family — cannot use for persona generation")
+                    raise ValueError(
+                        f"Policy: lisa_model '{lisa_mid}' is GPT-family — cannot use for persona generation"
+                    )
 
                 generated = lisa_generate_personas(dict(study), auto_n, lisa_mid)
                 new_persona_ids = []
@@ -4292,7 +4498,9 @@ def run_study(study_id):
                 study = conn.execute(
                     "SELECT * FROM studies WHERE id = ?", (study_id,)
                 ).fetchone()
-                print(f"AUTO_PERSONAS_GENERATED study={study_id} count={len(new_persona_ids)}")
+                print(
+                    f"AUTO_PERSONAS_GENERATED study={study_id} count={len(new_persona_ids)}"
+                )
             except Exception as e:
                 conn.close()
                 print(f"AUTO_PERSONAS_FAILED study={study_id} reason={e}")
@@ -4341,9 +4549,7 @@ def run_study(study_id):
             bp = (study_dict.get("business_problem") or "").strip()
             ta = (study_dict.get("target_audience") or "").strip()
 
-            questions_text = "\n".join(
-                f"  Q{i+1}: {q}" for i, q in enumerate(sq)
-            )
+            questions_text = "\n".join(f"  Q{i + 1}: {q}" for i, q in enumerate(sq))
 
             lisa_system = (
                 "You are Lisa, a senior quantitative research analyst at Project Brainstorm. "
@@ -4438,7 +4644,8 @@ def run_study(study_id):
                 p_row = conn.execute(
                     "SELECT name, persona_summary, demographic_frame, psychographic_profile, "
                     "contextual_constraints, behavioural_tendencies FROM personas "
-                    "WHERE persona_instance_id = ?", (pid,)
+                    "WHERE persona_instance_id = ?",
+                    (pid,),
                 ).fetchone()
                 if p_row:
                     persona_dossiers.append(
@@ -4450,7 +4657,11 @@ def run_study(study_id):
                         f"  Behaviour: {p_row['behavioural_tendencies'][:200]}"
                     )
 
-            personas_block = "\n\n".join(persona_dossiers) if persona_dossiers else "No persona dossiers available."
+            personas_block = (
+                "\n\n".join(persona_dossiers)
+                if persona_dossiers
+                else "No persona dossiers available."
+            )
 
             if study_type == "synthetic_idi":
                 format_instruction = (
