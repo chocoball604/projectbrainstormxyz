@@ -4200,6 +4200,119 @@ def run_study(study_id):
             app.logger.warning(f"Lisa LLM survey call failed, using placeholder: {e}")
             output = None
 
+    elif study_type in ("synthetic_idi", "synthetic_focus_group"):
+        try:
+            mc = {
+                r["key"]: r["value"]
+                for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+            }
+            lisa_model_id = mc.get("lisa_model", "")
+            if not lisa_model_id:
+                raise ValueError("lisa_model not configured")
+
+            study_dict = dict(study)
+            brief_fields = [
+                ("business_problem", "Business Problem"),
+                ("decision_to_support", "Decision to Support"),
+                ("known_vs_unknown", "Known vs Unknown"),
+                ("target_audience", "Target Audience"),
+                ("study_fit", "Study Fit"),
+                ("definition_useful_insight", "Definition of Useful Insight"),
+            ]
+            brief_text = ""
+            for field, label in brief_fields:
+                val = (study_dict.get(field) or "").strip()
+                brief_text += f"{label}: {val or 'Not specified'}\n"
+
+            persona_dossiers = []
+            for pid in personas_used:
+                p_row = conn.execute(
+                    "SELECT name, persona_summary, demographic_frame, psychographic_profile, "
+                    "contextual_constraints, behavioural_tendencies FROM personas "
+                    "WHERE persona_instance_id = ?", (pid,)
+                ).fetchone()
+                if p_row:
+                    persona_dossiers.append(
+                        f"Name: {p_row['name']}\n"
+                        f"  Summary: {p_row['persona_summary'][:300]}\n"
+                        f"  Demographics: {p_row['demographic_frame'][:200]}\n"
+                        f"  Psychographics: {p_row['psychographic_profile'][:200]}\n"
+                        f"  Context: {p_row['contextual_constraints'][:200]}\n"
+                        f"  Behaviour: {p_row['behavioural_tendencies'][:200]}"
+                    )
+
+            personas_block = "\n\n".join(persona_dossiers) if persona_dossiers else "No persona dossiers available."
+
+            if study_type == "synthetic_idi":
+                format_instruction = (
+                    "Format: Individual in-depth interviews. Generate a separate interview "
+                    "for EACH persona. Each interview should have 8-12 exchanges between "
+                    "Moderator and the respondent. The respondent must speak in character "
+                    "based on their dossier. Use the persona's actual name as the speaker label."
+                )
+            else:
+                format_instruction = (
+                    "Format: Group discussion with ALL personas present simultaneously. "
+                    "Generate 15-20 exchanges. The moderator guides the discussion. "
+                    "Each persona speaks in character based on their dossier. "
+                    "Show natural group dynamics: agreements, disagreements, building on each other's points. "
+                    "Use each persona's actual name as their speaker label."
+                )
+
+            lisa_system = (
+                "You are Lisa, a senior qualitative research analyst at Project Brainstorm. "
+                "You generate realistic synthetic qualitative research output.\n\n"
+                "You must produce TWO clearly labeled sections in this exact order:\n\n"
+                "TRANSCRIPT:\n"
+                "(the full simulated transcript)\n\n"
+                "FIRST-PASS FINDINGS MEMO:\n"
+                "Key themes\n"
+                "(list the major themes that emerged)\n\n"
+                "Strong vs exploratory signals\n"
+                "(classify which findings are robust vs tentative)\n\n"
+                "Contradictions/tensions\n"
+                "(note any conflicting views or internal tensions)\n\n"
+                "Candidate insights mapped to brief\n"
+                "(map findings back to the research brief anchors)\n\n"
+                "Supporting excerpts\n"
+                "(quote 3-5 key verbatims from the transcript)\n\n"
+                "Limitations/unknowns\n"
+                "(note limitations of synthetic qualitative research and remaining unknowns)\n\n"
+                "RULES:\n"
+                "1. Keep respondent voices distinct and grounded in their persona dossiers.\n"
+                "2. Do NOT output JSON. Output plain text with the two labeled sections.\n"
+                "3. Be culturally grounded for Asia-Pacific markets where relevant.\n"
+                "4. Findings memo should be analytical and concise, not just a summary."
+            )
+
+            lisa_user = (
+                f"Study: {study_dict.get('title', 'Untitled Study')}\n"
+                f"Type: {'In-Depth Interview (IDI)' if study_type == 'synthetic_idi' else 'Focus Group'}\n\n"
+                f"Research Brief:\n{brief_text}\n"
+                f"{format_instruction}\n\n"
+                f"Personas:\n{personas_block}"
+            )
+
+            raw_llm = call_llm(
+                lisa_model_id,
+                [
+                    {"role": "system", "content": lisa_system},
+                    {"role": "user", "content": lisa_user},
+                ],
+                purpose="lisa_qual_execution",
+            )
+
+            if raw_llm and raw_llm.strip():
+                output = raw_llm.strip()
+                print(f"LISA_QUAL=LLM study_id={study_id}")
+                app.logger.info(f"LISA_QUAL=LLM for study {study_id}")
+            else:
+                raise ValueError("LLM returned empty output")
+        except Exception as e:
+            print(f"LISA_QUAL=FALLBACK study_id={study_id} reason={e}")
+            app.logger.warning(f"LISA_QUAL=FALLBACK for study {study_id}: {e}")
+            output = None
+
     if output is None:
         output = generate_placeholder_output(study_type, dict(study), persona_names)
 
