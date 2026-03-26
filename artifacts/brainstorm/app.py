@@ -4114,7 +4114,94 @@ def run_study(study_id):
         if p_row:
             persona_names.append(p_row["name"])
 
-    output = generate_placeholder_output(study_type, dict(study), persona_names)
+    output = None
+    if study_type == "synthetic_survey":
+        try:
+            mc = {
+                r["key"]: r["value"]
+                for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+            }
+            lisa_model_id = mc.get("lisa_model", "")
+            if not lisa_model_id:
+                raise ValueError("lisa_model not configured")
+
+            study_dict = dict(study)
+            r_count = study_dict.get("respondent_count") or 100
+            q_count = study_dict.get("question_count") or 8
+            sq = json.loads(study_dict.get("survey_questions") or "[]")
+            bp = (study_dict.get("business_problem") or "").strip()
+            ta = (study_dict.get("target_audience") or "").strip()
+
+            questions_text = "\n".join(
+                f"  Q{i+1}: {q}" for i, q in enumerate(sq)
+            )
+
+            lisa_system = (
+                "You are Lisa, a senior quantitative research analyst at Project Brainstorm. "
+                "You generate synthetic survey results grounded in realistic market data.\n\n"
+                "RULES:\n"
+                "1. Output ONLY valid JSON. No markdown, no code fences, no commentary.\n"
+                "2. The JSON must have this exact structure:\n"
+                "{\n"
+                '  "study_title": "<title>",\n'
+                '  "study_type": "synthetic_survey",\n'
+                '  "methodology": {\n'
+                '    "respondent_count": <number>,\n'
+                '    "target_audience": "<description>",\n'
+                '    "limitations": ["<limitation1>", ...],\n'
+                '    "sources": ["<source1>", ...]\n'
+                "  },\n"
+                '  "questions": [\n'
+                "    {\n"
+                '      "q": "<question text>",\n'
+                '      "results": {"<option>": "<percent>%", ...}\n'
+                "    }\n"
+                "  ],\n"
+                '  "top_findings": ["<finding1>", ...],\n'
+                '  "risks_unknowns": ["<risk1>", ...]\n'
+                "}\n"
+                "3. Each question's result percentages must sum to 100%.\n"
+                "4. Provide 3-5 top_findings and 2-4 risks_unknowns.\n"
+                "5. limitations should mention this is AI-simulated, not real respondents.\n"
+                "6. sources should list plausible grounding references.\n"
+                "7. Be realistic and culturally grounded for Asia-Pacific markets where relevant."
+            )
+
+            lisa_user = (
+                f"Generate synthetic survey results for:\n"
+                f"Title: {study_dict.get('title', 'Untitled Study')}\n"
+                f"Business Problem: {bp or 'Not specified'}\n"
+                f"Target Audience: {ta or 'Not specified'}\n"
+                f"Respondent Count: {r_count}\n"
+                f"Questions ({q_count}):\n{questions_text}\n\n"
+                f"Return ONLY the JSON object, nothing else."
+            )
+
+            raw_llm = call_llm(
+                lisa_model_id,
+                [
+                    {"role": "system", "content": lisa_system},
+                    {"role": "user", "content": lisa_user},
+                ],
+                purpose="lisa_survey_execution",
+            )
+
+            cleaned = raw_llm.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                cleaned = cleaned.strip()
+
+            parsed = json.loads(cleaned)
+            output = json.dumps(parsed, indent=2)
+            app.logger.info(f"Lisa LLM survey output generated for study {study_id}")
+        except Exception as e:
+            app.logger.warning(f"Lisa LLM survey call failed, using placeholder: {e}")
+            output = None
+
+    if output is None:
+        output = generate_placeholder_output(study_type, dict(study), persona_names)
 
     study_data = dict(study)
     study_data["study_output"] = output
