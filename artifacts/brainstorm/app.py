@@ -3930,7 +3930,95 @@ def send_chat(study_id):
         if p_row:
             persona_count += 1
 
-    mark_reply = get_coaching_nudge(dict(study), persona_count)
+    mark_reply = None
+    try:
+        mc = {
+            r["key"]: r["value"]
+            for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+        }
+        mark_model_id = mc.get("mark_model", "")
+        if not mark_model_id:
+            raise ValueError("mark_model not configured")
+
+        study_dict = dict(study)
+        st = study_dict.get("study_type") or "not yet chosen"
+
+        filled = {}
+        missing = []
+        anchor_keys = [
+            ("business_problem", "Business Problem"),
+            ("decision_to_support", "Decision to Support"),
+            ("known_vs_unknown", "Known vs Unknown"),
+            ("target_audience", "Target Audience"),
+            ("study_fit", "Study Fit"),
+            ("definition_useful_insight", "Definition of Useful Insight"),
+        ]
+        for field, label in anchor_keys:
+            val = (study_dict.get(field) or "").strip()
+            if val:
+                filled[label] = val
+            else:
+                missing.append(label)
+
+        study_snapshot = f"Study type: {st}\n"
+        if st == "synthetic_survey":
+            rc = study_dict.get("respondent_count") or 0
+            qc = study_dict.get("question_count") or 0
+            sq = []
+            if study_dict.get("survey_questions"):
+                try:
+                    sq = json.loads(study_dict["survey_questions"])
+                except Exception:
+                    sq = []
+            study_snapshot += f"Respondent count: {rc} (valid: 1-400)\n"
+            study_snapshot += f"Question count: {qc} (valid: 1-12)\n"
+            study_snapshot += f"Questions written so far: {len(sq)}\n"
+        study_snapshot += f"Personas attached: {persona_count}\n"
+        if filled:
+            study_snapshot += "Filled anchors:\n"
+            for k, v in filled.items():
+                study_snapshot += f"  - {k}: {v[:120]}\n"
+        if missing:
+            study_snapshot += f"Missing anchors: {', '.join(missing)}\n"
+
+        chat_rows = conn.execute(
+            "SELECT sender, message_text FROM chat_messages WHERE study_id = ? ORDER BY id ASC",
+            (study_id,),
+        ).fetchall()
+        chat_history = []
+        for row in chat_rows[-10:]:
+            role = "assistant" if row["sender"] == "mark" else "user"
+            chat_history.append({"role": role, "content": row["message_text"]})
+
+        system_prompt = (
+            "You are Mark, a senior market research consultant at Project Brainstorm. "
+            "You are structured, concise, and professional. You guide the user through "
+            "setting up their market research study one step at a time.\n\n"
+            "Current study state:\n" + study_snapshot + "\n"
+            "Rules:\n"
+            "1. Acknowledge the user's latest message briefly.\n"
+            "2. Ask exactly ONE targeted next question to fill the most important missing item.\n"
+            "3. At the end of your message, include a section:\n"
+            "   Suggested saves:\n"
+            "   - list 1-3 keys from: business_problem, decision_to_support, known_vs_unknown, "
+            "target_audience, study_fit, definition_useful_insight, survey_question_append\n"
+            "   Only list keys that are relevant to what the user just said or what you are asking about.\n"
+            "4. Keep your reply under 200 words. Be direct and professional.\n"
+            "5. If the study looks complete, congratulate them and suggest clicking 'Ready for QA Review'."
+        )
+
+        llm_messages = [{"role": "system", "content": system_prompt}]
+        llm_messages.extend(chat_history)
+        llm_messages.append({"role": "user", "content": message_text})
+
+        mark_reply = call_llm(mark_model_id, llm_messages, purpose="mark_chat")
+    except Exception as e:
+        app.logger.warning(f"Mark LLM call failed, falling back to coaching nudge: {e}")
+        mark_reply = None
+
+    if not mark_reply:
+        mark_reply = get_coaching_nudge(dict(study), persona_count)
+
     conn.execute(
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
         (study_id, mark_reply),
