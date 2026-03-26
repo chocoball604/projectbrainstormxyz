@@ -43,6 +43,12 @@ from werkzeug.security import check_password_hash, generate_password_hash
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-fallback-key")
 
+
+@app.route("/__health")
+def __health():
+    return jsonify({"status": "ok", "service": "brainstorm_flask"})
+
+
 VALID_LANGS = {"en", "zh-Hans", "zh-Hant", "ja"}
 
 
@@ -55,9 +61,18 @@ def inject_lang():
 
 
 VERIFY_EXEMPT_ENDPOINTS = {
-    "index", "verify_email", "login", "signup", "admin_login", "logout",
-    "landing_page", "blog_list", "blog_single", "set_language",
-    "static", "serve_blog_image",
+    "index",
+    "verify_email",
+    "login",
+    "signup",
+    "admin_login",
+    "logout",
+    "landing_page",
+    "blog_list",
+    "blog_single",
+    "set_language",
+    "static",
+    "serve_blog_image",
 }
 
 
@@ -83,8 +98,12 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "brainstorm.db")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 VALID_STUDY_STATUSES = [
-    "draft", "in_progress", "qa_blocked",
-    "terminated_system", "terminated_user", "completed",
+    "draft",
+    "in_progress",
+    "qa_blocked",
+    "terminated_system",
+    "terminated_user",
+    "completed",
 ]
 
 VALID_STUDY_TYPES = ["synthetic_survey", "synthetic_idi", "synthetic_focus_group"]
@@ -98,15 +117,22 @@ UPLOAD_MAX_TOTAL_PER_STUDY = 5 * 1024 * 1024
 UPLOAD_USER_STORAGE_CAP = 15 * 1024 * 1024
 UPLOAD_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "csv", "png", "jpg", "jpeg"}
 DOCS_PAGE_SIZE = 10
-USER_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "user")
-ADMIN_UPLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "admin")
+USER_UPLOADS_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "uploads", "user"
+)
+ADMIN_UPLOADS_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "uploads", "admin"
+)
 os.makedirs(USER_UPLOADS_DIR, exist_ok=True)
 os.makedirs(ADMIN_UPLOADS_DIR, exist_ok=True)
 
 BLOG_IMAGE_MAX_SIZE = 300 * 1024
 BLOG_IMAGE_ALLOWED = {"png", "jpg", "jpeg"}
-BLOG_STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "blog")
+BLOG_STATIC_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "static", "blog"
+)
 os.makedirs(BLOG_STATIC_DIR, exist_ok=True)
+
 
 def call_llm(model_id, messages, purpose=""):
     """Single wrapper for all LLM calls via Replit AI Integrations (OpenRouter)."""
@@ -138,22 +164,38 @@ def run_model_health_check(run_type="manual"):
 
     integration_mode = "placeholder_not_connected"
     try:
-        call_llm("_probe_", [{"role": "user", "content": "ping"}], purpose="integration_probe")
+        call_llm(
+            "_probe_",
+            [{"role": "user", "content": "ping"}],
+            purpose="integration_probe",
+        )
         integration_mode = "live_calls_enabled"
     except NotImplementedError:
         integration_mode = "placeholder_not_connected"
     except Exception:
         integration_mode = "live_calls_enabled"
 
-    mc = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM model_config").fetchall()}
-    active_allowed = {r["model_id"] for r in conn.execute(
-        "SELECT model_id FROM allowed_models WHERE status = 'active'"
-    ).fetchall()}
-    pool_models = conn.execute("SELECT model_id, status FROM persona_model_pool").fetchall()
+    mc = {
+        r["key"]: r["value"]
+        for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+    }
+    active_allowed = {
+        r["model_id"]
+        for r in conn.execute(
+            "SELECT model_id FROM allowed_models WHERE status = 'active'"
+        ).fetchall()
+    }
+    pool_models = conn.execute(
+        "SELECT model_id, status FROM persona_model_pool"
+    ).fetchall()
     active_pool = [r["model_id"] for r in pool_models if r["status"] == "active"]
 
     config_errors = []
-    for role, key in [("Mark", "mark_model"), ("Lisa", "lisa_model"), ("Ben", "ben_model")]:
+    for role, key in [
+        ("Mark", "mark_model"),
+        ("Lisa", "lisa_model"),
+        ("Ben", "ben_model"),
+    ]:
         mid = mc.get(key)
         if not mid:
             config_errors.append(f"{role} model not configured")
@@ -181,9 +223,15 @@ def run_model_health_check(run_type="manual"):
         for mid in all_model_ids:
             is_valid = mid in active_allowed
             if is_valid:
-                per_model[mid] = {"status": "not_connected", "error": "LLM integration not connected (placeholder mode)"}
+                per_model[mid] = {
+                    "status": "not_connected",
+                    "error": "LLM integration not connected (placeholder mode)",
+                }
             else:
-                per_model[mid] = {"status": "fail", "error": f"Model not in active allowed list"}
+                per_model[mid] = {
+                    "status": "fail",
+                    "error": f"Model not in active allowed list",
+                }
         if not config_valid:
             summary_status = "fail"
         else:
@@ -191,14 +239,24 @@ def run_model_health_check(run_type="manual"):
     else:
         for mid in all_model_ids:
             if mid not in active_allowed:
-                per_model[mid] = {"status": "fail", "error": "Model not in active allowed list"}
+                per_model[mid] = {
+                    "status": "fail",
+                    "error": "Model not in active allowed list",
+                }
                 continue
             try:
-                result = call_llm(mid, [{"role": "user", "content": "Reply with the single word OK"}], purpose="health_check")
+                result = call_llm(
+                    mid,
+                    [{"role": "user", "content": "Reply with the single word OK"}],
+                    purpose="health_check",
+                )
                 if "ok" in result.lower():
                     per_model[mid] = {"status": "pass", "error": None}
                 else:
-                    per_model[mid] = {"status": "fail", "error": f"Unexpected response: {result[:300]}"}
+                    per_model[mid] = {
+                        "status": "fail",
+                        "error": f"Unexpected response: {result[:300]}",
+                    }
             except Exception as e:
                 per_model[mid] = {"status": "fail", "error": str(e)[:300]}
         if not config_valid:
@@ -212,37 +270,75 @@ def run_model_health_check(run_type="manual"):
         conn.execute(
             "INSERT INTO model_health_status (model_id, status, last_tested_at, last_error) VALUES (?, ?, ?, ?) "
             "ON CONFLICT(model_id) DO UPDATE SET status=?, last_tested_at=?, last_error=?",
-            (mid, info["status"], now_str, info["error"], info["status"], now_str, info["error"]),
+            (
+                mid,
+                info["status"],
+                now_str,
+                info["error"],
+                info["status"],
+                now_str,
+                info["error"],
+            ),
         )
 
     finished_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    details = {"config_errors": config_errors, "per_model": per_model, "models_checked": list(all_model_ids)}
+    details = {
+        "config_errors": config_errors,
+        "per_model": per_model,
+        "models_checked": list(all_model_ids),
+    }
     conn.execute(
         "INSERT INTO model_health_checks (run_id, run_type, started_at, finished_at, integration_mode, summary_status, details_json) VALUES (?,?,?,?,?,?,?)",
-        (run_id, run_type, started_at, finished_at, integration_mode, summary_status, json.dumps(details)),
+        (
+            run_id,
+            run_type,
+            started_at,
+            finished_at,
+            integration_mode,
+            summary_status,
+            json.dumps(details),
+        ),
     )
     conn.commit()
     conn.close()
-    return {"run_id": run_id, "run_type": run_type, "integration_mode": integration_mode, "summary_status": summary_status, "details": details}
+    return {
+        "run_id": run_id,
+        "run_type": run_type,
+        "integration_mode": integration_mode,
+        "summary_status": summary_status,
+        "details": details,
+    }
 
 
 def generate_weekly_qa_report():
     conn = get_db()
     from datetime import timedelta
+
     today = datetime.utcnow().date()
     week_start = today - timedelta(days=today.weekday())
     week_start_str = week_start.strftime("%Y-%m-%d")
 
-    existing = conn.execute("SELECT id FROM weekly_qa_reports WHERE week_start_date = ?", (week_start_str,)).fetchone()
+    existing = conn.execute(
+        "SELECT id FROM weekly_qa_reports WHERE week_start_date = ?", (week_start_str,)
+    ).fetchone()
     if existing:
         conn.close()
         return None
 
-    last_check = conn.execute("SELECT * FROM model_health_checks ORDER BY id DESC LIMIT 1").fetchone()
-    health_rows = conn.execute("SELECT * FROM model_health_status ORDER BY model_id").fetchall()
-    mc = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM model_config").fetchall()}
+    last_check = conn.execute(
+        "SELECT * FROM model_health_checks ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    health_rows = conn.execute(
+        "SELECT * FROM model_health_status ORDER BY model_id"
+    ).fetchall()
+    mc = {
+        r["key"]: r["value"]
+        for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+    }
     pool_total = conn.execute("SELECT COUNT(*) FROM persona_model_pool").fetchone()[0]
-    pool_active = conn.execute("SELECT COUNT(*) FROM persona_model_pool WHERE status='active'").fetchone()[0]
+    pool_active = conn.execute(
+        "SELECT COUNT(*) FROM persona_model_pool WHERE status='active'"
+    ).fetchone()[0]
 
     lines = [f"Weekly QA Report — Week of {week_start_str}", "=" * 50, ""]
     lines.append("## System Model Health")
@@ -268,7 +364,9 @@ def generate_weekly_qa_report():
     if not_connected:
         lines.append("### Not Connected Models:")
         for nc in not_connected:
-            lines.append(f"  - {nc['model_id']}: {nc['last_error'] or 'placeholder mode'}")
+            lines.append(
+                f"  - {nc['model_id']}: {nc['last_error'] or 'placeholder mode'}"
+            )
     if not failing and not not_connected:
         lines.append("All models OK or no checks run yet.")
 
@@ -297,6 +395,7 @@ SEED_ALLOWED_MODELS = [
 
 def get_monthly_usage(conn, user_id):
     import calendar
+
     now = datetime.utcnow()
     window_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     last_day = calendar.monthrange(now.year, now.month)[1]
@@ -307,7 +406,13 @@ def get_monthly_usage(conn, user_id):
         f"SELECT COUNT(*) FROM studies WHERE user_id = ? AND status IN ({placeholders}) AND created_at >= ?",
         (user_id, *BILLABLE_STATUSES, month_start_str),
     ).fetchone()[0]
-    return count, FREE_TIER_MONTHLY_LIMIT, window_start.strftime("%Y-%m-%d"), window_end.strftime("%Y-%m-%d")
+    return (
+        count,
+        FREE_TIER_MONTHLY_LIMIT,
+        window_start.strftime("%Y-%m-%d"),
+        window_end.strftime("%Y-%m-%d"),
+    )
+
 
 STUDY_TYPE_LIMITS = {
     "synthetic_survey": {"max_questions": 12, "max_respondents": 400},
@@ -334,7 +439,10 @@ PERSONA_DOSSIER_FIELDS = [
     ("psychographic_profile", "Psychographic Profile"),
     ("contextual_constraints", "Contextual Constraints"),
     ("behavioural_tendencies", "Behavioural Tendencies"),
-    ("ai_model_provenance", "AI Model Provenance (provider family + model id + selection method)"),
+    (
+        "ai_model_provenance",
+        "AI Model Provenance (provider family + model id + selection method)",
+    ),
     ("grounding_sources", "Grounding Sources (list)"),
     ("confidence_and_limits", "Confidence and Limits"),
 ]
@@ -607,9 +715,18 @@ def init_db():
                 "INSERT OR IGNORE INTO persona_model_pool (model_id, status) VALUES (?, 'active')",
                 (m,),
             )
-        conn.execute("INSERT OR IGNORE INTO model_config (key, value) VALUES ('mark_model', ?)", (SEED_ALLOWED_MODELS[0],))
-        conn.execute("INSERT OR IGNORE INTO model_config (key, value) VALUES ('lisa_model', ?)", (SEED_ALLOWED_MODELS[1],))
-        conn.execute("INSERT OR IGNORE INTO model_config (key, value) VALUES ('ben_model', ?)", (SEED_ALLOWED_MODELS[2],))
+        conn.execute(
+            "INSERT OR IGNORE INTO model_config (key, value) VALUES ('mark_model', ?)",
+            (SEED_ALLOWED_MODELS[0],),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO model_config (key, value) VALUES ('lisa_model', ?)",
+            (SEED_ALLOWED_MODELS[1],),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO model_config (key, value) VALUES ('ben_model', ?)",
+            (SEED_ALLOWED_MODELS[2],),
+        )
     migrate_db(conn)
     conn.commit()
     conn.close()
@@ -625,13 +742,19 @@ def migrate_db(conn):
         WHERE persona_instance_id IS NULL
     """)
 
-    study_cols = [row[1] for row in conn.execute("PRAGMA table_info(studies)").fetchall()]
+    study_cols = [
+        row[1] for row in conn.execute("PRAGMA table_info(studies)").fetchall()
+    ]
     if "personas_used" not in study_cols:
-        conn.execute("ALTER TABLE studies ADD COLUMN personas_used TEXT NOT NULL DEFAULT '[]'")
+        conn.execute(
+            "ALTER TABLE studies ADD COLUMN personas_used TEXT NOT NULL DEFAULT '[]'"
+        )
     if "study_output" not in study_cols:
         conn.execute("ALTER TABLE studies ADD COLUMN study_output TEXT")
     if "respondent_count" not in study_cols:
-        conn.execute("ALTER TABLE studies ADD COLUMN respondent_count INTEGER DEFAULT 100")
+        conn.execute(
+            "ALTER TABLE studies ADD COLUMN respondent_count INTEGER DEFAULT 100"
+        )
     if "question_count" not in study_cols:
         conn.execute("ALTER TABLE studies ADD COLUMN question_count INTEGER DEFAULT 8")
     if "survey_brief" not in study_cols:
@@ -685,7 +808,9 @@ def migrate_db(conn):
                 (json.dumps(migrated), row["id"]),
             )
 
-    uu_cols = [row[1] for row in conn.execute("PRAGMA table_info(user_uploads)").fetchall()]
+    uu_cols = [
+        row[1] for row in conn.execute("PRAGMA table_info(user_uploads)").fetchall()
+    ]
 
     if "study_id" in uu_cols:
         existing_links = conn.execute(
@@ -738,15 +863,21 @@ def migrate_db(conn):
         conn.execute("ALTER TABLE user_uploads_new RENAME TO user_uploads")
     else:
         if "status" not in uu_cols:
-            conn.execute("ALTER TABLE user_uploads ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+            conn.execute(
+                "ALTER TABLE user_uploads ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+            )
         if "deleted_at" not in uu_cols:
             conn.execute("ALTER TABLE user_uploads ADD COLUMN deleted_at TEXT")
         if "content_sha256" not in uu_cols:
             conn.execute("ALTER TABLE user_uploads ADD COLUMN content_sha256 TEXT")
         if "retained_excerpt_text" not in uu_cols:
-            conn.execute("ALTER TABLE user_uploads ADD COLUMN retained_excerpt_text TEXT")
+            conn.execute(
+                "ALTER TABLE user_uploads ADD COLUMN retained_excerpt_text TEXT"
+            )
         if "retained_excerpt_bytes" not in uu_cols:
-            conn.execute("ALTER TABLE user_uploads ADD COLUMN retained_excerpt_bytes INTEGER")
+            conn.execute(
+                "ALTER TABLE user_uploads ADD COLUMN retained_excerpt_bytes INTEGER"
+            )
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS study_documents (
@@ -760,9 +891,13 @@ def migrate_db(conn):
         )
     """)
 
-    bp_cols = [row[1] for row in conn.execute("PRAGMA table_info(blog_posts)").fetchall()]
+    bp_cols = [
+        row[1] for row in conn.execute("PRAGMA table_info(blog_posts)").fetchall()
+    ]
     if "is_pinned" not in bp_cols:
-        conn.execute("ALTER TABLE blog_posts ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
+        conn.execute(
+            "ALTER TABLE blog_posts ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0"
+        )
     if "pinned_rank" not in bp_cols:
         conn.execute("ALTER TABLE blog_posts ADD COLUMN pinned_rank INTEGER")
 
@@ -789,7 +924,9 @@ def get_session_data(token):
         return None, False
     user = None
     if row["user_id"]:
-        user = conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],)).fetchone()
+        user = conn.execute(
+            "SELECT * FROM users WHERE id = ?", (row["user_id"],)
+        ).fetchone()
         if user:
             user = dict(user)
     conn.close()
@@ -805,6 +942,7 @@ def user_needs_verification(user):
     try:
         last_dt = datetime.strptime(last_ts, "%Y-%m-%d %H:%M:%S")
         from datetime import timedelta
+
         return (datetime.utcnow() - last_dt).days >= EMAIL_VERIFY_INTERVAL_DAYS
     except (ValueError, TypeError):
         return True
@@ -877,7 +1015,9 @@ def create_grounding_trace(conn, trigger_event, study_id=None, persona_id=None):
             admin_source_reason_code, timestamp_utc)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            study_id, persona_id, trigger_event,
+            study_id,
+            persona_id,
+            trigger_event,
             1 if admin_sources_configured else 0,
             1 if admin_sources_queried else 0,
             1 if admin_sources_matched else 0,
@@ -954,7 +1094,12 @@ def index():
     if not user and not is_admin:
         error = request.args.get("error")
         show_auth_tab = request.args.get("show_auth_tab", "signup")
-        return render_template("landing.html", error=error, show_auth_tab=show_auth_tab, latest_blog_posts=get_latest_blog_posts(2))
+        return render_template(
+            "landing.html",
+            error=error,
+            show_auth_tab=show_auth_tab,
+            latest_blog_posts=get_latest_blog_posts(2),
+        )
 
     verify_redirect = require_verified_user(token, user, is_admin)
     if verify_redirect:
@@ -998,33 +1143,57 @@ def index():
 
     if is_admin:
         conn = get_db()
-        pending_users = [dict(r) for r in conn.execute(
-            "SELECT id, email, username, state, created_at FROM users WHERE state = 'pending' ORDER BY created_at DESC"
-        ).fetchall()]
-        all_users = [dict(r) for r in conn.execute(
-            "SELECT id, email, username, state, created_at FROM users ORDER BY created_at DESC"
-        ).fetchall()]
+        pending_users = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT id, email, username, state, created_at FROM users WHERE state = 'pending' ORDER BY created_at DESC"
+            ).fetchall()
+        ]
+        all_users = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT id, email, username, state, created_at FROM users ORDER BY created_at DESC"
+            ).fetchall()
+        ]
         admin_web_sources = get_admin_web_sources(conn)
-        grounding_traces = [dict(r) for r in conn.execute(
-            "SELECT * FROM grounding_traces ORDER BY id DESC LIMIT 50"
-        ).fetchall()]
-        cost_telemetry_rows = [dict(r) for r in conn.execute(
-            "SELECT * FROM cost_telemetry ORDER BY id DESC LIMIT 50"
-        ).fetchall()]
-        admin_uploads_list = [dict(r) for r in conn.execute(
-            "SELECT * FROM admin_uploads ORDER BY uploaded_at DESC"
-        ).fetchall()]
-        all_blog_posts = [dict(r) for r in conn.execute(
-            "SELECT * FROM blog_posts ORDER BY is_pinned DESC, pinned_rank ASC, created_at DESC, id DESC"
-        ).fetchall()]
+        grounding_traces = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM grounding_traces ORDER BY id DESC LIMIT 50"
+            ).fetchall()
+        ]
+        cost_telemetry_rows = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM cost_telemetry ORDER BY id DESC LIMIT 50"
+            ).fetchall()
+        ]
+        admin_uploads_list = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM admin_uploads ORDER BY uploaded_at DESC"
+            ).fetchall()
+        ]
+        all_blog_posts = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM blog_posts ORDER BY is_pinned DESC, pinned_rank ASC, created_at DESC, id DESC"
+            ).fetchall()
+        ]
         for row in conn.execute("SELECT key, value FROM model_config").fetchall():
             model_config[row["key"]] = row["value"]
-        allowed_models_list = [dict(r) for r in conn.execute(
-            "SELECT * FROM allowed_models ORDER BY model_id"
-        ).fetchall()]
-        persona_pool_list = [dict(r) for r in conn.execute(
-            "SELECT * FROM persona_model_pool ORDER BY model_id"
-        ).fetchall()]
+        allowed_models_list = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM allowed_models ORDER BY model_id"
+            ).fetchall()
+        ]
+        persona_pool_list = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM persona_model_pool ORDER BY model_id"
+            ).fetchall()
+        ]
         conn.close()
 
         today_str = datetime.utcnow().strftime("%Y-%m-%d")
@@ -1040,10 +1209,15 @@ def index():
         generate_weekly_qa_report()
 
         conn3 = get_db()
-        health_status_list = [dict(r) for r in conn3.execute(
-            "SELECT * FROM model_health_status ORDER BY model_id"
-        ).fetchall()]
-        wr = conn3.execute("SELECT * FROM weekly_qa_reports ORDER BY id DESC LIMIT 1").fetchone()
+        health_status_list = [
+            dict(r)
+            for r in conn3.execute(
+                "SELECT * FROM model_health_status ORDER BY model_id"
+            ).fetchall()
+        ]
+        wr = conn3.execute(
+            "SELECT * FROM weekly_qa_reports ORDER BY id DESC LIMIT 1"
+        ).fetchone()
         if wr:
             latest_weekly_report = dict(wr)
         conn3.close()
@@ -1066,7 +1240,9 @@ def index():
     if user and user["state"] == "active":
         conn = get_db()
 
-        usage_count, usage_limit, usage_window_start, usage_window_end = get_monthly_usage(conn, user["id"])
+        usage_count, usage_limit, usage_window_start, usage_window_end = (
+            get_monthly_usage(conn, user["id"])
+        )
         usage_limit_reached = usage_count >= usage_limit
 
         studies_page = max(1, int(request.args.get("studies_page", "1") or "1"))
@@ -1085,15 +1261,21 @@ def index():
         studies_page = min(studies_page, studies_total_pages)
         s_offset = (studies_page - 1) * PAGE_SIZE
         if studies_q:
-            studies = [dict(r) for r in conn.execute(
-                "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                (user["id"], f"%{studies_q}%", PAGE_SIZE, s_offset),
-            ).fetchall()]
+            studies = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (user["id"], f"%{studies_q}%", PAGE_SIZE, s_offset),
+                ).fetchall()
+            ]
         else:
-            studies = [dict(r) for r in conn.execute(
-                "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                (user["id"], PAGE_SIZE, s_offset),
-            ).fetchall()]
+            studies = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (user["id"], PAGE_SIZE, s_offset),
+                ).fetchall()
+            ]
 
         configure_id = request.args.get("configure")
         if configure_id:
@@ -1105,21 +1287,30 @@ def index():
                 configure_study = dict(row)
                 if configure_study.get("survey_questions"):
                     try:
-                        configure_study["survey_questions_list"] = json.loads(configure_study["survey_questions"])
+                        configure_study["survey_questions_list"] = json.loads(
+                            configure_study["survey_questions"]
+                        )
                     except (json.JSONDecodeError, TypeError):
                         configure_study["survey_questions_list"] = []
                 else:
                     configure_study["survey_questions_list"] = []
                 if configure_study.get("survey_brief"):
                     try:
-                        configure_study["survey_brief_data"] = json.loads(configure_study["survey_brief"])
+                        configure_study["survey_brief_data"] = json.loads(
+                            configure_study["survey_brief"]
+                        )
                     except (json.JSONDecodeError, TypeError):
                         configure_study["survey_brief_data"] = {}
                 else:
                     configure_study["survey_brief_data"] = {}
-                if configure_study.get("qa_notes") and configure_study.get("qa_status") == "precheck_failed":
+                if (
+                    configure_study.get("qa_notes")
+                    and configure_study.get("qa_status") == "precheck_failed"
+                ):
                     try:
-                        configure_study["precheck_failures"] = json.loads(configure_study["qa_notes"])
+                        configure_study["precheck_failures"] = json.loads(
+                            configure_study["qa_notes"]
+                        )
                     except (json.JSONDecodeError, TypeError):
                         configure_study["precheck_failures"] = []
                 else:
@@ -1132,7 +1323,9 @@ def index():
                         (pid, user["id"]),
                     ).fetchone()
                     if p_row:
-                        configure_study_personas.append({"id": pid, "name": p_row["name"], "exists": True})
+                        configure_study_personas.append(
+                            {"id": pid, "name": p_row["name"], "exists": True}
+                        )
                         cleaned_ids.append(pid)
                     else:
                         pass
@@ -1142,40 +1335,65 @@ def index():
                         (json.dumps(cleaned_ids), configure_study["id"]),
                     )
                     conn.commit()
-                    print(f"Cleaned dangling persona references from study {configure_study['id']}")
+                    print(
+                        f"Cleaned dangling persona references from study {configure_study['id']}"
+                    )
                 all_personas = get_user_personas_list(conn, user["id"])
                 attached_ids = set(cleaned_ids)
-                available_personas = [p for p in all_personas if p["persona_instance_id"] not in attached_ids]
+                available_personas = [
+                    p
+                    for p in all_personas
+                    if p["persona_instance_id"] not in attached_ids
+                ]
 
-                chat_messages = [dict(r) for r in conn.execute(
-                    "SELECT * FROM chat_messages WHERE study_id = ? ORDER BY id ASC",
-                    (configure_study["id"],),
-                ).fetchall()]
+                chat_messages = [
+                    dict(r)
+                    for r in conn.execute(
+                        "SELECT * FROM chat_messages WHERE study_id = ? ORDER BY id ASC",
+                        (configure_study["id"],),
+                    ).fetchall()
+                ]
 
                 chat_save_buttons = get_save_buttons(configure_study)
 
-                study_uploads = [dict(r) for r in conn.execute(
-                    """SELECT u.id, u.filename, u.file_type, u.file_size_bytes, u.uploaded_at, u.status,
+                study_uploads = [
+                    dict(r)
+                    for r in conn.execute(
+                        """SELECT u.id, u.filename, u.file_type, u.file_size_bytes, u.uploaded_at, u.status,
                               sd.id as attachment_id
                        FROM study_documents sd
                        JOIN user_uploads u ON u.id = sd.user_doc_id
                        WHERE sd.study_id = ? AND u.user_id = ?
                        ORDER BY sd.attached_at ASC""",
-                    (configure_study["id"], user["id"]),
-                ).fetchall()]
-                study_uploads_total_size = sum(u["file_size_bytes"] for u in study_uploads if u["status"] == "active")
+                        (configure_study["id"], user["id"]),
+                    ).fetchall()
+                ]
+                study_uploads_total_size = sum(
+                    u["file_size_bytes"]
+                    for u in study_uploads
+                    if u["status"] == "active"
+                )
                 attached_doc_ids = {u["id"] for u in study_uploads}
-                all_active_docs = [dict(r) for r in conn.execute(
-                    "SELECT id, filename, file_type, file_size_bytes FROM user_uploads WHERE user_id = ? AND status = 'active' ORDER BY uploaded_at DESC",
-                    (user["id"],),
-                ).fetchall()]
-                study_attachable_docs = [d for d in all_active_docs if d["id"] not in attached_doc_ids]
+                all_active_docs = [
+                    dict(r)
+                    for r in conn.execute(
+                        "SELECT id, filename, file_type, file_size_bytes FROM user_uploads WHERE user_id = ? AND status = 'active' ORDER BY uploaded_at DESC",
+                        (user["id"],),
+                    ).fetchall()
+                ]
+                study_attachable_docs = [
+                    d for d in all_active_docs if d["id"] not in attached_doc_ids
+                ]
 
                 if not configure_study.get("study_type"):
                     bp = configure_study.get("business_problem") or ""
                     ds = configure_study.get("decision_to_support") or ""
                     if bp.strip() and ds.strip():
-                        mark_recommendation, mark_recommendation_label, mark_recommendation_reason = get_mark_recommendation(bp, ds)
+                        (
+                            mark_recommendation,
+                            mark_recommendation_label,
+                            mark_recommendation_reason,
+                        ) = get_mark_recommendation(bp, ds)
 
         personas_page = max(1, int(request.args.get("personas_page", "1") or "1"))
         personas_q = (request.args.get("personas_q") or "").strip()
@@ -1193,15 +1411,27 @@ def index():
         personas_page = min(personas_page, personas_total_pages)
         p_offset = (personas_page - 1) * PAGE_SIZE
         if personas_q:
-            personas_list = [dict(r) for r in conn.execute(
-                "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
-                (user["id"], f"%{personas_q}%", f"%{personas_q}%", PAGE_SIZE, p_offset),
-            ).fetchall()]
+            personas_list = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
+                    (
+                        user["id"],
+                        f"%{personas_q}%",
+                        f"%{personas_q}%",
+                        PAGE_SIZE,
+                        p_offset,
+                    ),
+                ).fetchall()
+            ]
         else:
-            personas_list = [dict(r) for r in conn.execute(
-                "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
-                (user["id"], PAGE_SIZE, p_offset),
-            ).fetchall()]
+            personas_list = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                    (user["id"], PAGE_SIZE, p_offset),
+                ).fetchall()
+            ]
 
         user_storage_used = conn.execute(
             "SELECT COALESCE(SUM(file_size_bytes), 0) FROM user_uploads WHERE user_id = ? AND status = 'active'",
@@ -1209,7 +1439,9 @@ def index():
         ).fetchone()[0]
         docs_page = max(1, int(request.args.get("docs_page", "1") or "1"))
         docs_q = (request.args.get("docs_q") or "").strip()
-        doc_id_num = docs_q.upper().replace('DOC-', '').replace('D-', '') if docs_q else ""
+        doc_id_num = (
+            docs_q.upper().replace("DOC-", "").replace("D-", "") if docs_q else ""
+        )
         doc_id_like = f"%{doc_id_num}%" if doc_id_num else ""
         if docs_q:
             docs_total = conn.execute(
@@ -1225,15 +1457,21 @@ def index():
         docs_page = min(docs_page, docs_total_pages)
         d_offset = (docs_page - 1) * DOCS_PAGE_SIZE
         if docs_q:
-            docs_list = [dict(r) for r in conn.execute(
-                "SELECT * FROM user_uploads WHERE user_id = ? AND (filename LIKE ? OR CAST(id AS TEXT) LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
-                (user["id"], f"%{docs_q}%", doc_id_like, DOCS_PAGE_SIZE, d_offset),
-            ).fetchall()]
+            docs_list = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT * FROM user_uploads WHERE user_id = ? AND (filename LIKE ? OR CAST(id AS TEXT) LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
+                    (user["id"], f"%{docs_q}%", doc_id_like, DOCS_PAGE_SIZE, d_offset),
+                ).fetchall()
+            ]
         else:
-            docs_list = [dict(r) for r in conn.execute(
-                "SELECT * FROM user_uploads WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
-                (user["id"], DOCS_PAGE_SIZE, d_offset),
-            ).fetchall()]
+            docs_list = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT * FROM user_uploads WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                    (user["id"], DOCS_PAGE_SIZE, d_offset),
+                ).fetchall()
+            ]
 
         view_pid = request.args.get("view_persona")
         if view_pid:
@@ -1259,11 +1497,16 @@ def index():
                 "SELECT * FROM studies WHERE id = ? AND user_id = ?",
                 (view_output_id, user["id"]),
             ).fetchone()
-            if row and (row["study_output"] or row["status"] in ("qa_blocked", "completed", "terminated_system")):
+            if row and (
+                row["study_output"]
+                or row["status"] in ("qa_blocked", "completed", "terminated_system")
+            ):
                 view_study_output = dict(row)
                 if view_study_output.get("confidence_summary"):
                     try:
-                        view_study_output["confidence_parsed"] = json.loads(view_study_output["confidence_summary"])
+                        view_study_output["confidence_parsed"] = json.loads(
+                            view_study_output["confidence_summary"]
+                        )
                     except (json.JSONDecodeError, TypeError):
                         view_study_output["confidence_parsed"] = None
                 else:
@@ -1275,16 +1518,26 @@ def index():
                 view_study_output["followups"] = [dict(f) for f in followup_rows]
                 view_study_output["followup_count"] = len(followup_rows)
                 report_version = request.args.get("report_version")
-                report_version = int(report_version) if report_version and report_version.isdigit() else None
-                upload_names = [r["filename"] for r in conn.execute(
-                    """SELECT u.filename FROM study_documents sd
+                report_version = (
+                    int(report_version)
+                    if report_version and report_version.isdigit()
+                    else None
+                )
+                upload_names = [
+                    r["filename"]
+                    for r in conn.execute(
+                        """SELECT u.filename FROM study_documents sd
                        JOIN user_uploads u ON u.id = sd.user_doc_id
                        WHERE sd.study_id = ? AND u.user_id = ?""",
-                    (view_study_output["id"], user["id"]),
-                ).fetchall()]
-                active_admin_names = [r["filename"] for r in conn.execute(
-                    "SELECT filename FROM admin_uploads WHERE status = 'active'"
-                ).fetchall()]
+                        (view_study_output["id"], user["id"]),
+                    ).fetchall()
+                ]
+                active_admin_names = [
+                    r["filename"]
+                    for r in conn.execute(
+                        "SELECT filename FROM admin_uploads WHERE status = 'active'"
+                    ).fetchall()
+                ]
                 all_upload_names = upload_names + active_admin_names
                 view_study_output["report_sections"] = build_structured_report(
                     view_study_output,
@@ -1434,7 +1687,12 @@ def logout():
 def landing_page():
     error = request.args.get("error")
     show_auth_tab = request.args.get("show_auth_tab", "signup")
-    return render_template("landing.html", error=error, show_auth_tab=show_auth_tab, latest_blog_posts=get_latest_blog_posts(2))
+    return render_template(
+        "landing.html",
+        error=error,
+        show_auth_tab=show_auth_tab,
+        latest_blog_posts=get_latest_blog_posts(2),
+    )
 
 
 @app.route("/static/blog/<path:filename>")
@@ -1447,12 +1705,15 @@ BLOG_PAGE_SIZE = 10
 
 def get_latest_blog_posts(limit=2):
     conn = get_db()
-    posts = [dict(r) for r in conn.execute(
-        """SELECT id, title, slug, body, image_path, is_pinned, pinned_rank, created_at FROM blog_posts
+    posts = [
+        dict(r)
+        for r in conn.execute(
+            """SELECT id, title, slug, body, image_path, is_pinned, pinned_rank, created_at FROM blog_posts
            WHERE status = 'published'
            ORDER BY is_pinned DESC, pinned_rank ASC, created_at DESC, id DESC LIMIT ?""",
-        (limit,),
-    ).fetchall()]
+            (limit,),
+        ).fetchall()
+    ]
     conn.close()
     return posts
 
@@ -1463,9 +1724,12 @@ def blog_page():
     conn = get_db()
     pinned = []
     if page == 1:
-        pinned = [dict(r) for r in conn.execute(
-            "SELECT * FROM blog_posts WHERE status = 'published' AND is_pinned = 1 ORDER BY pinned_rank ASC"
-        ).fetchall()]
+        pinned = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM blog_posts WHERE status = 'published' AND is_pinned = 1 ORDER BY pinned_rank ASC"
+            ).fetchall()
+        ]
     pinned_count = conn.execute(
         "SELECT COUNT(*) FROM blog_posts WHERE status = 'published' AND is_pinned = 1"
     ).fetchone()[0]
@@ -1485,19 +1749,26 @@ def blog_page():
     else:
         unpinned_limit = BLOG_PAGE_SIZE
         unpinned_offset = first_page_unpinned + (page - 2) * BLOG_PAGE_SIZE
-    unpinned = [dict(r) for r in conn.execute(
-        "SELECT * FROM blog_posts WHERE status = 'published' AND is_pinned = 0 ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
-        (unpinned_limit, unpinned_offset),
-    ).fetchall()]
+    unpinned = [
+        dict(r)
+        for r in conn.execute(
+            "SELECT * FROM blog_posts WHERE status = 'published' AND is_pinned = 0 ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+            (unpinned_limit, unpinned_offset),
+        ).fetchall()
+    ]
     conn.close()
     posts = pinned + unpinned
-    return render_template("blog_list.html", posts=posts, page=page, total_pages=total_pages)
+    return render_template(
+        "blog_list.html", posts=posts, page=page, total_pages=total_pages
+    )
 
 
 @app.route("/blog/<int:post_id>")
 def blog_post(post_id):
     conn = get_db()
-    post = conn.execute("SELECT * FROM blog_posts WHERE id = ? AND status = 'published'", (post_id,)).fetchone()
+    post = conn.execute(
+        "SELECT * FROM blog_posts WHERE id = ? AND status = 'published'", (post_id,)
+    ).fetchone()
     conn.close()
     if not post:
         return render_template("blog_list.html", posts=[], error="Post not found."), 404
@@ -1535,7 +1806,9 @@ def admin_create_blog_post():
             return render_error(f"Blog image must be PNG or JPG. Got: .{ext}")
         img_data = img_file.read()
         if len(img_data) > BLOG_IMAGE_MAX_SIZE:
-            return render_error(f"Blog image must be under 300KB. Got: {len(img_data) // 1024}KB")
+            return render_error(
+                f"Blog image must be under 300KB. Got: {len(img_data) // 1024}KB"
+            )
         safe_name = f"{int(datetime.utcnow().timestamp())}_{secrets.token_hex(4)}.{ext}"
         dest = os.path.join(BLOG_STATIC_DIR, safe_name)
         with open(dest, "wb") as f:
@@ -1552,20 +1825,37 @@ def admin_create_blog_post():
             return render_error("Pin position must be 1, 2, or 3.")
         pinned_rank = int(rank_val)
         conn = get_db()
-        pin_count = conn.execute("SELECT COUNT(*) FROM blog_posts WHERE is_pinned = 1").fetchone()[0]
+        pin_count = conn.execute(
+            "SELECT COUNT(*) FROM blog_posts WHERE is_pinned = 1"
+        ).fetchone()[0]
         if pin_count >= 3:
             conn.close()
             return render_error("You can pin up to 3 posts. Unpin another post first.")
-        existing_rank = conn.execute("SELECT id FROM blog_posts WHERE is_pinned = 1 AND pinned_rank = ?", (pinned_rank,)).fetchone()
+        existing_rank = conn.execute(
+            "SELECT id FROM blog_posts WHERE is_pinned = 1 AND pinned_rank = ?",
+            (pinned_rank,),
+        ).fetchone()
         if existing_rank:
             conn.close()
-            return render_error("Pin position already in use. Choose another position or unpin the existing one.")
+            return render_error(
+                "Pin position already in use. Choose another position or unpin the existing one."
+            )
         conn.close()
 
     conn = get_db()
     conn.execute(
         "INSERT INTO blog_posts (title, slug, body, status, image_path, image_type, image_size_bytes, is_pinned, pinned_rank) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (title, slug, body, status, image_path, image_type, image_size_bytes, is_pinned, pinned_rank),
+        (
+            title,
+            slug,
+            body,
+            status,
+            image_path,
+            image_type,
+            image_size_bytes,
+            is_pinned,
+            pinned_rank,
+        ),
     )
     conn.commit()
     conn.close()
@@ -1585,7 +1875,10 @@ def admin_toggle_pin(post_id):
         conn.close()
         return render_error("Blog post not found.")
     if action == "unpin":
-        conn.execute("UPDATE blog_posts SET is_pinned = 0, pinned_rank = NULL WHERE id = ?", (post_id,))
+        conn.execute(
+            "UPDATE blog_posts SET is_pinned = 0, pinned_rank = NULL WHERE id = ?",
+            (post_id,),
+        )
         conn.commit()
         conn.close()
         return redirect(url_for("index", token=token))
@@ -1595,15 +1888,26 @@ def admin_toggle_pin(post_id):
             conn.close()
             return render_error("Pin position must be 1, 2, or 3.")
         pinned_rank = int(rank_val)
-        pin_count = conn.execute("SELECT COUNT(*) FROM blog_posts WHERE is_pinned = 1 AND id != ?", (post_id,)).fetchone()[0]
+        pin_count = conn.execute(
+            "SELECT COUNT(*) FROM blog_posts WHERE is_pinned = 1 AND id != ?",
+            (post_id,),
+        ).fetchone()[0]
         if pin_count >= 3:
             conn.close()
             return render_error("You can pin up to 3 posts. Unpin another post first.")
-        existing_rank = conn.execute("SELECT id FROM blog_posts WHERE is_pinned = 1 AND pinned_rank = ? AND id != ?", (pinned_rank, post_id)).fetchone()
+        existing_rank = conn.execute(
+            "SELECT id FROM blog_posts WHERE is_pinned = 1 AND pinned_rank = ? AND id != ?",
+            (pinned_rank, post_id),
+        ).fetchone()
         if existing_rank:
             conn.close()
-            return render_error("Pin position already in use. Choose another position or unpin the existing one.")
-        conn.execute("UPDATE blog_posts SET is_pinned = 1, pinned_rank = ? WHERE id = ?", (pinned_rank, post_id))
+            return render_error(
+                "Pin position already in use. Choose another position or unpin the existing one."
+            )
+        conn.execute(
+            "UPDATE blog_posts SET is_pinned = 1, pinned_rank = ? WHERE id = ?",
+            (pinned_rank, post_id),
+        )
         conn.commit()
         conn.close()
         return redirect(url_for("index", token=token))
@@ -1693,7 +1997,9 @@ def create_study():
     used, limit, _, _ = get_monthly_usage(conn_check, user["id"])
     conn_check.close()
     if used >= limit:
-        return render_error(f"Monthly study limit reached ({used}/{limit}). You cannot create new studies until next month.")
+        return render_error(
+            f"Monthly study limit reached ({used}/{limit}). You cannot create new studies until next month."
+        )
 
     title = (request.form.get("title") or "").strip()
     study_type = (request.form.get("study_type") or "").strip()
@@ -1706,10 +2012,19 @@ def create_study():
     if study_type == "synthetic_survey":
         decision_to_support = (request.form.get("decision_to_support") or "").strip()
         target_audience = (request.form.get("target_audience") or "").strip()
-        definition_useful_insight = (request.form.get("definition_useful_insight") or "").strip()
+        definition_useful_insight = (
+            request.form.get("definition_useful_insight") or ""
+        ).strip()
         top_hypotheses = (request.form.get("top_hypotheses") or "").strip()
-        if not decision_to_support or not target_audience or not definition_useful_insight or not top_hypotheses:
-            return render_error("All survey brief fields are required (Decision to Support, Target Audience, Definition of Useful Insight, Top Hypotheses).")
+        if (
+            not decision_to_support
+            or not target_audience
+            or not definition_useful_insight
+            or not top_hypotheses
+        ):
+            return render_error(
+                "All survey brief fields are required (Decision to Support, Target Audience, Definition of Useful Insight, Top Hypotheses)."
+            )
 
         try:
             respondent_count = int(request.form.get("respondent_count", 100))
@@ -1732,12 +2047,14 @@ def create_study():
         if len(survey_questions) > 12:
             survey_questions = survey_questions[:12]
 
-        survey_brief = json.dumps({
-            "decision_to_support": decision_to_support,
-            "target_audience": target_audience,
-            "definition_useful_insight": definition_useful_insight,
-            "top_hypotheses": top_hypotheses,
-        })
+        survey_brief = json.dumps(
+            {
+                "decision_to_support": decision_to_support,
+                "target_audience": target_audience,
+                "definition_useful_insight": definition_useful_insight,
+                "top_hypotheses": top_hypotheses,
+            }
+        )
 
         conn = get_db()
         conn.execute(
@@ -1745,8 +2062,15 @@ def create_study():
                (user_id, title, status, study_type, respondent_count, question_count,
                 survey_brief, survey_questions)
                VALUES (?, ?, 'draft', ?, ?, ?, ?, ?)""",
-            (user["id"], title, study_type, respondent_count, question_count,
-             survey_brief, json.dumps(survey_questions)),
+            (
+                user["id"],
+                title,
+                study_type,
+                respondent_count,
+                question_count,
+                survey_brief,
+                json.dumps(survey_questions),
+            ),
         )
         conn.commit()
         conn.close()
@@ -1769,10 +2093,15 @@ def create_study():
                 known_vs_unknown, target_audience, study_fit, definition_useful_insight)
                VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)""",
             (
-                user["id"], title, study_type,
-                brief["business_problem"], brief["decision_to_support"],
-                brief["known_vs_unknown"], brief["target_audience"],
-                brief["study_fit"], brief["definition_useful_insight"],
+                user["id"],
+                title,
+                study_type,
+                brief["business_problem"],
+                brief["decision_to_support"],
+                brief["known_vs_unknown"],
+                brief["target_audience"],
+                brief["study_fit"],
+                brief["definition_useful_insight"],
             ),
         )
         conn.commit()
@@ -1791,7 +2120,9 @@ def create_study_tbd():
     used, limit, _, _ = get_monthly_usage(conn_check, user["id"])
     conn_check.close()
     if used >= limit:
-        return render_error(f"Monthly study limit reached ({used}/{limit}). You cannot create new studies until next month.")
+        return render_error(
+            f"Monthly study limit reached ({used}/{limit}). You cannot create new studies until next month."
+        )
 
     title = (request.form.get("title") or "").strip()
     if not title:
@@ -1803,13 +2134,18 @@ def create_study_tbd():
         (user["id"], title),
     )
     conn.commit()
-    study_id = conn.execute("SELECT id FROM studies ORDER BY id DESC LIMIT 1").fetchone()["id"]
+    study_id = conn.execute(
+        "SELECT id FROM studies ORDER BY id DESC LIMIT 1"
+    ).fetchone()["id"]
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
 
 
 def _allowed_upload(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in UPLOAD_ALLOWED_EXTENSIONS
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower() in UPLOAD_ALLOWED_EXTENSIONS
+    )
 
 
 def _compute_sha256(data):
@@ -1866,30 +2202,41 @@ def upload_study_file(study_id):
     if not _allowed_upload(f.filename):
         conn.close()
         ext = f.filename.rsplit(".", 1)[-1] if "." in f.filename else "(none)"
-        return render_error(f"File type '.{ext}' is not allowed. Allowed types: {', '.join(sorted(UPLOAD_ALLOWED_EXTENSIONS))}.")
+        return render_error(
+            f"File type '.{ext}' is not allowed. Allowed types: {', '.join(sorted(UPLOAD_ALLOWED_EXTENSIONS))}."
+        )
 
     file_data = f.read()
     file_size = len(file_data)
 
     if file_size > UPLOAD_MAX_FILE_SIZE:
         conn.close()
-        return render_error(f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024*1024)}MB size limit.")
+        return render_error(
+            f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024 * 1024)}MB size limit."
+        )
 
     current_storage = _get_user_storage_used(conn, user["id"])
     if current_storage + file_size > UPLOAD_USER_STORAGE_CAP:
         conn.close()
-        return render_error(f"User storage cap ({UPLOAD_USER_STORAGE_CAP // (1024*1024)}MB) would be exceeded. Delete some documents to free space.")
+        return render_error(
+            f"User storage cap ({UPLOAD_USER_STORAGE_CAP // (1024 * 1024)}MB) would be exceeded. Delete some documents to free space."
+        )
 
     att_cnt, att_total = _get_study_attachment_stats(conn, study_id)
     if att_cnt >= UPLOAD_MAX_FILES_PER_STUDY:
         conn.close()
-        return render_error(f"Maximum {UPLOAD_MAX_FILES_PER_STUDY} files attached to this study.")
+        return render_error(
+            f"Maximum {UPLOAD_MAX_FILES_PER_STUDY} files attached to this study."
+        )
 
     if att_total + file_size > UPLOAD_MAX_TOTAL_PER_STUDY:
         conn.close()
-        return render_error(f"Total attached size would exceed {UPLOAD_MAX_TOTAL_PER_STUDY // (1024*1024)}MB limit for this study.")
+        return render_error(
+            f"Total attached size would exceed {UPLOAD_MAX_TOTAL_PER_STUDY // (1024 * 1024)}MB limit for this study."
+        )
 
     import uuid
+
     safe_name = f"{uuid.uuid4().hex}_{f.filename}"
     storage_path = os.path.join(USER_UPLOADS_DIR, safe_name)
     with open(storage_path, "wb") as out:
@@ -1900,7 +2247,16 @@ def upload_study_file(study_id):
     excerpt = _extract_excerpt(file_data, ext)
     conn.execute(
         "INSERT INTO user_uploads (user_id, filename, file_type, file_size_bytes, storage_path, content_sha256, retained_excerpt_text, retained_excerpt_bytes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')",
-        (user["id"], f.filename, ext, file_size, storage_path, content_sha, excerpt, len(excerpt)),
+        (
+            user["id"],
+            f.filename,
+            ext,
+            file_size,
+            storage_path,
+            content_sha,
+            excerpt,
+            len(excerpt),
+        ),
     )
     doc_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.execute(
@@ -1925,21 +2281,28 @@ def upload_user_doc():
 
     if not _allowed_upload(f.filename):
         ext = f.filename.rsplit(".", 1)[-1] if "." in f.filename else "(none)"
-        return render_error(f"File type '.{ext}' is not allowed. Allowed types: {', '.join(sorted(UPLOAD_ALLOWED_EXTENSIONS))}.")
+        return render_error(
+            f"File type '.{ext}' is not allowed. Allowed types: {', '.join(sorted(UPLOAD_ALLOWED_EXTENSIONS))}."
+        )
 
     file_data = f.read()
     file_size = len(file_data)
 
     if file_size > UPLOAD_MAX_FILE_SIZE:
-        return render_error(f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024*1024)}MB size limit.")
+        return render_error(
+            f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024 * 1024)}MB size limit."
+        )
 
     conn = get_db()
     current_storage = _get_user_storage_used(conn, user["id"])
     if current_storage + file_size > UPLOAD_USER_STORAGE_CAP:
         conn.close()
-        return render_error(f"User storage cap ({UPLOAD_USER_STORAGE_CAP // (1024*1024)}MB) would be exceeded. Delete some documents to free space.")
+        return render_error(
+            f"User storage cap ({UPLOAD_USER_STORAGE_CAP // (1024 * 1024)}MB) would be exceeded. Delete some documents to free space."
+        )
 
     import uuid
+
     safe_name = f"{uuid.uuid4().hex}_{f.filename}"
     storage_path = os.path.join(USER_UPLOADS_DIR, safe_name)
     with open(storage_path, "wb") as out:
@@ -1950,7 +2313,16 @@ def upload_user_doc():
     excerpt = _extract_excerpt(file_data, ext)
     conn.execute(
         "INSERT INTO user_uploads (user_id, filename, file_type, file_size_bytes, storage_path, content_sha256, retained_excerpt_text, retained_excerpt_bytes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')",
-        (user["id"], f.filename, ext, file_size, storage_path, content_sha, excerpt, len(excerpt)),
+        (
+            user["id"],
+            f.filename,
+            ext,
+            file_size,
+            storage_path,
+            content_sha,
+            excerpt,
+            len(excerpt),
+        ),
     )
     conn.commit()
     conn.close()
@@ -1997,11 +2369,15 @@ def attach_doc_to_study(study_id):
     att_cnt, att_total = _get_study_attachment_stats(conn, study_id)
     if att_cnt >= UPLOAD_MAX_FILES_PER_STUDY:
         conn.close()
-        return render_error(f"Maximum {UPLOAD_MAX_FILES_PER_STUDY} files attached to this study.")
+        return render_error(
+            f"Maximum {UPLOAD_MAX_FILES_PER_STUDY} files attached to this study."
+        )
 
     if att_total + doc["file_size_bytes"] > UPLOAD_MAX_TOTAL_PER_STUDY:
         conn.close()
-        return render_error(f"Total attached size would exceed {UPLOAD_MAX_TOTAL_PER_STUDY // (1024*1024)}MB limit for this study.")
+        return render_error(
+            f"Total attached size would exceed {UPLOAD_MAX_TOTAL_PER_STUDY // (1024 * 1024)}MB limit for this study."
+        )
 
     conn.execute(
         "INSERT INTO study_documents (study_id, user_doc_id) VALUES (?, ?)",
@@ -2063,14 +2439,20 @@ def delete_user_doc(doc_id):
         (doc_id,),
     )
 
-    draft_study_ids = [r["study_id"] for r in conn.execute(
-        """SELECT sd.study_id FROM study_documents sd
+    draft_study_ids = [
+        r["study_id"]
+        for r in conn.execute(
+            """SELECT sd.study_id FROM study_documents sd
            JOIN studies s ON s.id = sd.study_id
            WHERE sd.user_doc_id = ? AND s.status = 'draft'""",
-        (doc_id,),
-    ).fetchall()]
+            (doc_id,),
+        ).fetchall()
+    ]
     for sid in draft_study_ids:
-        conn.execute("DELETE FROM study_documents WHERE study_id = ? AND user_doc_id = ?", (sid, doc_id))
+        conn.execute(
+            "DELETE FROM study_documents WHERE study_id = ? AND user_doc_id = ?",
+            (sid, doc_id),
+        )
 
     conn.commit()
     conn.close()
@@ -2090,15 +2472,20 @@ def admin_upload_document():
 
     if not _allowed_upload(f.filename):
         ext = f.filename.rsplit(".", 1)[-1] if "." in f.filename else "(none)"
-        return render_error(f"File type '.{ext}' is not allowed. Allowed types: {', '.join(sorted(UPLOAD_ALLOWED_EXTENSIONS))}.")
+        return render_error(
+            f"File type '.{ext}' is not allowed. Allowed types: {', '.join(sorted(UPLOAD_ALLOWED_EXTENSIONS))}."
+        )
 
     file_data = f.read()
     file_size = len(file_data)
 
     if file_size > UPLOAD_MAX_FILE_SIZE:
-        return render_error(f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024*1024)}MB size limit.")
+        return render_error(
+            f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024 * 1024)}MB size limit."
+        )
 
     import uuid
+
     safe_name = f"{uuid.uuid4().hex}_{f.filename}"
     storage_path = os.path.join(ADMIN_UPLOADS_DIR, safe_name)
     with open(storage_path, "wb") as out:
@@ -2123,13 +2510,17 @@ def admin_toggle_upload(upload_id):
         return render_error("Admin access required.")
 
     conn = get_db()
-    upload = conn.execute("SELECT * FROM admin_uploads WHERE id = ?", (upload_id,)).fetchone()
+    upload = conn.execute(
+        "SELECT * FROM admin_uploads WHERE id = ?", (upload_id,)
+    ).fetchone()
     if not upload:
         conn.close()
         return render_error("Upload not found.")
 
     new_status = "disabled" if upload["status"] == "active" else "active"
-    conn.execute("UPDATE admin_uploads SET status = ? WHERE id = ?", (new_status, upload_id))
+    conn.execute(
+        "UPDATE admin_uploads SET status = ? WHERE id = ?", (new_status, upload_id)
+    )
     conn.commit()
     conn.close()
     return redirect(url_for("index", token=token))
@@ -2143,7 +2534,9 @@ def admin_delete_upload(upload_id):
         return render_error("Admin access required.")
 
     conn = get_db()
-    upload = conn.execute("SELECT * FROM admin_uploads WHERE id = ?", (upload_id,)).fetchone()
+    upload = conn.execute(
+        "SELECT * FROM admin_uploads WHERE id = ?", (upload_id,)
+    ).fetchone()
     if not upload:
         conn.close()
         return render_error("Upload not found.")
@@ -2191,26 +2584,82 @@ def get_mark_recommendation(business_problem, decision_to_support):
     ds = (decision_to_support or "").lower()
     combined = bp + " " + ds
 
-    survey_signals = ["how many", "percentage", "quantif", "measure", "scale", "survey", "poll",
-                      "prevalence", "frequency", "rate", "volume", "count", "trend",
-                      "satisfaction score", "nps", "benchmark", "metric", "statistical"]
-    fg_signals = ["group dynamic", "focus group", "collective", "social", "community",
-                  "consensus", "debate", "discussion", "react to concept", "co-creation",
-                  "brainstorm together", "group reaction", "shared experience"]
-    idi_signals = ["why", "understand", "motivation", "explore", "deep dive", "journey",
-                   "experience", "interview", "personal", "individual", "feeling",
-                   "perception", "narrative", "story", "insight", "qualitative"]
+    survey_signals = [
+        "how many",
+        "percentage",
+        "quantif",
+        "measure",
+        "scale",
+        "survey",
+        "poll",
+        "prevalence",
+        "frequency",
+        "rate",
+        "volume",
+        "count",
+        "trend",
+        "satisfaction score",
+        "nps",
+        "benchmark",
+        "metric",
+        "statistical",
+    ]
+    fg_signals = [
+        "group dynamic",
+        "focus group",
+        "collective",
+        "social",
+        "community",
+        "consensus",
+        "debate",
+        "discussion",
+        "react to concept",
+        "co-creation",
+        "brainstorm together",
+        "group reaction",
+        "shared experience",
+    ]
+    idi_signals = [
+        "why",
+        "understand",
+        "motivation",
+        "explore",
+        "deep dive",
+        "journey",
+        "experience",
+        "interview",
+        "personal",
+        "individual",
+        "feeling",
+        "perception",
+        "narrative",
+        "story",
+        "insight",
+        "qualitative",
+    ]
 
     survey_score = sum(1 for s in survey_signals if s in combined)
     fg_score = sum(1 for s in fg_signals if s in combined)
     idi_score = sum(1 for s in idi_signals if s in combined)
 
     if survey_score > idi_score and survey_score > fg_score:
-        return "synthetic_survey", "Synthetic Survey", "Your inputs suggest quantitative measurement would best address this problem."
+        return (
+            "synthetic_survey",
+            "Synthetic Survey",
+            "Your inputs suggest quantitative measurement would best address this problem.",
+        )
     elif fg_score > idi_score:
-        return "synthetic_focus_group", "Synthetic Focus Group", "Your inputs suggest group dynamics and collective reactions would yield the richest insights."
+        return (
+            "synthetic_focus_group",
+            "Synthetic Focus Group",
+            "Your inputs suggest group dynamics and collective reactions would yield the richest insights.",
+        )
     else:
-        return "synthetic_idi", "Synthetic IDI", "Your inputs suggest in-depth individual exploration would best uncover the insights you need."
+        return (
+            "synthetic_idi",
+            "Synthetic IDI",
+            "Your inputs suggest in-depth individual exploration would best uncover the insights you need.",
+        )
 
 
 @app.route("/set-mark-recommendation/<int:study_id>", methods=["POST"])
@@ -2303,7 +2752,9 @@ ANCHOR_FIELDS = [
 ]
 
 
-def build_structured_report(study, followups=None, version=None, uploaded_filenames=None):
+def build_structured_report(
+    study, followups=None, version=None, uploaded_filenames=None
+):
     if followups is None:
         followups = []
     if uploaded_filenames is None:
@@ -2328,10 +2779,14 @@ def build_structured_report(study, followups=None, version=None, uploaded_filena
             exec_lines.append(f"{label}: {val}")
     if is_placeholder:
         exec_lines.append("")
-        exec_lines.append("Note: This output is simulated placeholder data for development/testing purposes. It does not represent real research findings.")
+        exec_lines.append(
+            "Note: This output is simulated placeholder data for development/testing purposes. It does not represent real research findings."
+        )
     else:
         exec_lines.append("")
-        exec_lines.append("This report summarizes the findings from the study execution.")
+        exec_lines.append(
+            "This report summarizes the findings from the study execution."
+        )
     sections["executive_summary"] = "\n".join(exec_lines)
 
     studied_lines = [f"Study Title: {title}", f"Study Type: {st_label}"]
@@ -2368,7 +2823,9 @@ def build_structured_report(study, followups=None, version=None, uploaded_filena
         findings_lines.append("[Placeholder findings — not based on real data]")
     if st == "synthetic_survey" and output_raw:
         try:
-            survey_data = json.loads(output_raw.split("\n", 1)[-1] if "===" in output_raw else output_raw)
+            survey_data = json.loads(
+                output_raw.split("\n", 1)[-1] if "===" in output_raw else output_raw
+            )
             if isinstance(survey_data, dict) and "questions" in survey_data:
                 for qi, qobj in enumerate(survey_data["questions"], 1):
                     q_text = qobj.get("q", f"Question {qi}")
@@ -2381,7 +2838,9 @@ def build_structured_report(study, followups=None, version=None, uploaded_filena
                         findings_lines.append(f"  - {k}: {v}")
                     findings_lines.append("")
         except (json.JSONDecodeError, TypeError, IndexError):
-            findings_lines.append("Raw output available but could not be parsed into structured findings.")
+            findings_lines.append(
+                "Raw output available but could not be parsed into structured findings."
+            )
     else:
         clean_output = output_raw
         for prefix in ["=== QA REVIEW: PASS ===", "=== QA REVIEW: DOWNGRADE ==="]:
@@ -2393,15 +2852,25 @@ def build_structured_report(study, followups=None, version=None, uploaded_filena
         if clean_output.startswith("*** SIMULATED"):
             lines_raw = clean_output.split("\n")
             clean_output = "\n".join(l for l in lines_raw if not l.startswith("***"))
-        interview_blocks = clean_output.split("--- Interview with ") if "--- Interview with " in clean_output else []
+        interview_blocks = (
+            clean_output.split("--- Interview with ")
+            if "--- Interview with " in clean_output
+            else []
+        )
         if interview_blocks and len(interview_blocks) > 1:
             for bi, block in enumerate(interview_blocks[1:], 1):
                 conf_label = "Indicative"
                 if confidence and confidence.get("Strong", 0) >= bi:
                     conf_label = "Strong"
                 speaker = block.split("---")[0].strip()
-                findings_lines.append(f"Finding {bi} [{conf_label}]: Key themes from {speaker}")
-                snippet_lines = [l.strip() for l in block.split("\n") if l.strip() and not l.startswith("---")][:4]
+                findings_lines.append(
+                    f"Finding {bi} [{conf_label}]: Key themes from {speaker}"
+                )
+                snippet_lines = [
+                    l.strip()
+                    for l in block.split("\n")
+                    if l.strip() and not l.startswith("---")
+                ][:4]
                 for sl in snippet_lines:
                     findings_lines.append(f"  {sl}")
                 findings_lines.append("")
@@ -2424,12 +2893,20 @@ def build_structured_report(study, followups=None, version=None, uploaded_filena
     elif qa_status == "downgrade":
         risk_lines.append(f"QA Status: DOWNGRADE — {qa_notes}")
     if is_placeholder:
-        risk_lines.append("All data in this report is simulated. Do not use for real business decisions.")
-    risk_lines.append("Synthetic research outputs are experimental and should be validated with traditional research methods before acting on findings.")
+        risk_lines.append(
+            "All data in this report is simulated. Do not use for real business decisions."
+        )
+    risk_lines.append(
+        "Synthetic research outputs are experimental and should be validated with traditional research methods before acting on findings."
+    )
     if st == "synthetic_survey":
-        risk_lines.append("Survey responses are AI-generated and may not reflect real consumer behavior.")
+        risk_lines.append(
+            "Survey responses are AI-generated and may not reflect real consumer behavior."
+        )
     elif st in ("synthetic_idi", "synthetic_focus_group"):
-        risk_lines.append("Interview/discussion outputs are AI-generated based on persona profiles and may contain biases inherent in the training data.")
+        risk_lines.append(
+            "Interview/discussion outputs are AI-generated based on persona profiles and may contain biases inherent in the training data."
+        )
     sections["risks_limits"] = "\n".join(risk_lines)
 
     source_lines = [
@@ -2439,7 +2916,11 @@ def build_structured_report(study, followups=None, version=None, uploaded_filena
     ]
     if study.get("personas_used"):
         try:
-            pids = json.loads(study["personas_used"]) if isinstance(study["personas_used"], str) else study["personas_used"]
+            pids = (
+                json.loads(study["personas_used"])
+                if isinstance(study["personas_used"], str)
+                else study["personas_used"]
+            )
             if pids:
                 source_lines.append(f"Personas Used: {', '.join(pids)}")
         except (json.JSONDecodeError, TypeError):
@@ -2450,7 +2931,9 @@ def build_structured_report(study, followups=None, version=None, uploaded_filena
         for uf in uploaded_filenames:
             source_lines.append(f"  - {uf}")
     source_lines.append("")
-    source_lines.append("Note: Real citations will be populated when live AI model integration is enabled.")
+    source_lines.append(
+        "Note: Real citations will be populated when live AI model integration is enabled."
+    )
     sections["sources_citations"] = "\n".join(source_lines)
 
     sections["followup_sections"] = []
@@ -2467,10 +2950,12 @@ def build_structured_report(study, followups=None, version=None, uploaded_filena
             if fu_qa == "downgrade":
                 fu_lines.append(f"[QA DOWNGRADE] {fu.get('qa_notes', '')}")
             fu_lines.append(fu.get("generated_output", ""))
-        sections["followup_sections"].append({
-            "round": fu["followup_round"],
-            "content": "\n".join(fu_lines),
-        })
+        sections["followup_sections"].append(
+            {
+                "round": fu["followup_round"],
+                "content": "\n".join(fu_lines),
+            }
+        )
 
     sections["version"] = version
     sections["max_version"] = max_version
@@ -2478,7 +2963,9 @@ def build_structured_report(study, followups=None, version=None, uploaded_filena
     return sections
 
 
-CJK_FONT_PATH = os.path.join(os.path.dirname(__file__), "fonts", "NotoSansCJK-Regular.ttc")
+CJK_FONT_PATH = os.path.join(
+    os.path.dirname(__file__), "fonts", "NotoSansCJK-Regular.ttc"
+)
 TRAD_MARKERS = set("漢歡測臺體繁廣")
 SIMP_MARKERS = set("汉欢测台体简")
 
@@ -2493,8 +2980,12 @@ def _has_non_ascii(text):
 def _has_cjk(text):
     for ch in text:
         cp = ord(ch)
-        if (0x3000 <= cp <= 0x9FFF or 0xF900 <= cp <= 0xFAFF
-                or 0x20000 <= cp <= 0x2FA1F or 0xFF00 <= cp <= 0xFFEF):
+        if (
+            0x3000 <= cp <= 0x9FFF
+            or 0xF900 <= cp <= 0xFAFF
+            or 0x20000 <= cp <= 0x2FA1F
+            or 0xFF00 <= cp <= 0xFFEF
+        ):
             return True
     return False
 
@@ -2538,7 +3029,9 @@ def _pdf_set_font(pdf, text, size, style="", cjk_available=True):
         pdf.set_font("Helvetica", style, size)
 
 
-def _pdf_write_text(pdf, text, size, style="", cjk_available=True, method="cell", **kwargs):
+def _pdf_write_text(
+    pdf, text, size, style="", cjk_available=True, method="cell", **kwargs
+):
     needs_unicode = _has_non_ascii(text)
     if not cjk_available or not needs_unicode:
         pdf.set_font("Helvetica", style, size)
@@ -2547,11 +3040,15 @@ def _pdf_write_text(pdf, text, size, style="", cjk_available=True, method="cell"
             pdf.multi_cell(kwargs.get("w", 0), kwargs.get("h", 5), safe)
         else:
             safe = text.encode("latin-1", "replace").decode("latin-1")
-            pdf.cell(kwargs.get("w", 0), kwargs.get("h", 10), safe,
-                     new_x=kwargs.get("new_x", "LMARGIN"),
-                     new_y=kwargs.get("new_y", "NEXT"),
-                     align=kwargs.get("align", ""),
-                     fill=kwargs.get("fill", False))
+            pdf.cell(
+                kwargs.get("w", 0),
+                kwargs.get("h", 10),
+                safe,
+                new_x=kwargs.get("new_x", "LMARGIN"),
+                new_y=kwargs.get("new_y", "NEXT"),
+                align=kwargs.get("align", ""),
+                fill=kwargs.get("fill", False),
+            )
         return
 
     font_name = _pick_cjk_font(text)
@@ -2565,11 +3062,15 @@ def _pdf_write_text(pdf, text, size, style="", cjk_available=True, method="cell"
             if method == "multi_cell":
                 pdf.multi_cell(kwargs.get("w", 0), kwargs.get("h", 5), text)
             else:
-                pdf.cell(kwargs.get("w", 0), kwargs.get("h", 10), text,
-                         new_x=kwargs.get("new_x", "LMARGIN"),
-                         new_y=kwargs.get("new_y", "NEXT"),
-                         align=kwargs.get("align", ""),
-                         fill=kwargs.get("fill", False))
+                pdf.cell(
+                    kwargs.get("w", 0),
+                    kwargs.get("h", 10),
+                    text,
+                    new_x=kwargs.get("new_x", "LMARGIN"),
+                    new_y=kwargs.get("new_y", "NEXT"),
+                    align=kwargs.get("align", ""),
+                    fill=kwargs.get("fill", False),
+                )
             return
         except Exception:
             continue
@@ -2579,11 +3080,15 @@ def _pdf_write_text(pdf, text, size, style="", cjk_available=True, method="cell"
     if method == "multi_cell":
         pdf.multi_cell(kwargs.get("w", 0), kwargs.get("h", 5), safe)
     else:
-        pdf.cell(kwargs.get("w", 0), kwargs.get("h", 10), safe,
-                 new_x=kwargs.get("new_x", "LMARGIN"),
-                 new_y=kwargs.get("new_y", "NEXT"),
-                 align=kwargs.get("align", ""),
-                 fill=kwargs.get("fill", False))
+        pdf.cell(
+            kwargs.get("w", 0),
+            kwargs.get("h", 10),
+            safe,
+            new_x=kwargs.get("new_x", "LMARGIN"),
+            new_y=kwargs.get("new_y", "NEXT"),
+            align=kwargs.get("align", ""),
+            fill=kwargs.get("fill", False),
+        )
 
 
 DISCLAIMER_TEXT = (
@@ -2613,18 +3118,34 @@ def generate_report_pdf(study, sections):
     cjk_ok = _register_cjk_fonts(pdf)
 
     pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 12, "Project Brainstorm - Research Report", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.cell(
+        0,
+        12,
+        "Project Brainstorm - Research Report",
+        new_x="LMARGIN",
+        new_y="NEXT",
+        align="C",
+    )
     pdf.ln(4)
 
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 6, "Experimental / simulated output - not for production use", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.cell(
+        0,
+        6,
+        "Experimental / simulated output - not for production use",
+        new_x="LMARGIN",
+        new_y="NEXT",
+        align="C",
+    )
     pdf.set_text_color(0, 0, 0)
     pdf.ln(4)
 
     title_text = study.get("title", "Untitled Study")
     _pdf_write_text(pdf, title_text, 14, style="B", cjk_available=cjk_ok, h=10)
-    st_label = STUDY_TYPE_LABELS.get(study.get("study_type", ""), study.get("study_type", "Unknown"))
+    st_label = STUDY_TYPE_LABELS.get(
+        study.get("study_type", ""), study.get("study_type", "Unknown")
+    )
     status_line = f"Type: {st_label}  |  Status: {study.get('status', 'unknown')}"
     _pdf_write_text(pdf, status_line, 10, cjk_available=cjk_ok, h=6)
     pdf.ln(6)
@@ -2642,7 +3163,9 @@ def generate_report_pdf(study, sections):
         pdf.set_fill_color(240, 240, 240)
         pdf.cell(0, 8, heading, new_x="LMARGIN", new_y="NEXT", fill=True)
         pdf.ln(2)
-        _pdf_write_text(pdf, content, 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5)
+        _pdf_write_text(
+            pdf, content, 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5
+        )
         pdf.ln(4)
 
     fu_sections = sections.get("followup_sections", [])
@@ -2652,7 +3175,9 @@ def generate_report_pdf(study, sections):
         heading = f"{5 + fus['round']}. Follow-up Round {fus['round']}"
         pdf.cell(0, 8, heading, new_x="LMARGIN", new_y="NEXT", fill=True)
         pdf.ln(2)
-        _pdf_write_text(pdf, fus["content"], 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5)
+        _pdf_write_text(
+            pdf, fus["content"], 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5
+        )
         pdf.ln(4)
 
     return pdf.output()
@@ -2661,71 +3186,106 @@ def generate_report_pdf(study, sections):
 def generate_placeholder_output(study_type, study, persona_names):
     header = "*** SIMULATED PLACEHOLDER — NOT REAL OUTPUT ***"
     if study_type == "synthetic_survey":
-        return json.dumps({
-            "disclaimer": header,
-            "study_title": study["title"],
-            "study_type": "synthetic_survey",
-            "summary": "This is a placeholder aggregated survey result. No real respondents were surveyed.",
-            "sample_size": 200,
-            "questions": [
-                {
-                    "q": "How satisfied are you with the product?",
-                    "results": {"Very satisfied": "32%", "Satisfied": "41%", "Neutral": "15%", "Dissatisfied": "8%", "Very dissatisfied": "4%"},
-                },
-                {
-                    "q": "Would you recommend this product to a friend?",
-                    "results": {"Definitely yes": "28%", "Probably yes": "35%", "Not sure": "22%", "Probably not": "10%", "Definitely not": "5%"},
-                },
-                {
-                    "q": "What is your primary reason for using this product?",
-                    "results": {"Price": "25%", "Quality": "30%", "Convenience": "20%", "Brand trust": "15%", "Other": "10%"},
-                },
-            ],
-        }, indent=2)
+        return json.dumps(
+            {
+                "disclaimer": header,
+                "study_title": study["title"],
+                "study_type": "synthetic_survey",
+                "summary": "This is a placeholder aggregated survey result. No real respondents were surveyed.",
+                "sample_size": 200,
+                "questions": [
+                    {
+                        "q": "How satisfied are you with the product?",
+                        "results": {
+                            "Very satisfied": "32%",
+                            "Satisfied": "41%",
+                            "Neutral": "15%",
+                            "Dissatisfied": "8%",
+                            "Very dissatisfied": "4%",
+                        },
+                    },
+                    {
+                        "q": "Would you recommend this product to a friend?",
+                        "results": {
+                            "Definitely yes": "28%",
+                            "Probably yes": "35%",
+                            "Not sure": "22%",
+                            "Probably not": "10%",
+                            "Definitely not": "5%",
+                        },
+                    },
+                    {
+                        "q": "What is your primary reason for using this product?",
+                        "results": {
+                            "Price": "25%",
+                            "Quality": "30%",
+                            "Convenience": "20%",
+                            "Brand trust": "15%",
+                            "Other": "10%",
+                        },
+                    },
+                ],
+            },
+            indent=2,
+        )
     elif study_type == "synthetic_idi":
         speakers = persona_names if persona_names else ["Respondent"]
         lines = [header, "", f"Study: {study['title']}", f"Type: Synthetic IDI", ""]
         for speaker in speakers[:3]:
-            lines.extend([
-                f"--- Interview with {speaker} ---",
-                "",
-                f"Moderator: Thank you for joining, {speaker}. Can you tell me about your experience?",
-                f"{speaker}: Sure. I've been using the product for about 6 months now. Overall it's been positive.",
-                "",
-                f"Moderator: What stands out most to you?",
-                f"{speaker}: The ease of use is the biggest factor. I don't have to think about it.",
-                "",
-                f"Moderator: Are there any areas for improvement?",
-                f"{speaker}: The pricing could be more transparent. Sometimes I'm not sure what I'm paying for.",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"--- Interview with {speaker} ---",
+                    "",
+                    f"Moderator: Thank you for joining, {speaker}. Can you tell me about your experience?",
+                    f"{speaker}: Sure. I've been using the product for about 6 months now. Overall it's been positive.",
+                    "",
+                    f"Moderator: What stands out most to you?",
+                    f"{speaker}: The ease of use is the biggest factor. I don't have to think about it.",
+                    "",
+                    f"Moderator: Are there any areas for improvement?",
+                    f"{speaker}: The pricing could be more transparent. Sometimes I'm not sure what I'm paying for.",
+                    "",
+                ]
+            )
         return "\n".join(lines)
     elif study_type == "synthetic_focus_group":
-        speakers = persona_names if len(persona_names) >= 4 else ["Participant A", "Participant B", "Participant C", "Participant D"]
-        lines = [header, "", f"Study: {study['title']}", f"Type: Synthetic Focus Group", ""]
-        lines.extend([
-            "Moderator: Welcome everyone. Let's start by discussing your first impressions.",
+        speakers = (
+            persona_names
+            if len(persona_names) >= 4
+            else ["Participant A", "Participant B", "Participant C", "Participant D"]
+        )
+        lines = [
+            header,
             "",
-            f"{speakers[0]}: I was skeptical at first, but the onboarding was smooth.",
-            f"{speakers[1]}: Same here. Though I had some confusion with the navigation.",
-            f"{speakers[2]}: I actually found it intuitive from day one.",
-            f"{speakers[3] if len(speakers) > 3 else 'Participant D'}: The design is clean but I wish there were more customization options.",
+            f"Study: {study['title']}",
+            f"Type: Synthetic Focus Group",
             "",
-            "Moderator: Interesting. How about ongoing usage?",
-            "",
-            f"{speakers[0]}: I use it daily now. It's become part of my routine.",
-            f"{speakers[1]}: Weekly for me. Mostly for the reporting features.",
-            f"{speakers[2]}: I've tried alternatives but keep coming back.",
-            f"{speakers[3] if len(speakers) > 3 else 'Participant D'}: The mobile experience could use work.",
-            "",
-            "Moderator: Any final thoughts?",
-            "",
-            f"{speakers[0]}: Keep improving the speed. That's my top ask.",
-            f"{speakers[1]}: More integrations with other tools would help.",
-            f"{speakers[2]}: Overall very satisfied.",
-            f"{speakers[3] if len(speakers) > 3 else 'Participant D'}: Agree with what's been said.",
-            "",
-        ])
+        ]
+        lines.extend(
+            [
+                "Moderator: Welcome everyone. Let's start by discussing your first impressions.",
+                "",
+                f"{speakers[0]}: I was skeptical at first, but the onboarding was smooth.",
+                f"{speakers[1]}: Same here. Though I had some confusion with the navigation.",
+                f"{speakers[2]}: I actually found it intuitive from day one.",
+                f"{speakers[3] if len(speakers) > 3 else 'Participant D'}: The design is clean but I wish there were more customization options.",
+                "",
+                "Moderator: Interesting. How about ongoing usage?",
+                "",
+                f"{speakers[0]}: I use it daily now. It's become part of my routine.",
+                f"{speakers[1]}: Weekly for me. Mostly for the reporting features.",
+                f"{speakers[2]}: I've tried alternatives but keep coming back.",
+                f"{speakers[3] if len(speakers) > 3 else 'Participant D'}: The mobile experience could use work.",
+                "",
+                "Moderator: Any final thoughts?",
+                "",
+                f"{speakers[0]}: Keep improving the speed. That's my top ask.",
+                f"{speakers[1]}: More integrations with other tools would help.",
+                f"{speakers[2]}: Overall very satisfied.",
+                f"{speakers[3] if len(speakers) > 3 else 'Participant D'}: Agree with what's been said.",
+                "",
+            ]
+        )
         return "\n".join(lines)
     return json.dumps({"disclaimer": header, "error": "Unknown study type"})
 
@@ -2762,13 +3322,17 @@ def run_ben_qa(study_dict):
         if r_count is None or not (1 <= int(r_count) <= 400):
             failures.append(f"respondent_count invalid ({r_count})")
         if not failures and len(sq) != int(q_count):
-            failures.append(f"survey has {len(sq)} questions but question_count is {q_count}")
+            failures.append(
+                f"survey has {len(sq)} questions but question_count is {q_count}"
+            )
         if len(sq) < 1 and not failures:
             failures.append("survey has no questions defined")
         study_id_debug = study_dict.get("id", "?")
         if failures:
             decision = "FAIL"
-            print(f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision={decision}")
+            print(
+                f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision={decision}"
+            )
             return {
                 "decision": decision,
                 "notes": f"QA failed: {'; '.join(failures)}.",
@@ -2790,7 +3354,9 @@ def run_ben_qa(study_dict):
             if not val or not str(val).strip():
                 missing_anchors.append(field_label)
         if missing_anchors:
-            print(f"QA_DEBUG qual study={study_id_debug} missing_anchors={missing_anchors} decision=FAIL")
+            print(
+                f"QA_DEBUG qual study={study_id_debug} missing_anchors={missing_anchors} decision=FAIL"
+            )
             return {
                 "decision": "FAIL",
                 "notes": f"QA failed: missing research brief anchors: {', '.join(missing_anchors)}.",
@@ -2799,14 +3365,18 @@ def run_ben_qa(study_dict):
         personas = normalize_personas_used(study_dict.get("personas_used"))
         pc = len(personas)
         if study_type == "synthetic_idi" and (pc < 1 or pc > 3):
-            print(f"QA_DEBUG qual study={study_id_debug} missing_anchors=[] persona_count={pc} decision=FAIL")
+            print(
+                f"QA_DEBUG qual study={study_id_debug} missing_anchors=[] persona_count={pc} decision=FAIL"
+            )
             return {
                 "decision": "FAIL",
                 "notes": f"QA failed: IDI requires 1–3 personas, found {pc}.",
                 "confidence_labels": fail_zero,
             }
         if study_type == "synthetic_focus_group" and (pc < 4 or pc > 6):
-            print(f"QA_DEBUG qual study={study_id_debug} missing_anchors=[] persona_count={pc} decision=FAIL")
+            print(
+                f"QA_DEBUG qual study={study_id_debug} missing_anchors=[] persona_count={pc} decision=FAIL"
+            )
             return {
                 "decision": "FAIL",
                 "notes": f"QA failed: Focus Group requires 4–6 personas, found {pc}.",
@@ -2823,7 +3393,9 @@ def run_ben_qa(study_dict):
                 n_insights = len(parsed.get("questions", []))
             except (json.JSONDecodeError, TypeError):
                 n_insights = 3
-            print(f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision=DOWNGRADE")
+            print(
+                f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision=DOWNGRADE"
+            )
         elif study_type == "synthetic_idi":
             n_insights = output.count("--- Interview with")
             if n_insights == 0:
@@ -2838,7 +3410,11 @@ def run_ben_qa(study_dict):
         return {
             "decision": "DOWNGRADE",
             "notes": "Output is placeholder; confidence downgraded.",
-            "confidence_labels": {"Strong": 0, "Indicative": min(n_insights, 2), "Exploratory": max(0, n_insights - 2)},
+            "confidence_labels": {
+                "Strong": 0,
+                "Indicative": min(n_insights, 2),
+                "Exploratory": max(0, n_insights - 2),
+            },
         }
 
     if study_type == "synthetic_survey":
@@ -2847,14 +3423,20 @@ def run_ben_qa(study_dict):
             n_insights = len(parsed.get("questions", []))
         except (json.JSONDecodeError, TypeError):
             n_insights = 3
-        print(f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision=PASS")
+        print(
+            f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision=PASS"
+        )
     else:
         n_insights = 3
 
     return {
         "decision": "PASS",
         "notes": "All checks passed. Output meets quality standards.",
-        "confidence_labels": {"Strong": max(1, n_insights // 2), "Indicative": n_insights - max(1, n_insights // 2), "Exploratory": 0},
+        "confidence_labels": {
+            "Strong": max(1, n_insights // 2),
+            "Indicative": n_insights - max(1, n_insights // 2),
+            "Exploratory": 0,
+        },
     }
 
 
@@ -2895,10 +3477,14 @@ def ben_precheck(study, persona_count):
                 failures.append(f"{label} is missing.")
         if st == "synthetic_idi":
             if persona_count < 1 or persona_count > 3:
-                failures.append(f"IDI requires 1–3 personas (currently {persona_count}).")
+                failures.append(
+                    f"IDI requires 1–3 personas (currently {persona_count})."
+                )
         else:
             if persona_count < 4 or persona_count > 6:
-                failures.append(f"Focus Group requires 4–6 personas (currently {persona_count}).")
+                failures.append(
+                    f"Focus Group requires 4–6 personas (currently {persona_count})."
+                )
     else:
         failures.append(f"Unknown study type: {st}")
 
@@ -2963,29 +3549,50 @@ def download_pdf(study_id):
         return render_error("Study not found.")
     if study["status"] not in ("completed", "qa_blocked", "terminated_system"):
         conn.close()
-        return render_error("Report is only available for completed or reviewed studies.")
+        return render_error(
+            "Report is only available for completed or reviewed studies."
+        )
     followup_rows = conn.execute(
         "SELECT * FROM followups WHERE study_id = ? ORDER BY followup_round ASC",
         (study_id,),
     ).fetchall()
-    upload_names = [r["filename"] for r in conn.execute(
-        """SELECT u.filename FROM study_documents sd
+    upload_names = [
+        r["filename"]
+        for r in conn.execute(
+            """SELECT u.filename FROM study_documents sd
            JOIN user_uploads u ON u.id = sd.user_doc_id
-           WHERE sd.study_id = ?""", (study_id,)
-    ).fetchall()]
-    active_admin_names = [r["filename"] for r in conn.execute(
-        "SELECT filename FROM admin_uploads WHERE status = 'active'"
-    ).fetchall()]
+           WHERE sd.study_id = ?""",
+            (study_id,),
+        ).fetchall()
+    ]
+    active_admin_names = [
+        r["filename"]
+        for r in conn.execute(
+            "SELECT filename FROM admin_uploads WHERE status = 'active'"
+        ).fetchall()
+    ]
     conn.close()
     all_upload_names = upload_names + active_admin_names
     followups = [dict(f) for f in followup_rows]
     study_dict = dict(study)
     version_param = request.args.get("version")
     version = int(version_param) if version_param and version_param.isdigit() else None
-    sections = build_structured_report(study_dict, followups=followups, version=version, uploaded_filenames=all_upload_names)
+    sections = build_structured_report(
+        study_dict,
+        followups=followups,
+        version=version,
+        uploaded_filenames=all_upload_names,
+    )
     pdf_bytes = generate_report_pdf(study_dict, sections)
     report_version = sections.get("version", 1)
-    safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in (study_dict.get("title") or f"study_{study_id}")).strip().replace(" ", "_")
+    safe_title = (
+        "".join(
+            c if c.isalnum() or c in (" ", "-", "_") else ""
+            for c in (study_dict.get("title") or f"study_{study_id}")
+        )
+        .strip()
+        .replace(" ", "_")
+    )
     filename = f"{safe_title}_{study_id}_V{report_version}.pdf"
     return send_file(
         io.BytesIO(pdf_bytes),
@@ -3045,7 +3652,9 @@ def submit_followup(study_id):
 
     if study["study_type"] not in ("synthetic_idi", "synthetic_focus_group"):
         conn.close()
-        return render_error("Follow-ups are only available for IDI and Focus Group studies.")
+        return render_error(
+            "Follow-ups are only available for IDI and Focus Group studies."
+        )
 
     existing_count = conn.execute(
         "SELECT COUNT(*) FROM followups WHERE study_id = ?",
@@ -3066,7 +3675,9 @@ def submit_followup(study_id):
 
     round_num = existing_count + 1
     study_dict = dict(study)
-    followup_output = generate_followup_placeholder(study_dict, user_question, round_num)
+    followup_output = generate_followup_placeholder(
+        study_dict, user_question, round_num
+    )
 
     qa_input = dict(study_dict)
     qa_input["study_output"] = followup_output
@@ -3077,7 +3688,14 @@ def submit_followup(study_id):
     conn.execute(
         """INSERT INTO followups (study_id, followup_round, user_question, generated_output, qa_status, qa_notes)
            VALUES (?, ?, ?, ?, ?, ?)""",
-        (study_id, round_num, user_question, followup_output, fu_qa_status, fu_qa_notes),
+        (
+            study_id,
+            round_num,
+            user_question,
+            followup_output,
+            fu_qa_status,
+            fu_qa_notes,
+        ),
     )
     conn.commit()
     conn.close()
@@ -3160,12 +3778,36 @@ def get_coaching_nudge(study, persona_count):
 
     if st in ("synthetic_idi", "synthetic_focus_group"):
         anchors = [
-            ("business_problem", "Business Problem", "What business challenge should this research address?"),
-            ("decision_to_support", "Decision to Support", "What specific decision will this research inform?"),
-            ("known_vs_unknown", "Known vs Unknown", "What do you already know, and what remains unknown?"),
-            ("target_audience", "Target Audience", "Who is the target audience for this research?"),
-            ("study_fit", "Study Fit", "Why is this study type appropriate, and what can it NOT answer?"),
-            ("definition_useful_insight", "Definition of Useful Insight", "What would a useful insight look like for this study?"),
+            (
+                "business_problem",
+                "Business Problem",
+                "What business challenge should this research address?",
+            ),
+            (
+                "decision_to_support",
+                "Decision to Support",
+                "What specific decision will this research inform?",
+            ),
+            (
+                "known_vs_unknown",
+                "Known vs Unknown",
+                "What do you already know, and what remains unknown?",
+            ),
+            (
+                "target_audience",
+                "Target Audience",
+                "Who is the target audience for this research?",
+            ),
+            (
+                "study_fit",
+                "Study Fit",
+                "Why is this study type appropriate, and what can it NOT answer?",
+            ),
+            (
+                "definition_useful_insight",
+                "Definition of Useful Insight",
+                "What would a useful insight look like for this study?",
+            ),
         ]
         for field, label, prompt in anchors:
             val = (study[field] or "").strip()
@@ -3207,8 +3849,15 @@ def save_chat_field(study_id):
         return render_error("No user message to save.")
     value = last_user_msg["message_text"]
 
-    valid_fields = {"business_problem", "decision_to_support", "known_vs_unknown",
-                    "target_audience", "study_fit", "definition_useful_insight", "survey_question_append"}
+    valid_fields = {
+        "business_problem",
+        "decision_to_support",
+        "known_vs_unknown",
+        "target_audience",
+        "study_fit",
+        "definition_useful_insight",
+        "survey_question_append",
+    }
     if field not in valid_fields:
         conn.close()
         return render_error("Invalid field.")
@@ -3223,7 +3872,9 @@ def save_chat_field(study_id):
         qc = study["question_count"] or 0
         if len(sq) >= qc:
             conn.close()
-            return render_error(f"Already have {len(sq)}/{qc} questions. Cannot add more.")
+            return render_error(
+                f"Already have {len(sq)}/{qc} questions. Cannot add more."
+            )
         sq.append(value)
         conn.execute(
             "UPDATE studies SET survey_questions = ? WHERE id = ?",
@@ -3307,7 +3958,9 @@ def run_study(study_id):
 
     if study["qa_status"] != "precheck_passed":
         conn.close()
-        return render_error("You must pass Ben's QA precheck before running the study. Click 'Ready for QA Review' first.")
+        return render_error(
+            "You must pass Ben's QA precheck before running the study. Click 'Ready for QA Review' first."
+        )
 
     study_type = study["study_type"]
     if not study_type:
@@ -3329,7 +3982,9 @@ def run_study(study_id):
         sq = json.loads(study["survey_questions"] or "[]")
         if len(sq) != q_count:
             conn.close()
-            return render_error(f"Survey must have exactly {q_count} questions (currently {len(sq)}). Save your questions first.")
+            return render_error(
+                f"Survey must have exactly {q_count} questions (currently {len(sq)}). Save your questions first."
+            )
     elif study_type in ("synthetic_idi", "synthetic_focus_group"):
         anchor_missing = []
         for col, label in [
@@ -3345,7 +4000,9 @@ def run_study(study_id):
                 anchor_missing.append(label)
         if anchor_missing:
             conn.close()
-            return render_error(f"Cannot run: the following Research Brief anchors are missing: {', '.join(anchor_missing)}")
+            return render_error(
+                f"Cannot run: the following Research Brief anchors are missing: {', '.join(anchor_missing)}"
+            )
         if study_type == "synthetic_idi":
             if persona_count < 1:
                 conn.close()
@@ -3416,12 +4073,22 @@ def run_study(study_id):
         termination_reason = "budget_exhaustion"
         final_report = None
         qa_decision = "FAIL"
-        qa_notes = f"Budget ceiling exceeded: {tokens_total} tokens > {ceiling} ceiling."
+        qa_notes = (
+            f"Budget ceiling exceeded: {tokens_total} tokens > {ceiling} ceiling."
+        )
 
     conn.execute(
         """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
            confidence_summary = ?, final_report = ? WHERE id = ?""",
-        (final_status, output, qa_decision.lower(), qa_notes, confidence_summary, final_report, study_id),
+        (
+            final_status,
+            output,
+            qa_decision.lower(),
+            qa_notes,
+            confidence_summary,
+            final_report,
+            study_id,
+        ),
     )
 
     conn.execute(
@@ -3429,8 +4096,17 @@ def run_study(study_id):
            (study_id, study_type, tokens_mark, tokens_lisa, tokens_ben, tokens_total,
             model_call_count, qa_retry_count, followup_round_count, status, termination_reason)
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)""",
-        (study_id, study_type, tokens_mark, tokens_lisa, tokens_ben, tokens_total,
-         model_call_count, final_status, termination_reason),
+        (
+            study_id,
+            study_type,
+            tokens_mark,
+            tokens_lisa,
+            tokens_ben,
+            tokens_total,
+            model_call_count,
+            final_status,
+            termination_reason,
+        ),
     )
 
     create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
@@ -3507,7 +4183,9 @@ def save_survey_questions(study_id):
 
     if len(questions) != q_count:
         conn.close()
-        return render_error(f"You must provide exactly {q_count} questions (got {len(questions)}).")
+        return render_error(
+            f"You must provide exactly {q_count} questions (got {len(questions)})."
+        )
 
     conn.execute(
         "UPDATE studies SET survey_questions = ? WHERE id = ?",
@@ -3535,7 +4213,9 @@ def save_remaining_anchors(study_id):
         return render_error("Draft study not found.")
     if study["study_type"] not in ("synthetic_idi", "synthetic_focus_group"):
         conn.close()
-        return render_error("Remaining anchors only apply to IDI or Focus Group studies.")
+        return render_error(
+            "Remaining anchors only apply to IDI or Focus Group studies."
+        )
 
     ku = (request.form.get("known_vs_unknown") or "").strip()
     ta = (request.form.get("target_audience") or "").strip()
@@ -3663,13 +4343,20 @@ def create_persona():
         return render_error("Persona name is required.", show_new_persona=True)
 
     import random as _random
+
     conn = get_db()
-    pool_models = [r["model_id"] for r in conn.execute(
-        "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
-    ).fetchall()]
+    pool_models = [
+        r["model_id"]
+        for r in conn.execute(
+            "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
+        ).fetchall()
+    ]
     if not pool_models:
         conn.close()
-        return render_error("Cannot create persona: no active models in the persona model pool. An admin must configure at least one pool model.", show_new_persona=True)
+        return render_error(
+            "Cannot create persona: no active models in the persona model pool. An admin must configure at least one pool model.",
+            show_new_persona=True,
+        )
 
     dossier = {}
     for field_key, field_label in PERSONA_DOSSIER_FIELDS:
@@ -3695,14 +4382,23 @@ def create_persona():
             ai_model_provenance, grounding_sources, confidence_and_limits)
            VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            user["id"], new_instance_id, new_instance_id, name,
-            dossier["persona_summary"], dossier["demographic_frame"],
-            dossier["psychographic_profile"], dossier["contextual_constraints"],
-            dossier["behavioural_tendencies"], provenance,
-            dossier["grounding_sources"], dossier["confidence_and_limits"],
+            user["id"],
+            new_instance_id,
+            new_instance_id,
+            name,
+            dossier["persona_summary"],
+            dossier["demographic_frame"],
+            dossier["psychographic_profile"],
+            dossier["contextual_constraints"],
+            dossier["behavioural_tendencies"],
+            provenance,
+            dossier["grounding_sources"],
+            dossier["confidence_and_limits"],
         ),
     )
-    create_grounding_trace(conn, trigger_event="persona_created", persona_id=new_instance_id)
+    create_grounding_trace(
+        conn, trigger_event="persona_created", persona_id=new_instance_id
+    )
     conn.commit()
     conn.close()
     return redirect(url_for("index", token=token, view_persona=new_instance_id))
@@ -3739,15 +4435,20 @@ def admin_set_model_config():
     if not is_admin:
         return render_error("Admin access required.")
     conn = get_db()
-    active_models = {r["model_id"] for r in conn.execute(
-        "SELECT model_id FROM allowed_models WHERE status = 'active'"
-    ).fetchall()}
+    active_models = {
+        r["model_id"]
+        for r in conn.execute(
+            "SELECT model_id FROM allowed_models WHERE status = 'active'"
+        ).fetchall()
+    }
     for key in ("mark_model", "lisa_model", "ben_model"):
         val = (request.form.get(key) or "").strip()
         if val:
             if val not in active_models:
                 conn.close()
-                return render_error(f"Model '{val}' is not in the active allowed models list.")
+                return render_error(
+                    f"Model '{val}' is not in the active allowed models list."
+                )
             conn.execute(
                 "INSERT INTO model_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
                 (key, val, val),
@@ -3768,7 +4469,9 @@ def admin_add_allowed_model():
     if not model_id:
         return render_error("Model ID is required.")
     conn = get_db()
-    existing = conn.execute("SELECT id FROM allowed_models WHERE model_id = ?", (model_id,)).fetchone()
+    existing = conn.execute(
+        "SELECT id FROM allowed_models WHERE model_id = ?", (model_id,)
+    ).fetchone()
     if existing:
         conn.close()
         return render_error(f"Model '{model_id}' already exists in allowed models.")
@@ -3788,10 +4491,15 @@ def admin_toggle_allowed_model(model_db_id):
     if not is_admin:
         return render_error("Admin access required.")
     conn = get_db()
-    row = conn.execute("SELECT status FROM allowed_models WHERE id = ?", (model_db_id,)).fetchone()
+    row = conn.execute(
+        "SELECT status FROM allowed_models WHERE id = ?", (model_db_id,)
+    ).fetchone()
     if row:
         new_status = "disabled" if row["status"] == "active" else "active"
-        conn.execute("UPDATE allowed_models SET status = ? WHERE id = ?", (new_status, model_db_id))
+        conn.execute(
+            "UPDATE allowed_models SET status = ? WHERE id = ?",
+            (new_status, model_db_id),
+        )
         conn.commit()
     conn.close()
     return redirect(url_for("index", token=token))
@@ -3820,11 +4528,18 @@ def admin_add_pool_model():
     if not model_id:
         return render_error("Model ID is required.")
     conn = get_db()
-    allowed = conn.execute("SELECT id FROM allowed_models WHERE model_id = ? AND status = 'active'", (model_id,)).fetchone()
+    allowed = conn.execute(
+        "SELECT id FROM allowed_models WHERE model_id = ? AND status = 'active'",
+        (model_id,),
+    ).fetchone()
     if not allowed:
         conn.close()
-        return render_error(f"Model '{model_id}' must be in the active allowed models list before adding to persona pool.")
-    existing = conn.execute("SELECT id FROM persona_model_pool WHERE model_id = ?", (model_id,)).fetchone()
+        return render_error(
+            f"Model '{model_id}' must be in the active allowed models list before adding to persona pool."
+        )
+    existing = conn.execute(
+        "SELECT id FROM persona_model_pool WHERE model_id = ?", (model_id,)
+    ).fetchone()
     if existing:
         conn.close()
         return render_error(f"Model '{model_id}' is already in the persona model pool.")
@@ -3844,10 +4559,15 @@ def admin_toggle_pool_model(pool_id):
     if not is_admin:
         return render_error("Admin access required.")
     conn = get_db()
-    row = conn.execute("SELECT status FROM persona_model_pool WHERE id = ?", (pool_id,)).fetchone()
+    row = conn.execute(
+        "SELECT status FROM persona_model_pool WHERE id = ?", (pool_id,)
+    ).fetchone()
     if row:
         new_status = "disabled" if row["status"] == "active" else "active"
-        conn.execute("UPDATE persona_model_pool SET status = ? WHERE id = ?", (new_status, pool_id))
+        conn.execute(
+            "UPDATE persona_model_pool SET status = ? WHERE id = ?",
+            (new_status, pool_id),
+        )
         conn.commit()
     conn.close()
     return redirect(url_for("index", token=token))
@@ -3873,8 +4593,12 @@ def admin_import_openrouter_models():
     if not is_admin:
         return render_error("Admin access required.")
     import urllib.request as ur
+
     try:
-        req = ur.Request("https://openrouter.ai/api/v1/models", headers={"User-Agent": "ProjectBrainstorm/1.0"})
+        req = ur.Request(
+            "https://openrouter.ai/api/v1/models",
+            headers={"User-Agent": "ProjectBrainstorm/1.0"},
+        )
         resp = ur.urlopen(req, timeout=10)
         data = json.loads(resp.read().decode())
         models = data.get("data", [])
@@ -3883,7 +4607,9 @@ def admin_import_openrouter_models():
         for m in models:
             mid = m.get("id", "")
             if mid:
-                existing = conn.execute("SELECT id FROM allowed_models WHERE model_id = ?", (mid,)).fetchone()
+                existing = conn.execute(
+                    "SELECT id FROM allowed_models WHERE model_id = ?", (mid,)
+                ).fetchone()
                 if not existing:
                     conn.execute(
                         "INSERT INTO allowed_models (model_id, source, status) VALUES (?, 'openrouter', 'active')",
@@ -3894,7 +4620,9 @@ def admin_import_openrouter_models():
         conn.close()
         return redirect(url_for("index", token=token))
     except Exception:
-        return render_error("Failed to fetch models from OpenRouter API. Please use the OpenRouter Models catalog link to browse model IDs manually.")
+        return render_error(
+            "Failed to fetch models from OpenRouter API. Please use the OpenRouter Models catalog link to browse model IDs manually."
+        )
 
 
 @app.route("/admin/model-health/run", methods=["POST"])
@@ -3916,13 +4644,22 @@ def admin_model_health_status():
     if not is_admin:
         return render_error("Admin access required.")
     conn = get_db()
-    rows = [dict(r) for r in conn.execute("SELECT * FROM model_health_status ORDER BY model_id").fetchall()]
-    last_check = conn.execute("SELECT * FROM model_health_checks ORDER BY id DESC LIMIT 1").fetchone()
+    rows = [
+        dict(r)
+        for r in conn.execute(
+            "SELECT * FROM model_health_status ORDER BY model_id"
+        ).fetchall()
+    ]
+    last_check = conn.execute(
+        "SELECT * FROM model_health_checks ORDER BY id DESC LIMIT 1"
+    ).fetchone()
     conn.close()
-    return jsonify({
-        "models": rows,
-        "last_check": dict(last_check) if last_check else None,
-    })
+    return jsonify(
+        {
+            "models": rows,
+            "last_check": dict(last_check) if last_check else None,
+        }
+    )
 
 
 @app.route("/admin/weekly-qa-report/latest", methods=["GET"])
@@ -3932,7 +4669,9 @@ def admin_weekly_qa_report_latest():
     if not is_admin:
         return render_error("Admin access required.")
     conn = get_db()
-    row = conn.execute("SELECT * FROM weekly_qa_reports ORDER BY id DESC LIMIT 1").fetchone()
+    row = conn.execute(
+        "SELECT * FROM weekly_qa_reports ORDER BY id DESC LIMIT 1"
+    ).fetchone()
     conn.close()
     if row:
         return jsonify(dict(row))
@@ -3973,10 +4712,15 @@ def admin_toggle_source(source_id):
         return render_error("Admin access required.")
 
     conn = get_db()
-    row = conn.execute("SELECT status FROM admin_web_sources WHERE id = ?", (source_id,)).fetchone()
+    row = conn.execute(
+        "SELECT status FROM admin_web_sources WHERE id = ?", (source_id,)
+    ).fetchone()
     if row:
         new_status = "disabled" if row["status"] == "active" else "active"
-        conn.execute("UPDATE admin_web_sources SET status = ? WHERE id = ?", (new_status, source_id))
+        conn.execute(
+            "UPDATE admin_web_sources SET status = ? WHERE id = ?",
+            (new_status, source_id),
+        )
         conn.commit()
     conn.close()
     return redirect(url_for("index", token=token))
@@ -4007,7 +4751,12 @@ def render_error(message, show_new_research=False, show_new_persona=False):
             show_tab = "login"
         else:
             show_tab = "signup"
-        return render_template("landing.html", error=message, show_auth_tab=show_tab, latest_blog_posts=get_latest_blog_posts(2))
+        return render_template(
+            "landing.html",
+            error=message,
+            show_auth_tab=show_tab,
+            latest_blog_posts=get_latest_blog_posts(2),
+        )
     pending_users = []
     all_users = []
     studies = []
@@ -4015,19 +4764,28 @@ def render_error(message, show_new_research=False, show_new_persona=False):
     configure_study = None
     if is_admin:
         conn = get_db()
-        pending_users = [dict(r) for r in conn.execute(
-            "SELECT id, email, username, state, created_at FROM users WHERE state = 'pending' ORDER BY created_at DESC"
-        ).fetchall()]
-        all_users = [dict(r) for r in conn.execute(
-            "SELECT id, email, username, state, created_at FROM users ORDER BY created_at DESC"
-        ).fetchall()]
+        pending_users = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT id, email, username, state, created_at FROM users WHERE state = 'pending' ORDER BY created_at DESC"
+            ).fetchall()
+        ]
+        all_users = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT id, email, username, state, created_at FROM users ORDER BY created_at DESC"
+            ).fetchall()
+        ]
         conn.close()
     if user and user["state"] == "active":
         conn = get_db()
-        studies = [dict(r) for r in conn.execute(
-            "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? ORDER BY created_at DESC",
-            (user["id"],),
-        ).fetchall()]
+        studies = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? ORDER BY created_at DESC",
+                (user["id"],),
+            ).fetchall()
+        ]
         personas_list = get_user_personas_list(conn, user["id"])
         conn.close()
     if not show_new_persona:
@@ -4041,27 +4799,42 @@ def render_error(message, show_new_research=False, show_new_persona=False):
     if is_admin:
         conn2 = get_db()
         admin_web_sources = get_admin_web_sources(conn2)
-        grounding_traces = [dict(r) for r in conn2.execute(
-            "SELECT * FROM grounding_traces ORDER BY id DESC LIMIT 50"
-        ).fetchall()]
-        cost_telemetry_rows = [dict(r) for r in conn2.execute(
-            "SELECT * FROM cost_telemetry ORDER BY id DESC LIMIT 50"
-        ).fetchall()]
+        grounding_traces = [
+            dict(r)
+            for r in conn2.execute(
+                "SELECT * FROM grounding_traces ORDER BY id DESC LIMIT 50"
+            ).fetchall()
+        ]
+        cost_telemetry_rows = [
+            dict(r)
+            for r in conn2.execute(
+                "SELECT * FROM cost_telemetry ORDER BY id DESC LIMIT 50"
+            ).fetchall()
+        ]
         for row in conn2.execute("SELECT key, value FROM model_config").fetchall():
             model_config[row["key"]] = row["value"]
-        allowed_models_list = [dict(r) for r in conn2.execute(
-            "SELECT * FROM allowed_models ORDER BY model_id"
-        ).fetchall()]
-        persona_pool_list = [dict(r) for r in conn2.execute(
-            "SELECT * FROM persona_model_pool ORDER BY model_id"
-        ).fetchall()]
+        allowed_models_list = [
+            dict(r)
+            for r in conn2.execute(
+                "SELECT * FROM allowed_models ORDER BY model_id"
+            ).fetchall()
+        ]
+        persona_pool_list = [
+            dict(r)
+            for r in conn2.execute(
+                "SELECT * FROM persona_model_pool ORDER BY model_id"
+            ).fetchall()
+        ]
         conn2.close()
     all_blog_posts_err = []
     if is_admin:
         conn3 = get_db()
-        all_blog_posts_err = [dict(r) for r in conn3.execute(
-            "SELECT * FROM blog_posts ORDER BY is_pinned DESC, pinned_rank ASC, created_at DESC, id DESC"
-        ).fetchall()]
+        all_blog_posts_err = [
+            dict(r)
+            for r in conn3.execute(
+                "SELECT * FROM blog_posts ORDER BY is_pinned DESC, pinned_rank ASC, created_at DESC, id DESC"
+            ).fetchall()
+        ]
         conn3.close()
     return render_template(
         "index.html",
@@ -4187,12 +4960,22 @@ def admin_dev_run_study(study_id):
         termination_reason = "budget_exhaustion"
         final_report = None
         qa_decision = "FAIL"
-        qa_notes = f"Budget ceiling exceeded: {tokens_total} tokens > {ceiling} ceiling."
+        qa_notes = (
+            f"Budget ceiling exceeded: {tokens_total} tokens > {ceiling} ceiling."
+        )
 
     conn.execute(
         """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
            confidence_summary = ?, final_report = ? WHERE id = ?""",
-        (final_status, output, qa_decision.lower(), qa_notes, confidence_summary, final_report, study_id),
+        (
+            final_status,
+            output,
+            qa_decision.lower(),
+            qa_notes,
+            confidence_summary,
+            final_report,
+            study_id,
+        ),
     )
 
     conn.execute(
@@ -4200,8 +4983,17 @@ def admin_dev_run_study(study_id):
            (study_id, study_type, tokens_mark, tokens_lisa, tokens_ben, tokens_total,
             model_call_count, qa_retry_count, followup_round_count, status, termination_reason)
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)""",
-        (study_id, study_type, tokens_mark, tokens_lisa, tokens_ben, tokens_total,
-         model_call_count, final_status, termination_reason),
+        (
+            study_id,
+            study_type,
+            tokens_mark,
+            tokens_lisa,
+            tokens_ben,
+            tokens_total,
+            model_call_count,
+            final_status,
+            termination_reason,
+        ),
     )
 
     create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
@@ -4248,14 +5040,22 @@ def admin_dev_inject_invalid_qual_study():
            business_problem, decision_to_support, known_vs_unknown,
            target_audience, study_fit, definition_useful_insight, personas_used)
            VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, '[]')""",
-        (admin_user["id"], f"DEV_INVALID_{study_type}_{blank_field}",
-         study_type,
-         anchors["business_problem"], anchors["decision_to_support"],
-         anchors["known_vs_unknown"], anchors["target_audience"],
-         anchors["study_fit"], anchors["definition_useful_insight"]),
+        (
+            admin_user["id"],
+            f"DEV_INVALID_{study_type}_{blank_field}",
+            study_type,
+            anchors["business_problem"],
+            anchors["decision_to_support"],
+            anchors["known_vs_unknown"],
+            anchors["target_audience"],
+            anchors["study_fit"],
+            anchors["definition_useful_insight"],
+        ),
     )
     conn.commit()
-    study_id = conn.execute("SELECT id FROM studies ORDER BY id DESC LIMIT 1").fetchone()["id"]
+    study_id = conn.execute(
+        "SELECT id FROM studies ORDER BY id DESC LIMIT 1"
+    ).fetchone()["id"]
     conn.close()
     return f"DEV ONLY: Created invalid {study_type} study id={study_id} with blank field '{blank_field}'. Use /admin/dev-run-study/{study_id} to test QA."
 
@@ -4285,7 +5085,13 @@ def admin_dev_cjk_pdf_test():
         pdf.ln(4)
     pdf.ln(8)
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 8, f"CJK fonts loaded: {'Yes' if cjk_ok else 'No'}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(
+        0,
+        8,
+        f"CJK fonts loaded: {'Yes' if cjk_ok else 'No'}",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
     pdf_bytes = pdf.output()
     return send_file(
         io.BytesIO(pdf_bytes),
@@ -4302,9 +5108,14 @@ def admin_export_studies_csv():
     if not is_admin:
         return "Admin access required.", 403
     import csv, io
+
     conn = get_db()
     rows = conn.execute("SELECT * FROM studies ORDER BY id").fetchall()
-    cols = [desc[0] for desc in conn.execute("SELECT * FROM studies LIMIT 1").description] if rows else []
+    cols = (
+        [desc[0] for desc in conn.execute("SELECT * FROM studies LIMIT 1").description]
+        if rows
+        else []
+    )
     conn.close()
     si = io.StringIO()
     w = csv.writer(si)
@@ -4325,9 +5136,17 @@ def admin_export_cost_telemetry_csv():
     if not is_admin:
         return "Admin access required.", 403
     import csv, io
+
     conn = get_db()
     rows = conn.execute("SELECT * FROM cost_telemetry ORDER BY id").fetchall()
-    cols = [desc[0] for desc in conn.execute("SELECT * FROM cost_telemetry LIMIT 1").description] if rows else []
+    cols = (
+        [
+            desc[0]
+            for desc in conn.execute("SELECT * FROM cost_telemetry LIMIT 1").description
+        ]
+        if rows
+        else []
+    )
     conn.close()
     si = io.StringIO()
     w = csv.writer(si)
@@ -4348,9 +5167,19 @@ def admin_export_grounding_traces_csv():
     if not is_admin:
         return "Admin access required.", 403
     import csv, io
+
     conn = get_db()
     rows = conn.execute("SELECT * FROM grounding_traces ORDER BY id").fetchall()
-    cols = [desc[0] for desc in conn.execute("SELECT * FROM grounding_traces LIMIT 1").description] if rows else []
+    cols = (
+        [
+            desc[0]
+            for desc in conn.execute(
+                "SELECT * FROM grounding_traces LIMIT 1"
+            ).description
+        ]
+        if rows
+        else []
+    )
     conn.close()
     si = io.StringIO()
     w = csv.writer(si)
@@ -4398,6 +5227,7 @@ def verify_email():
         )
 
     import random
+
     code = str(random.randint(100000, 999999))
     _verification_codes[user_id] = code
     return render_template(
@@ -4432,7 +5262,9 @@ def manage_account():
             (name, company, role, location, linkedin, user["id"]),
         )
         conn.commit()
-        user = dict(conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone())
+        user = dict(
+            conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+        )
         conn.close()
         success_msg = "Profile updated successfully."
 
@@ -4457,12 +5289,18 @@ def change_password():
 
     if not check_password_hash(user["password_hash"], current_pw):
         return render_template(
-            "account.html", token=token, user=user, success=None,
+            "account.html",
+            token=token,
+            user=user,
+            success=None,
             error="Current password is incorrect.",
         )
     if len(new_pw) < 6 or len(new_pw) > 10:
         return render_template(
-            "account.html", token=token, user=user, success=None,
+            "account.html",
+            token=token,
+            user=user,
+            success=None,
             error="New password must be 6–10 characters.",
         )
 
@@ -4474,7 +5312,10 @@ def change_password():
     conn.commit()
     conn.close()
     return render_template(
-        "account.html", token=token, user=user, success="Password changed successfully.",
+        "account.html",
+        token=token,
+        user=user,
+        success="Password changed successfully.",
         error=None,
     )
 
@@ -4491,7 +5332,11 @@ def admin_llm_smoke():
         return jsonify({"error": "model_id is required"}), 400
 
     try:
-        result = call_llm(model_id, [{"role": "user", "content": "Reply with the single word OK"}], purpose="smoke_test")
+        result = call_llm(
+            model_id,
+            [{"role": "user", "content": "Reply with the single word OK"}],
+            purpose="smoke_test",
+        )
         return jsonify({"model_id": model_id, "status": "ok", "response": result[:500]})
     except Exception as e:
         return jsonify({"model_id": model_id, "status": "error", "error": str(e)[:500]})
