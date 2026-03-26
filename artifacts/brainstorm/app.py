@@ -3457,10 +3457,10 @@ def ben_precheck(study, persona_count):
                 sq = json.loads(study["survey_questions"])
             except (json.JSONDecodeError, TypeError):
                 sq = []
-        if rc < 1:
-            failures.append("Respondent count is not set.")
-        if qc < 1:
-            failures.append("Question count is not set.")
+        if rc < 1 or rc > 400:
+            failures.append("Respondent count must be between 1 and 400.")
+        if qc < 1 or qc > 12:
+            failures.append("Question count must be between 1 and 12.")
         if len(sq) != qc:
             failures.append(f"Survey has {len(sq)} questions but needs exactly {qc}.")
     elif st in ("synthetic_idi", "synthetic_focus_group"):
