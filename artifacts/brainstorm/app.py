@@ -393,6 +393,11 @@ SEED_ALLOWED_MODELS = [
 ]
 
 
+def is_gpt_family(model_id: str) -> bool:
+    mid = model_id.lower().strip()
+    return mid.startswith("openai/gpt-") or mid.startswith("openai/gpt_") or "/gpt-" in mid
+
+
 def get_monthly_usage(conn, user_id):
     import calendar
 
@@ -711,10 +716,11 @@ def init_db():
                 (m,),
             )
         for m in SEED_ALLOWED_MODELS[:3]:
-            conn.execute(
-                "INSERT OR IGNORE INTO persona_model_pool (model_id, status) VALUES (?, 'active')",
-                (m,),
-            )
+            if not is_gpt_family(m):
+                conn.execute(
+                    "INSERT OR IGNORE INTO persona_model_pool (model_id, status) VALUES (?, 'active')",
+                    (m,),
+                )
         conn.execute(
             "INSERT OR IGNORE INTO model_config (key, value) VALUES ('mark_model', ?)",
             (SEED_ALLOWED_MODELS[0],),
@@ -4639,10 +4645,11 @@ def create_persona():
             "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
         ).fetchall()
     ]
+    pool_models = [m for m in pool_models if not is_gpt_family(m)]
     if not pool_models:
         conn.close()
         return render_error(
-            "Cannot create persona: no active models in the persona model pool. An admin must configure at least one pool model.",
+            "Cannot create persona: persona model pool has no active non-GPT models. An admin must configure at least one non-GPT model.",
             show_new_persona=True,
         )
 
@@ -4658,6 +4665,7 @@ def create_persona():
         dossier[field_key] = val
 
     selected_model = _random.choice(pool_models)
+    print(f"PERSONA_MODEL_SELECTED={selected_model}")
     provenance = f"{dossier['ai_model_provenance']} [model={selected_model}, selection_method=random from pool]"
 
     new_instance_id = f"P-{secrets.token_hex(4).upper()}"
@@ -4815,6 +4823,11 @@ def admin_add_pool_model():
     model_id = (request.form.get("model_id") or "").strip()
     if not model_id:
         return render_error("Model ID is required.")
+    if is_gpt_family(model_id):
+        return render_error(
+            f"Policy: GPT-family models may not be used for persona generation. "
+            f"'{model_id}' is blocked from the persona model pool."
+        )
     conn = get_db()
     allowed = conn.execute(
         "SELECT id FROM allowed_models WHERE model_id = ? AND status = 'active'",
