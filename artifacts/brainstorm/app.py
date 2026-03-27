@@ -4128,34 +4128,8 @@ def save_chat_field(study_id):
     return redirect(f"/?token={token}&configure={study_id}")
 
 
-def _mark_reply_background(study_id, placeholder_msg_id, message_text, mark_model_id, study_dict, persona_count):
-    try:
-        llm_messages = [{"role": "user", "content": message_text}]
-        mark_reply = call_llm(mark_model_id, llm_messages, purpose="mark_chat")
-    except Exception as e:
-        print(f"MARK_CHAT_LLM_FAILED study={study_id} reason={e}")
-        mark_reply = None
-
-    if not mark_reply:
-        mark_reply = get_coaching_nudge(study_dict or {}, persona_count)
-
-    try:
-        conn = get_db()
-        conn.execute(
-            "UPDATE chat_messages SET message_text = ? WHERE id = ?",
-            (mark_reply, placeholder_msg_id),
-        )
-        conn.commit()
-        conn.close()
-        print(f"MARK_CHAT_REPLY_SAVED study={study_id}")
-    except Exception as e:
-        print(f"MARK_CHAT_SAVE_FAILED study={study_id} reason={e}")
-
-
 @app.route("/send-chat/<int:study_id>", methods=["POST", "GET"])
 def send_chat(study_id):
-    import threading
-
     if request.method == "GET":
         token = get_token()
         return redirect(f"/?token={token}&configure={study_id}")
@@ -4183,6 +4157,7 @@ def send_chat(study_id):
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'user', ?)",
         (study_id, message_text),
     )
+    conn.commit()
 
     persona_count = 0
     raw_ids = normalize_personas_used(study["personas_used"])
@@ -4200,32 +4175,25 @@ def send_chat(study_id):
     mark_model_id = mc.get("mark_model")
     study_dict = dict(study)
 
-    placeholder_text = "⏳ Mark is thinking..."
-    cursor = conn.execute(
+    mark_reply = None
+    if mark_model_id:
+        try:
+            llm_messages = [{"role": "user", "content": message_text}]
+            mark_reply = call_llm(mark_model_id, llm_messages, purpose="mark_chat")
+            print(f"MARK_CHAT_LLM_OK study={study_id}", flush=True)
+        except Exception as e:
+            print(f"MARK_CHAT_LLM_FAILED study={study_id} reason={e}", flush=True)
+            mark_reply = None
+
+    if not mark_reply:
+        mark_reply = get_coaching_nudge(study_dict, persona_count)
+
+    conn.execute(
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
-        (study_id, placeholder_text),
+        (study_id, mark_reply),
     )
-    placeholder_msg_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    print(f"MARK_CHAT_PLACEHOLDER id={placeholder_msg_id} study={study_id}")
-
-    if mark_model_id:
-        t = threading.Thread(
-            target=_mark_reply_background,
-            args=(study_id, placeholder_msg_id, message_text, mark_model_id, study_dict, persona_count),
-            daemon=True,
-        )
-        t.start()
-    else:
-        fallback = get_coaching_nudge(study_dict, persona_count)
-        conn2 = get_db()
-        conn2.execute(
-            "UPDATE chat_messages SET message_text = ? WHERE id = ?",
-            (fallback, placeholder_msg_id),
-        )
-        conn2.commit()
-        conn2.close()
 
     return redirect(f"/?token={token}&configure={study_id}")
 
