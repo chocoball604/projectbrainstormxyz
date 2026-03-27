@@ -4201,13 +4201,14 @@ def send_chat(study_id):
     study_dict = dict(study)
 
     placeholder_text = "⏳ Mark is thinking..."
-    conn.execute(
+    cursor = conn.execute(
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
         (study_id, placeholder_text),
     )
+    placeholder_msg_id = cursor.lastrowid
     conn.commit()
-    placeholder_msg_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.close()
+    print(f"MARK_CHAT_PLACEHOLDER id={placeholder_msg_id} study={study_id}")
 
     if mark_model_id:
         t = threading.Thread(
