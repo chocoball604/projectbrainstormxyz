@@ -349,153 +349,6 @@ def run_model_health_check(run_type="manual"):
             "error": "Health check encountered an unexpected error",
         }
 
-    integration_mode = "placeholder_not_connected"
-    try:
-        call_llm(
-            "_probe_",
-            [{"role": "user", "content": "ping"}],
-            purpose="integration_probe",
-        )
-        integration_mode = "live_calls_enabled"
-    except NotImplementedError:
-        integration_mode = "placeholder_not_connected"
-    except Exception:
-        integration_mode = "error_probe_failed"
-
-    mc = {
-        r["key"]: r["value"]
-        for r in conn.execute("SELECT key, value FROM model_config").fetchall()
-    }
-    active_allowed = {
-        r["model_id"]
-        for r in conn.execute(
-            "SELECT model_id FROM allowed_models WHERE status = 'active'"
-        ).fetchall()
-    }
-    pool_models = conn.execute(
-        "SELECT model_id, status FROM persona_model_pool"
-    ).fetchall()
-    active_pool = [r["model_id"] for r in pool_models if r["status"] == "active"]
-
-    config_errors = []
-    for role, key in [
-        ("Mark", "mark_model"),
-        ("Lisa", "lisa_model"),
-        ("Ben", "ben_model"),
-    ]:
-        mid = mc.get(key)
-        if not mid:
-            config_errors.append(f"{role} model not configured")
-        elif mid not in active_allowed:
-            config_errors.append(f"{role} model '{mid}' not in active allowed models")
-
-    if not active_pool:
-        config_errors.append("Persona model pool has no active entries")
-    for pm in active_pool:
-        if pm not in active_allowed:
-            config_errors.append(f"Pool model '{pm}' not in active allowed models")
-
-    config_valid = len(config_errors) == 0
-
-    all_model_ids = set()
-    for key in ("mark_model", "lisa_model", "ben_model"):
-        if mc.get(key):
-            all_model_ids.add(mc[key])
-    all_model_ids.update(active_pool)
-
-    per_model = {}
-    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-
-    if integration_mode == "placeholder_not_connected":
-        for mid in all_model_ids:
-            is_valid = mid in active_allowed
-            if is_valid:
-                per_model[mid] = {
-                    "status": "not_connected",
-                    "error": "LLM integration not connected (placeholder mode)",
-                }
-            else:
-                per_model[mid] = {
-                    "status": "fail",
-                    "error": f"Model not in active allowed list",
-                }
-        if not config_valid:
-            summary_status = "fail"
-        else:
-            summary_status = "unknown"
-    else:
-        for mid in all_model_ids:
-            if mid not in active_allowed:
-                per_model[mid] = {
-                    "status": "fail",
-                    "error": "Model not in active allowed list",
-                }
-                continue
-            try:
-                result = call_llm(
-                    mid,
-                    [{"role": "user", "content": "Reply with the single word OK"}],
-                    purpose="health_check",
-                )
-                if "ok" in result.lower():
-                    per_model[mid] = {"status": "pass", "error": None}
-                else:
-                    per_model[mid] = {
-                        "status": "fail",
-                        "error": f"Unexpected response: {result[:300]}",
-                    }
-            except Exception as e:
-                per_model[mid] = {"status": "fail", "error": str(e)[:300]}
-        if not config_valid:
-            summary_status = "fail"
-        elif any(v["status"] == "fail" for v in per_model.values()):
-            summary_status = "fail"
-        else:
-            summary_status = "pass"
-
-    for mid, info in per_model.items():
-        conn.execute(
-            "INSERT INTO model_health_status (model_id, status, last_tested_at, last_error) VALUES (?, ?, ?, ?) "
-            "ON CONFLICT(model_id) DO UPDATE SET status=?, last_tested_at=?, last_error=?",
-            (
-                mid,
-                info["status"],
-                now_str,
-                info["error"],
-                info["status"],
-                now_str,
-                info["error"],
-            ),
-        )
-
-    finished_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    details = {
-        "config_errors": config_errors,
-        "per_model": per_model,
-        "models_checked": list(all_model_ids),
-    }
-    conn.execute(
-        "INSERT INTO model_health_checks (run_id, run_type, started_at, finished_at, integration_mode, summary_status, details_json) VALUES (?,?,?,?,?,?,?)",
-        (
-            run_id,
-            run_type,
-            started_at,
-            finished_at,
-            integration_mode,
-            summary_status,
-            json.dumps(details),
-        ),
-    )
-    conn.commit()
-    conn.close()
-    return {
-        "run_id": run_id,
-        "run_type": run_type,
-        "integration_mode": integration_mode,
-        "summary_status": summary_status,
-        "details": details,
-    }
-
 
 def generate_weekly_qa_report():
     conn = get_db()
@@ -989,11 +842,10 @@ def init_db():
                 (m,),
             )
         for m in SEED_ALLOWED_MODELS[:3]:
-            if not is_gpt_family(m):
-                conn.execute(
-                    "INSERT OR IGNORE INTO persona_model_pool (model_id, status) VALUES (?, 'active')",
-                    (m,),
-                )
+            conn.execute(
+                "INSERT OR IGNORE INTO persona_model_pool (model_id, status) VALUES (?, 'active')",
+                (m,),
+            )
         conn.execute(
             "INSERT OR IGNORE INTO model_config (key, value) VALUES ('mark_model', ?)",
             (SEED_ALLOWED_MODELS[0],),
@@ -3741,17 +3593,6 @@ def run_ben_qa(study_dict):
                     gov_failures.append(f"Persona {pid} missing ai_model_provenance.")
                     continue
 
-                # provenance is recorded, but NO policy enforcement on model family        
-                # (model=... may exist, but is not restricted)
-
-                
-                model_match = ""
-                if "model=" in prov:
-                    model_match = (
-                        prov.split("model=")[1].split(",")[0].split("]")[0].strip()
-                    )
-
-
                 pt_row = gov_conn.execute(
                     "SELECT id FROM grounding_traces WHERE trigger_event = 'persona_created' AND persona_id = ?",
                     (pid,),
@@ -4452,11 +4293,6 @@ def run_study(study_id):
                 lisa_mid = mc.get("lisa_model", "")
                 if not lisa_mid:
                     raise ValueError("lisa_model not configured in model_config")
-                if is_gpt_family(lisa_mid):
-                    raise ValueError(
-                        f"Policy: lisa_model '{lisa_mid}' is GPT-family — cannot use for persona generation"
-                    )
-
                 generated = lisa_generate_personas(dict(study), auto_n, lisa_mid)
                 new_persona_ids = []
                 for p_data in generated:
@@ -5073,11 +4909,10 @@ def create_persona():
             "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
         ).fetchall()
     ]
-    pool_models = [m for m in pool_models if not is_gpt_family(m)]
     if not pool_models:
         conn.close()
         return render_error(
-            "Cannot create persona: persona model pool has no active non-GPT models. An admin must configure at least one non-GPT model.",
+            "Cannot create persona: no active models in the persona model pool. An admin must configure at least one pool model.",
             show_new_persona=True,
         )
 
@@ -5251,11 +5086,6 @@ def admin_add_pool_model():
     model_id = (request.form.get("model_id") or "").strip()
     if not model_id:
         return render_error("Model ID is required.")
-    if is_gpt_family(model_id):
-        return render_error(
-            f"Policy: GPT-family models may not be used for persona generation. "
-            f"'{model_id}' is blocked from the persona model pool."
-        )
     conn = get_db()
     allowed = conn.execute(
         "SELECT id FROM allowed_models WHERE model_id = ? AND status = 'active'",
@@ -5650,6 +5480,8 @@ def admin_dev_run_study(study_id):
     study_data = dict(study)
     study_data["study_output"] = output
 
+    create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
+
     qa_result = run_ben_qa(study_data)
     qa_decision = qa_result["decision"]
     qa_notes = qa_result["notes"]
@@ -5725,7 +5557,6 @@ def admin_dev_run_study(study_id):
         ),
     )
 
-    create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
     conn.commit()
     conn.close()
 

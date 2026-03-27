@@ -1,0 +1,75 @@
+Edit app.py only. Do not change templates or DB schema.
+Goal: fix stability + session + QA ordering + chat route issues across the app in one consistent patch. The app currently shows: intermittent dropped connections, /send-chat/<id> issues, “database is locked”, QA blocked due to “Missing Grounding Trace for study_executed”, and blog navigation dropping session token.
+A) SQLite stability: WAL + busy_timeout
+
+Update get_db() to use:
+
+sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
+PRAGMA journal_mode=WAL
+PRAGMA synchronous=NORMAL
+PRAGMA busy_timeout=30000
+keep foreign_keys=ON
+
+
+
+B) Mark chat endpoint reliability (/send-chat/<study_id>)
+
+Modify the /send-chat/<int:study_id> route to allow both POST and GET.
+
+If request.method == "GET": redirect to /?token=<token>&configure=<study_id> (so accidental GET never returns 405).
+
+
+Refactor send_chat() so no DB connection is held open during call_llm():
+
+Insert user message → commit() → close() immediately.
+Build prompt inputs either before closing or by reopening for short reads.
+Call call_llm() with no DB open.
+Reopen DB and insert Mark reply → commit() → close().
+
+
+Guarantee every code path returns a valid Flask response (no None fallthrough). Add a final redirect at end as a safety net.
+
+C) Run Study QA ordering: create grounding trace BEFORE Ben QA
+
+In /run-study/<int:study_id>, move creation of the study_executed grounding trace to before run_ben_qa(study_data) is called.
+
+Right after output is generated and study_data["study_output"] = output, insert create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id)), then run QA.
+
+
+Apply the same ordering fix to /admin/dev-run-study/<int:study_id> as it also calls run_ben_qa() before writing a trace.
+
+D) Remove “GPT-family persona forbidden” policy everywhere (user request)
+
+Remove/disable ALL enforcement that blocks GPT-family models for persona generation or reuse:
+
+In run_ben_qa(): remove the clause that fails a study if a persona provenance indicates GPT-family.
+In /create-persona: stop filtering the persona pool to non-GPT only; allow GPT models in pool.
+In /admin/add-pool-model: remove the block that rejects GPT-family model IDs.
+In /run-study auto-persona generation: remove the check that prevents persona generation when lisa_model is GPT-family.
+Keep provenance recording (ai_model_provenance) and grounding-trace checks; just remove GPT-family prohibition.
+
+
+
+E) Blog session continuity (Home link logging out)
+
+In blog_page() and blog_post() routes, add token = get_token() and pass token=token into render_template(...) so templates can preserve it.
+
+F) Health check hardening (server shouldn’t crash)
+
+Ensure run_model_health_check() never crashes the app:
+
+Wrap entire body in try/except safety net that returns JSON {summary_status:"fail", error:"..."} on unexpected errors.
+Do not hold a DB connection open during multiple LLM calls: gather results first, then open DB only to write rows.
+Fix integration probe: if _probe_ raises generic Exception, set integration_mode="error_probe_failed" (not “live_calls_enabled”).
+
+
+
+G) Acceptance tests (must pass)
+After patching, verify:
+
+Mark chat: POST /send-chat/<id> returns 302 and page reload works; no 405; no 500; no DB locked errors.
+Run Study: no QA FAIL due to missing study_executed trace (trace must exist before QA).
+Blog: viewing a blog post then clicking Home keeps user logged in (token preserved).
+Health check: “Run Health Check Now” never crashes; returns a result even if some models fail.
+
+Output a short summary: what changed + how to test.
