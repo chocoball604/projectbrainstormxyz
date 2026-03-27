@@ -4287,7 +4287,19 @@ def save_chat_field(study_id):
     return redirect(f"/?token={token}&configure={study_id}")
 
 
-@app.route("/send-chat/<int:study_id>", methods=["POST"])
+@app.route("/send-chat/<int:study_id>", methods=["POST", "GET"])
+def send_chat(study_id):
+    # FIX: handle accidental GET after redirect    
+    if request.method == "GET":
+        token = get_token()
+        return redirect(f"/?token={token}&configure={study_id}")
+    
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("Unauthorized.")
+
+    conn = get_db()
 def send_chat(study_id):
     token = get_token()
     user, _ = get_session_data(token)
