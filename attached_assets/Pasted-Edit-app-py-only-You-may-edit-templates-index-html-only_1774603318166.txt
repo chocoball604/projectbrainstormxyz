@@ -1,0 +1,44 @@
+Edit app.py only. You may edit templates/index.html only if absolutely necessary, but prefer app.py-first.
+
+Problem:
+- When I click “Run Health Check Now”, console shows a fresh run like:
+  HEALTH_CHECK_RUN=<run_id> status=pass started=<today> finished=<today>
+- But after the page refresh, the admin UI still displays an old report date (e.g., 2026-03-24), which appears to be the weekly QA report date, not the latest health check timestamp.
+- This creates the impression health check is broken even when it ran.
+
+Goal:
+- Admin dashboard must clearly show the *latest model health check run* (from model_health_checks), not the weekly QA report date.
+- Weekly QA report should remain available, but it must be labeled as “Weekly QA Report” and not presented as the latest health check.
+
+Context (in current code):
+- There is a run_model_health_check(...) function that writes to model_health_checks and model_health_status.
+- There is generate_weekly_qa_report() writing to weekly_qa_reports.
+- The admin index() route currently builds “latest_weekly_report” and shows it; the UI is likely using that as a “health check date”.
+
+Tasks:
+1) In index() admin branch (is_admin == True), fetch the latest health check row explicitly:
+   SELECT * FROM model_health_checks ORDER BY started_at DESC LIMIT 1
+   Convert to dict if present, name it latest_health_check.
+2) Also fetch the latest weekly QA report explicitly (already exists). Keep it separate:
+   SELECT * FROM weekly_qa_reports ORDER BY id DESC LIMIT 1
+   Name it latest_weekly_report.
+3) Pass BOTH objects to the template render:
+   latest_health_check=latest_health_check,
+   latest_weekly_report=latest_weekly_report,
+4) Update the admin dashboard display so:
+   - “Last Health Check Run” uses latest_health_check.started_at / finished_at and latest_health_check.summary_status.
+   - “Weekly QA Report” uses latest_weekly_report.week_start_date (or created_at) and report_text.
+   - Do NOT show weekly report date in the “health check” section.
+5) Make sure /admin/model-health/run triggers run_model_health_check("manual") and after redirect the index page shows the latest_health_check from the DB (so the timestamp updates immediately).
+6) Add a small defensive fallback:
+   - If latest_health_check is None, show “No health checks run yet.”
+   - If latest_weekly_report is None, show “No weekly QA report yet.”
+
+Acceptance test:
+- Log in as admin.
+- Click “Run Health Check Now”.
+- After redirect, the admin UI must show today’s started/finished timestamps from model_health_checks (matching the console log).
+- Weekly QA report date may still be older, but is shown in its own separate “Weekly QA Report” section.
+
+Deliverable:
+- Provide a short summary of exactly what you changed (which route, what template fields), and how to verify using /admin/model-health/status.

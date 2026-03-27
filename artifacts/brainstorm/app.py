@@ -1267,6 +1267,7 @@ def index():
     persona_pool_list = []
     health_status_list = []
     latest_weekly_report = None
+    latest_health_check = None
     docs_list = []
     docs_page = 1
     docs_q = ""
@@ -1349,6 +1350,11 @@ def index():
                 "SELECT * FROM model_health_status ORDER BY model_id"
             ).fetchall()
         ]
+        hc_row = conn3.execute(
+            "SELECT * FROM model_health_checks ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        if hc_row:
+            latest_health_check = dict(hc_row)
         wr = conn3.execute(
             "SELECT * FROM weekly_qa_reports ORDER BY id DESC LIMIT 1"
         ).fetchone()
@@ -1712,6 +1718,7 @@ def index():
         persona_pool_list=persona_pool_list,
         health_status_list=health_status_list,
         latest_weekly_report=latest_weekly_report,
+        latest_health_check=latest_health_check,
         mark_recommendation=mark_recommendation,
         mark_recommendation_label=mark_recommendation_label,
         mark_recommendation_reason=mark_recommendation_reason,
@@ -5459,6 +5466,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         persona_pool_list=persona_pool_list,
         health_status_list=[],
         latest_weekly_report=None,
+        latest_health_check=None,
         mark_recommendation="",
         mark_recommendation_label="",
         mark_recommendation_reason="",

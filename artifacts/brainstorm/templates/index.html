@@ -2295,6 +2295,48 @@
                 Per-model health status. Auto-checked daily on admin dashboard load.
             </p>
 
+            {% if latest_health_check %}
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 18px; margin-bottom: 18px;">
+                <h3 style="font-size: 14px; color: #1a1a2e; margin: 0 0 8px 0;">Last Health Check Run</h3>
+                <table style="font-size: 13px; margin: 0;">
+                    <tr>
+                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Status:</td>
+                        <td>
+                            {% if latest_health_check.summary_status == 'pass' %}
+                            <span class="badge badge-active">PASS</span>
+                            {% elif latest_health_check.summary_status == 'fail' %}
+                            <span class="badge badge-disabled">FAIL</span>
+                            {% else %}
+                            <span class="badge" style="background: #6b7280; color: #fff;">{{ latest_health_check.summary_status|upper }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Run ID:</td>
+                        <td style="font-family: monospace; font-size: 12px;">{{ latest_health_check.run_id }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Type:</td>
+                        <td>{{ latest_health_check.run_type }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Started:</td>
+                        <td style="font-family: monospace; font-size: 12px;">{{ latest_health_check.started_at }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Finished:</td>
+                        <td style="font-family: monospace; font-size: 12px;">{{ latest_health_check.finished_at }}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Integration:</td>
+                        <td>{{ latest_health_check.integration_mode }}</td>
+                    </tr>
+                </table>
+            </div>
+            {% else %}
+            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No health checks run yet.</p>
+            {% endif %}
+
             {% if health_status_list %}
             <table style="margin-bottom: 20px; font-size: 13px;">
                 <thead>
@@ -2326,8 +2368,6 @@
                     {% endfor %}
                 </tbody>
             </table>
-            {% else %}
-            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No health check data yet.</p>
             {% endif %}
 
             <div style="display: flex; gap: 12px; align-items: center;">
@@ -2339,10 +2379,12 @@
 
             {% if latest_weekly_report %}
             <div style="margin-top: 20px;">
-                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px;">Latest Weekly QA Report</h3>
+                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px;">Weekly QA Report</h3>
                 <pre style="background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto;">{{ latest_weekly_report.report_text }}</pre>
-                <p style="font-size: 11px; color: #999; margin-top: 4px;">Generated: {{ latest_weekly_report.created_at }}</p>
+                <p style="font-size: 11px; color: #999; margin-top: 4px;">Week: {{ latest_weekly_report.week_start_date }} | Generated: {{ latest_weekly_report.created_at }}</p>
             </div>
+            {% else %}
+            <p style="color: #999; font-size: 13px; margin-top: 16px;">No weekly QA report yet.</p>
             {% endif %}
         </div>
 
