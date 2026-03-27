@@ -4128,9 +4128,35 @@ def save_chat_field(study_id):
     return redirect(f"/?token={token}&configure={study_id}")
 
 
+def _mark_reply_background(study_id, user_id, message_text, mark_model_id, study_dict, persona_count):
+    import threading
+    try:
+        llm_messages = [{"role": "user", "content": message_text}]
+        mark_reply = call_llm(mark_model_id, llm_messages, purpose="mark_chat")
+    except Exception as e:
+        print(f"MARK_CHAT_LLM_FAILED study={study_id} reason={e}")
+        mark_reply = None
+
+    if not mark_reply:
+        mark_reply = get_coaching_nudge(study_dict or {}, persona_count)
+
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+            (study_id, mark_reply),
+        )
+        conn.commit()
+        conn.close()
+        print(f"MARK_CHAT_REPLY_SAVED study={study_id}")
+    except Exception as e:
+        print(f"MARK_CHAT_SAVE_FAILED study={study_id} reason={e}")
+
+
 @app.route("/send-chat/<int:study_id>", methods=["POST", "GET"])
 def send_chat(study_id):
-    # Handle accidental GET safely
+    import threading
+
     if request.method == "GET":
         token = get_token()
         return redirect(f"/?token={token}&configure={study_id}")
@@ -4140,80 +4166,60 @@ def send_chat(study_id):
     if not user or user["state"] != "active":
         return render_error("Unauthorized.")
 
-    mark_reply = None
-    persona_count = 0
-    study_dict = None
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Study not found.")
 
-    try:
-        # --- DB PHASE (short, safe) ---
-        conn = get_db()
+    message_text = (request.form.get("message_text") or "").strip()
+    if not message_text:
+        conn.close()
+        return redirect(f"/?token={token}&configure={study_id}")
 
-        study = conn.execute(
-            "SELECT * FROM studies WHERE id = ? AND user_id = ?",
-            (study_id, user["id"]),
-        ).fetchone()
-        if not study:
-            conn.close()
-            return render_error("Study not found.")
-
-        message_text = (request.form.get("message_text") or "").strip()
-        if not message_text:
-            conn.close()
-            return redirect(f"/?token={token}&configure={study_id}")
-
-        conn.execute(
-            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'user', ?)",
-            (study_id, message_text),
-        )
-        conn.commit()
-
-        raw_ids = normalize_personas_used(study["personas_used"])
-        for pid in raw_ids:
-            if conn.execute(
-                "SELECT 1 FROM personas WHERE persona_instance_id = ? AND user_id = ?",
-                (pid, user["id"]),
-            ).fetchone():
-                persona_count += 1
-
-        mc = {
-            r["key"]: r["value"]
-            for r in conn.execute("SELECT key, value FROM model_config").fetchall()
-        }
-        mark_model_id = mc.get("mark_model")
-        if not mark_model_id:
-            raise ValueError("mark_model not configured")
-
-        study_dict = dict(study)
-
-        chat_rows = conn.execute(
-            "SELECT sender, message_text FROM chat_messages WHERE study_id = ? ORDER BY id ASC",
-            (study_id,),
-        ).fetchall()
-
-        conn.close()  # DB CLOSED before LLM
-
-        # --- LLM PHASE ---
-        llm_messages = [{"role": "user", "content": message_text}]
-        mark_reply = call_llm(mark_model_id, llm_messages, purpose="mark_chat")
-
-    except Exception as e:
-        app.logger.exception("send_chat failed")
-        mark_reply = None
-
-    # --- FALLBACK ---
-    if not mark_reply:
-        mark_reply = get_coaching_nudge(study_dict or {}, persona_count)
-
-    # --- WRITE REPLY ---
-    conn2 = get_db()
-    conn2.execute(
-        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
-        (study_id, mark_reply),
+    conn.execute(
+        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'user', ?)",
+        (study_id, message_text),
     )
-    conn2.commit()
-    conn2.close()
+    conn.commit()
 
-    # SINGLE GUARANTEED RETURN
+    persona_count = 0
+    raw_ids = normalize_personas_used(study["personas_used"])
+    for pid in raw_ids:
+        if conn.execute(
+            "SELECT 1 FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+            (pid, user["id"]),
+        ).fetchone():
+            persona_count += 1
+
+    mc = {
+        r["key"]: r["value"]
+        for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+    }
+    mark_model_id = mc.get("mark_model")
+    study_dict = dict(study)
+    conn.close()
+
+    if mark_model_id:
+        t = threading.Thread(
+            target=_mark_reply_background,
+            args=(study_id, user["id"], message_text, mark_model_id, study_dict, persona_count),
+            daemon=True,
+        )
+        t.start()
+    else:
+        fallback = get_coaching_nudge(study_dict, persona_count)
+        conn2 = get_db()
+        conn2.execute(
+            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+            (study_id, fallback),
+        )
+        conn2.commit()
+        conn2.close()
+
     return redirect(f"/?token={token}&configure={study_id}")
 
 
