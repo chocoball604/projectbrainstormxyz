@@ -4134,7 +4134,7 @@ def chat_status(study_id):
     token = get_token()
     user, _ = get_session_data(token)
     if not user or user["state"] != "active":
-        return jsonify({"ready": False})
+        return jsonify({"ready": False, "messages": []})
     conn = get_db()
     study = conn.execute(
         "SELECT id FROM studies WHERE id = ? AND user_id = ?",
@@ -4142,13 +4142,18 @@ def chat_status(study_id):
     ).fetchone()
     if not study:
         conn.close()
-        return jsonify({"ready": False})
+        return jsonify({"ready": False, "messages": []})
     pending = conn.execute(
         "SELECT COUNT(*) FROM chat_messages WHERE study_id = ? AND sender = 'mark' AND message_text = '⏳ Mark is thinking...'",
         (study_id,),
     ).fetchone()[0]
+    msgs = conn.execute(
+        "SELECT id, sender, message_text, timestamp_utc FROM chat_messages WHERE study_id = ? ORDER BY id",
+        (study_id,),
+    ).fetchall()
     conn.close()
-    return jsonify({"ready": pending == 0, "pending": pending})
+    messages = [{"id": m["id"], "sender": m["sender"], "text": m["message_text"], "time": m["timestamp_utc"]} for m in msgs]
+    return jsonify({"ready": pending == 0, "pending": pending, "messages": messages})
 
 
 @app.route("/send-chat/<int:study_id>", methods=["POST", "GET"])

@@ -935,38 +935,108 @@
                 {% endif %}
             </div>
 
-            <form action="/send-chat/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;">
-                <input type="hidden" name="token" value="{{ token }}">
-                <input type="text" name="message_text" required placeholder="Type your message to Mark..." style="flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
-                <button type="submit" class="btn btn-primary" style="white-space: nowrap;">Send</button>
+            <form id="chat-form" style="display: flex; gap: 8px;">
+                <input type="text" id="chat-input" name="message_text" required placeholder="Type your message to Mark..." style="flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                <button type="submit" class="btn btn-primary" id="chat-send-btn" style="white-space: nowrap;">Send</button>
             </form>
 
             <script>
             (function() {
-                var chatThread = document.getElementById('chat-thread');
-                if (!chatThread) return;
-                var hasThinking = chatThread.textContent.indexOf('Mark is thinking') !== -1;
-                if (!hasThinking) return;
                 var studyId = {{ configure_study.id }};
                 var token = '{{ token }}';
-                var pollCount = 0;
-                var maxPolls = 30;
-                var interval = setInterval(function() {
-                    pollCount++;
-                    if (pollCount > maxPolls) {
-                        clearInterval(interval);
-                        return;
+                var chatThread = document.getElementById('chat-thread');
+                var chatForm = document.getElementById('chat-form');
+                var chatInput = document.getElementById('chat-input');
+                var sendBtn = document.getElementById('chat-send-btn');
+                var polling = false;
+
+                function makeBubble(sender, text) {
+                    var wrap = document.createElement('div');
+                    wrap.style.cssText = 'margin-bottom:12px;display:flex;flex-direction:column;align-items:' + (sender === 'user' ? 'flex-end' : 'flex-start') + ';';
+                    var bubble = document.createElement('div');
+                    bubble.style.cssText = 'max-width:80%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.5;' +
+                        (sender === 'user'
+                            ? 'background:#5C7E8F;color:#fff;border-bottom-right-radius:4px;'
+                            : 'background:#e8e8e8;color:#1a1a2e;border-bottom-left-radius:4px;');
+                    bubble.textContent = text;
+                    wrap.appendChild(bubble);
+                    var ts = document.createElement('div');
+                    ts.style.cssText = 'font-size:11px;color:#999;margin-top:2px;padding:0 4px;';
+                    ts.textContent = sender.charAt(0).toUpperCase() + sender.slice(1) + ' \u00b7 now';
+                    wrap.appendChild(ts);
+                    return wrap;
+                }
+
+                function renderMessages(messages) {
+                    var emptyMsg = chatThread.querySelector('p');
+                    if (emptyMsg) emptyMsg.remove();
+
+                    chatThread.innerHTML = '';
+                    for (var i = 0; i < messages.length; i++) {
+                        var m = messages[i];
+                        if (m.text === '\u23f3 Mark is thinking...') continue;
+                        chatThread.appendChild(makeBubble(m.sender, m.text));
                     }
-                    fetch('/chat-status/' + studyId + '?token=' + encodeURIComponent(token))
-                        .then(function(r) { return r.json(); })
-                        .then(function(data) {
-                            if (data.ready) {
-                                clearInterval(interval);
-                                window.location.reload();
-                            }
+                    chatThread.scrollTop = chatThread.scrollHeight;
+                }
+
+                function startPolling() {
+                    if (polling) return;
+                    polling = true;
+                    var pollCount = 0;
+                    var iv = setInterval(function() {
+                        pollCount++;
+                        if (pollCount > 40) { clearInterval(iv); polling = false; return; }
+                        fetch('/chat-status/' + studyId + '?token=' + encodeURIComponent(token))
+                            .then(function(r) { return r.json(); })
+                            .then(function(data) {
+                                if (data.ready && data.messages) {
+                                    clearInterval(iv);
+                                    polling = false;
+                                    renderMessages(data.messages);
+                                    sendBtn.disabled = false;
+                                    sendBtn.textContent = 'Send';
+                                }
+                            })
+                            .catch(function() {});
+                    }, 3000);
+                }
+
+                chatForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    var msg = chatInput.value.trim();
+                    if (!msg) return;
+
+                    var emptyMsg = chatThread.querySelector('p');
+                    if (emptyMsg) emptyMsg.remove();
+
+                    chatThread.appendChild(makeBubble('user', msg));
+                    chatThread.scrollTop = chatThread.scrollHeight;
+                    chatInput.value = '';
+                    sendBtn.disabled = true;
+                    sendBtn.textContent = 'Sending...';
+
+                    var formData = new FormData();
+                    formData.append('token', token);
+                    formData.append('message_text', msg);
+
+                    fetch('/send-chat/' + studyId, { method: 'POST', body: formData, redirect: 'manual' })
+                        .then(function() {
+                            sendBtn.textContent = 'Waiting...';
+                            startPolling();
                         })
-                        .catch(function() {});
-                }, 3000);
+                        .catch(function() {
+                            sendBtn.disabled = false;
+                            sendBtn.textContent = 'Send';
+                        });
+                });
+
+                var hasThinking = chatThread.textContent.indexOf('Mark is thinking') !== -1;
+                if (hasThinking) {
+                    sendBtn.disabled = true;
+                    sendBtn.textContent = 'Waiting...';
+                    startPolling();
+                }
             })();
             </script>
         </div>
