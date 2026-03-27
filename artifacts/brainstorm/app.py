@@ -4128,8 +4128,7 @@ def save_chat_field(study_id):
     return redirect(f"/?token={token}&configure={study_id}")
 
 
-def _mark_reply_background(study_id, user_id, message_text, mark_model_id, study_dict, persona_count):
-    import threading
+def _mark_reply_background(study_id, placeholder_msg_id, message_text, mark_model_id, study_dict, persona_count):
     try:
         llm_messages = [{"role": "user", "content": message_text}]
         mark_reply = call_llm(mark_model_id, llm_messages, purpose="mark_chat")
@@ -4143,8 +4142,8 @@ def _mark_reply_background(study_id, user_id, message_text, mark_model_id, study
     try:
         conn = get_db()
         conn.execute(
-            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
-            (study_id, mark_reply),
+            "UPDATE chat_messages SET message_text = ? WHERE id = ?",
+            (mark_reply, placeholder_msg_id),
         )
         conn.commit()
         conn.close()
@@ -4184,7 +4183,6 @@ def send_chat(study_id):
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'user', ?)",
         (study_id, message_text),
     )
-    conn.commit()
 
     persona_count = 0
     raw_ids = normalize_personas_used(study["personas_used"])
@@ -4201,12 +4199,20 @@ def send_chat(study_id):
     }
     mark_model_id = mc.get("mark_model")
     study_dict = dict(study)
+
+    placeholder_text = "⏳ Mark is thinking..."
+    conn.execute(
+        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+        (study_id, placeholder_text),
+    )
+    conn.commit()
+    placeholder_msg_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.close()
 
     if mark_model_id:
         t = threading.Thread(
             target=_mark_reply_background,
-            args=(study_id, user["id"], message_text, mark_model_id, study_dict, persona_count),
+            args=(study_id, placeholder_msg_id, message_text, mark_model_id, study_dict, persona_count),
             daemon=True,
         )
         t.start()
@@ -4214,8 +4220,8 @@ def send_chat(study_id):
         fallback = get_coaching_nudge(study_dict, persona_count)
         conn2 = get_db()
         conn2.execute(
-            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
-            (study_id, fallback),
+            "UPDATE chat_messages SET message_text = ? WHERE id = ?",
+            (fallback, placeholder_msg_id),
         )
         conn2.commit()
         conn2.close()
