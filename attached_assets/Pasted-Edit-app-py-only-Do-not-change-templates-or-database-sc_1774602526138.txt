@@ -1,0 +1,38 @@
+Edit app.py only. Do not change templates or database schema.
+
+We have two continuing production-breaking issues:
+
+(1) Health Check is slow and appears stale:
+- Clicking “Run Health Check Now” takes a long time.
+- After refresh it shows an old report date (e.g., 2026-03-24), so it’s unclear whether a new check executed.
+Fix requirement:
+- run_model_health_check must (a) always insert a NEW model_health_checks row per click, (b) always refresh model_health_status, and (c) never hold a SQLite connection open while making any call_llm calls.
+- Ensure /admin/model-health/run triggers a fresh run and the UI reflects the latest model_health_checks entry (not an old weekly report unless explicitly requested).
+- If any model call fails, it should record fail status for that model but still complete the run and write the check row.
+- For the probe: if _probe_ raises any exception, set integration_mode="error_probe_failed" (not live).
+
+(2) Ben QA blocks IDI/FG (and sometimes survey) with:
+“Governance check failed: Missing Grounding Trace for study_executed”
+even though Lisa produced good raw output.
+Root cause likely: grounding trace is written after run_ben_qa runs.
+Fix requirement:
+- In /run-study/<study_id>, create the grounding trace row with trigger_event="study_executed" and study_id=str(study_id) BEFORE calling run_ben_qa(study_data). Commit it before QA runs.
+- Apply the same ordering fix in /admin/dev-run-study/<study_id>.
+
+Additional stability requirement (to prevent dropped connections / db locked):
+- Update get_db() to use WAL + busy timeout:
+  sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
+  PRAGMA journal_mode=WAL
+  PRAGMA synchronous=NORMAL
+  PRAGMA busy_timeout=30000
+- Ensure no route holds a DB connection open during any call_llm() call. Close DB before call_llm, reopen after to write results.
+
+Deliverables:
+- Implement the fixes above in app.py.
+- Add minimal console logs:
+  HEALTH_CHECK_RUN=<run_id> status=<summary_status> started=<started_at> finished=<finished_at>
+  TRACE_CREATED study_id=<id> trigger=study_executed
+- After changes, verify:
+  a) “Run Health Check Now” creates a new latest model_health_checks row and UI shows today’s timestamp.
+  b) Running an IDI after precheck_passed no longer fails for missing study_executed trace (Ben should PASS/DOWNGRADE based on content, not missing trace).
+Return a brief summary of what files/sections were changed and how to test.

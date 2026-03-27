@@ -165,7 +165,6 @@ def run_model_health_check(run_type="manual"):
     try:
         run_id = secrets.token_hex(8)
         started_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        conn = get_db()
         integration_mode = "placeholder_not_connected"
 
         try:
@@ -180,6 +179,7 @@ def run_model_health_check(run_type="manual"):
         except Exception:
             integration_mode = "error_probe_failed"
 
+        conn = get_db()
         mc = {
             r["key"]: r["value"]
             for r in conn.execute("SELECT key, value FROM model_config").fetchall()
@@ -194,6 +194,7 @@ def run_model_health_check(run_type="manual"):
             "SELECT model_id, status FROM persona_model_pool"
         ).fetchall()
         active_pool = [r["model_id"] for r in pool_models if r["status"] == "active"]
+        conn.close()
 
         config_errors = []
         for role, key in [
@@ -272,6 +273,7 @@ def run_model_health_check(run_type="manual"):
             else:
                 summary_status = "pass"
 
+        conn = get_db()
         for mid, info in per_model.items():
             conn.execute(
                 "INSERT INTO model_health_status (model_id, status, last_tested_at, last_error) "
@@ -311,6 +313,7 @@ def run_model_health_check(run_type="manual"):
         )
         conn.commit()
         conn.close()
+        print(f"HEALTH_CHECK_RUN={run_id} status={summary_status} started={started_at} finished={finished_at}", flush=True)
         return {
             "run_id": run_id,
             "run_type": run_type,
@@ -320,7 +323,6 @@ def run_model_health_check(run_type="manual"):
         }
 
     except Exception as e:
-        # Safety net: never let health check crash the admin UI
         try:
             conn = get_db()
             now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -4457,6 +4459,7 @@ def run_study(study_id):
                 f"Return ONLY the JSON object, nothing else."
             )
 
+            conn.close()
             raw_llm = call_llm(
                 lisa_model_id,
                 [
@@ -4465,6 +4468,7 @@ def run_study(study_id):
                 ],
                 purpose="lisa_survey_execution",
             )
+            conn = get_db()
 
             cleaned = raw_llm.strip()
             if cleaned.startswith("```"):
@@ -4479,6 +4483,10 @@ def run_study(study_id):
         except Exception as e:
             app.logger.warning(f"Lisa LLM survey call failed, using placeholder: {e}")
             output = None
+            try:
+                conn.execute("SELECT 1")
+            except Exception:
+                conn = get_db()
 
     elif study_type in ("synthetic_idi", "synthetic_focus_group"):
         try:
@@ -4578,6 +4586,7 @@ def run_study(study_id):
                 f"Personas:\n{personas_block}"
             )
 
+            conn.close()
             raw_llm = call_llm(
                 lisa_model_id,
                 [
@@ -4586,6 +4595,7 @@ def run_study(study_id):
                 ],
                 purpose="lisa_qual_execution",
             )
+            conn = get_db()
 
             if raw_llm and raw_llm.strip():
                 output = raw_llm.strip()
@@ -4597,6 +4607,10 @@ def run_study(study_id):
             print(f"LISA_QUAL=FALLBACK study_id={study_id} reason={e}")
             app.logger.warning(f"LISA_QUAL=FALLBACK for study {study_id}: {e}")
             output = None
+            try:
+                conn.execute("SELECT 1")
+            except Exception:
+                conn = get_db()
 
     if output is None:
         output = generate_placeholder_output(study_type, dict(study), persona_names)
@@ -4604,12 +4618,13 @@ def run_study(study_id):
     study_data = dict(study)
     study_data["study_output"] = output
 
-    # FIX 1: create grounding trace BEFORE Ben QA
     create_grounding_trace(
         conn,
         trigger_event="study_executed",
         study_id=str(study_id),
     )
+    conn.commit()
+    print(f"TRACE_CREATED study_id={study_id} trigger=study_executed", flush=True)
 
     qa_result = run_ben_qa(study_data)
     qa_decision = qa_result["decision"]
@@ -4689,7 +4704,6 @@ def run_study(study_id):
         ),
     )
 
-    create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
     conn.commit()
     conn.close()
     return redirect(url_for("index", token=token, view_output=study_id))
@@ -5503,6 +5517,8 @@ def admin_dev_run_study(study_id):
     study_data["study_output"] = output
 
     create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
+    conn.commit()
+    print(f"TRACE_CREATED study_id={study_id} trigger=study_executed", flush=True)
 
     qa_result = run_ben_qa(study_data)
     qa_decision = qa_result["decision"]
