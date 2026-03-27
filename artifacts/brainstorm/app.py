@@ -4199,7 +4199,6 @@ def send_chat(study_id):
             env=env,
             stdout=log_f,
             stderr=log_f,
-            start_new_session=True,
         )
     else:
         conn2 = get_db()

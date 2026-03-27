@@ -2,7 +2,7 @@
 import sys
 import os
 import sqlite3
-import json
+import time
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brainstorm.db")
 
@@ -20,17 +20,21 @@ def call_llm(model_id, messages):
     base_url = os.environ.get("AI_INTEGRATIONS_OPENROUTER_BASE_URL")
     api_key = os.environ.get("AI_INTEGRATIONS_OPENROUTER_API_KEY")
     if not base_url or not api_key:
+        print("WORKER: no API credentials found", flush=True)
         return None
-    client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=60)
+    client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=90)
+    start = time.time()
     try:
         resp = client.chat.completions.create(
             model=model_id,
             messages=messages,
-            max_tokens=8192,
+            max_tokens=256,
         )
-        return resp.choices[0].message.content or ""
+        result = resp.choices[0].message.content or ""
+        print(f"WORKER_LLM_OK took={time.time()-start:.1f}s chars={len(result)}", flush=True)
+        return result
     except Exception as e:
-        print(f"WORKER_LLM_ERROR: {e}", flush=True)
+        print(f"WORKER_LLM_ERROR took={time.time()-start:.1f}s err={e}", flush=True)
         return None
 
 def main():
@@ -50,6 +54,7 @@ def main():
 
     if not mark_reply:
         mark_reply = fallback_text
+        print(f"WORKER: using fallback", flush=True)
 
     try:
         conn = get_db()
