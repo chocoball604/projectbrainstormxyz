@@ -22,6 +22,7 @@ import hashlib
 import io
 import json
 import os
+import sys
 import secrets
 import sqlite3
 from datetime import datetime, timezone
@@ -4130,6 +4131,8 @@ def save_chat_field(study_id):
 
 @app.route("/send-chat/<int:study_id>", methods=["POST", "GET"])
 def send_chat(study_id):
+    import subprocess
+
     if request.method == "GET":
         token = get_token()
         return redirect(f"/?token={token}&configure={study_id}")
@@ -4157,7 +4160,6 @@ def send_chat(study_id):
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'user', ?)",
         (study_id, message_text),
     )
-    conn.commit()
 
     persona_count = 0
     raw_ids = normalize_personas_used(study["personas_used"])
@@ -4175,25 +4177,38 @@ def send_chat(study_id):
     mark_model_id = mc.get("mark_model")
     study_dict = dict(study)
 
-    mark_reply = None
-    if mark_model_id:
-        try:
-            llm_messages = [{"role": "user", "content": message_text}]
-            mark_reply = call_llm(mark_model_id, llm_messages, purpose="mark_chat")
-            print(f"MARK_CHAT_LLM_OK study={study_id}", flush=True)
-        except Exception as e:
-            print(f"MARK_CHAT_LLM_FAILED study={study_id} reason={e}", flush=True)
-            mark_reply = None
-
-    if not mark_reply:
-        mark_reply = get_coaching_nudge(study_dict, persona_count)
-
-    conn.execute(
+    placeholder_text = "⏳ Mark is thinking..."
+    cursor = conn.execute(
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
-        (study_id, mark_reply),
+        (study_id, placeholder_text),
     )
+    placeholder_msg_id = cursor.lastrowid
     conn.commit()
     conn.close()
+
+    fallback = get_coaching_nudge(study_dict, persona_count)
+
+    if mark_model_id:
+        worker_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mark_reply_worker.py")
+        env = os.environ.copy()
+        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.log")
+        log_f = open(log_path, "a")
+        subprocess.Popen(
+            [sys.executable, worker_script,
+             str(study_id), str(placeholder_msg_id), mark_model_id, message_text, fallback],
+            env=env,
+            stdout=log_f,
+            stderr=log_f,
+            start_new_session=True,
+        )
+    else:
+        conn2 = get_db()
+        conn2.execute(
+            "UPDATE chat_messages SET message_text = ? WHERE id = ?",
+            (fallback, placeholder_msg_id),
+        )
+        conn2.commit()
+        conn2.close()
 
     return redirect(f"/?token={token}&configure={study_id}")
 
