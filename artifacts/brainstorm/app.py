@@ -4129,6 +4129,28 @@ def save_chat_field(study_id):
     return redirect(f"/?token={token}&configure={study_id}")
 
 
+@app.route("/chat-status/<int:study_id>")
+def chat_status(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return jsonify({"ready": False})
+    conn = get_db()
+    study = conn.execute(
+        "SELECT id FROM studies WHERE id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return jsonify({"ready": False})
+    pending = conn.execute(
+        "SELECT COUNT(*) FROM chat_messages WHERE study_id = ? AND sender = 'mark' AND message_text = '⏳ Mark is thinking...'",
+        (study_id,),
+    ).fetchone()[0]
+    conn.close()
+    return jsonify({"ready": pending == 0, "pending": pending})
+
+
 @app.route("/send-chat/<int:study_id>", methods=["POST", "GET"])
 def send_chat(study_id):
     import subprocess

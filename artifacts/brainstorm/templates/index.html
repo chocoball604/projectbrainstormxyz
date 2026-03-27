@@ -940,6 +940,35 @@
                 <input type="text" name="message_text" required placeholder="Type your message to Mark..." style="flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
                 <button type="submit" class="btn btn-primary" style="white-space: nowrap;">Send</button>
             </form>
+
+            <script>
+            (function() {
+                var chatThread = document.getElementById('chat-thread');
+                if (!chatThread) return;
+                var hasThinking = chatThread.textContent.indexOf('Mark is thinking') !== -1;
+                if (!hasThinking) return;
+                var studyId = {{ configure_study.id }};
+                var token = '{{ token }}';
+                var pollCount = 0;
+                var maxPolls = 30;
+                var interval = setInterval(function() {
+                    pollCount++;
+                    if (pollCount > maxPolls) {
+                        clearInterval(interval);
+                        return;
+                    }
+                    fetch('/chat-status/' + studyId + '?token=' + encodeURIComponent(token))
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.ready) {
+                                clearInterval(interval);
+                                window.location.reload();
+                            }
+                        })
+                        .catch(function() {});
+                }, 3000);
+            })();
+            </script>
         </div>
 
         <div id="side-panel-brief" style="width: 300px; flex-shrink: 0; position: sticky; top: 20px;">
