@@ -1,0 +1,151 @@
+Edit app.py only. DO NOT change SQLite schema (no CREATE/ALTER/DROP tables, no new columns, no migrations). Do not modify brainstorm_v1_replit_singlepage_pack/ or brainstorm.db.
+
+Goal:
+- Make Mark V1A-compliant and “always-on grounded” using a hardened system prompt.
+- Align Mark to V1A anchors: Business Problem, Decision to Support, Market/Geography, Product/Concept, Target Audience, Definition of Useful Insight.
+- V1A explicitly removes “Study Fit” as a user question and removes “Known vs Unknown” as required (can appear only as hypothesis).
+- Because schema cannot change, implement V1A anchors by mapping to existing DB columns:
+market_geography -> study_fit column
+product_concept -> known_vs_unknown column
+
+Scope:
+1) Add V1A mapping helpers
+2) Update Mark chat system_prompt with the EXACT text below
+3) Update study_snapshot builder in /send-chat to use V1A anchor labels + mapped fields
+4) Update save_chat_field valid_fields to include market_geography + product_concept and write via mapping (no schema change)
+5) Update get_save_buttons() so “Suggested saves” keys match V1A (do not reference known_vs_unknown/study_fit in user-facing keys)
+
+--------------------------------------------------------------------------------
+A) Add mapping helpers (top-level, near other constants/helpers)
+
+Add:
+
+V1A_FIELD_MAP = {
+"market_geography": "study_fit", # schema-safe alias
+"product_concept": "known_vs_unknown", # schema-safe alias
+}
+
+def get_v1a_value(study_dict, key: str) -> str:
+db_key = V1A_FIELD_MAP.get(key, key)
+return (study_dict.get(db_key) or "").strip()
+
+def set_v1a_value(conn, study_id: int, key: str, value: str):
+db_key = V1A_FIELD_MAP.get(key, key)
+conn.execute(f"UPDATE studies SET {db_key} = ? WHERE id = ?", (value, study_id))
+
+Also add a small label helper for user-facing names:
+V1A_LABELS = {
+"business_problem": "Business Problem",
+"decision_to_support": "Decision to Support",
+"market_geography": "Market / Geography",
+"product_concept": "Product / Concept",
+"target_audience": "Target Audience",
+"definition_useful_insight": "Definition of Useful Insight",
+}
+
+--------------------------------------------------------------------------------
+B) Update /send-chat/<study_id> study_snapshot builder to V1A anchors
+
+In send_chat(), replace the anchor list currently using:
+business_problem, decision_to_support, known_vs_unknown, target_audience, study_fit, definition_useful_insight
+
+with the V1A list below (note: market_geography + product_concept are mapped):
+
+anchor_keys = [
+("business_problem", "Business Problem"),
+("decision_to_support", "Decision to Support"),
+("market_geography", "Market / Geography"),
+("product_concept", "Product / Concept"),
+("target_audience", "Target Audience"),
+("definition_useful_insight", "Definition of Useful Insight"),
+]
+
+When reading values for market_geography / product_concept, use get_v1a_value(study_dict, key).
+
+--------------------------------------------------------------------------------
+C) Replace Mark’s system_prompt with the EXACT hardened V1A-compliant prompt below
+
+In send_chat(), replace the existing system_prompt assignment with this exact block:
+
+system_prompt = (
+"You are Mark, the Market Intelligence Copilot for Project Brainstorm.\n\n"
+"Project Brainstorm is an AI-native market research platform that helps users frame business problems "
+"and run disciplined, governed market research simulations (Synthetic Survey, Synthetic IDI, Synthetic Focus Group) "
+"to support real business decisions.\n\n"
+"Project Brainstorm is NOT:\n"
+"- a general-purpose chatbot\n"
+"- an academic research tutor\n"
+"- a prediction or forecasting engine\n"
+"- a brainstorming partner for unrelated topics\n\n"
+"Your role is to ORCHESTRATE research setup. You lead the process. The user provides inputs. "
+"You decide what is required next.\n\n"
+"Authority & behavior rules:\n"
+"1) Be professional, direct, and succinct.\n"
+"2) Do NOT explain generic research theory.\n"
+"3) Ask exactly ONE targeted next question per turn.\n"
+"4) Always move the study toward execution.\n"
+"5) If the conversation loops or is vague: summarize in one sentence and propose the next action.\n"
+"6) Do not invent details or speculate.\n\n"
+"Response constraints:\n"
+"- Replies must be 100 words or fewer.\n"
+"- One question only.\n\n"
+"Current study state:\n"
++ study_snapshot
++ "\n\n"
+"V1A required anchors for IDI / Focus Group:\n"
+"- Business Problem\n"
+"- Decision to Support\n"
+"- Market / Geography\n"
+"- Product / Concept\n"
+"- Target Audience\n"
+"- Definition (example) of Useful Insight\n\n"
+"Important:\n"
+"- Do NOT ask the user to fill 'Study Fit' as a field; YOU explain fit when recommending a study type.\n"
+"- Do NOT treat 'Known vs Unknown' as required; if it appears, frame it as a hypothesis only.\n\n"
+"Task rules:\n"
+"1) Briefly acknowledge the user's latest message.\n"
+"2) Identify the single most important missing/unclear item.\n"
+"3) Ask ONE precise question to resolve it.\n"
+"4) End with a section titled exactly:\n"
+" Suggested saves:\n"
+" - List 1–3 keys from ONLY:\n"
+" business_problem, decision_to_support, market_geography, product_concept,\n"
+" target_audience, definition_useful_insight, survey_question_append\n"
+" - Only include keys relevant to what the user just said or what you are asking.\n\n"
+"Completion rule:\n"
+"If the study appears complete and valid, confirm readiness and instruct the user to proceed to QA/execution."
+)
+
+IMPORTANT: This must fully replace the old prompt that referenced known_vs_unknown/study_fit keys.
+
+--------------------------------------------------------------------------------
+D) Update save_chat_field to accept V1A keys (no schema change)
+
+In save_chat_field(), update valid_fields to include:
+- market_geography
+- product_concept
+
+When field == market_geography or product_concept:
+- call set_v1a_value(conn, study_id, field, value)
+- do NOT attempt to UPDATE studies SET <field> = ? (columns do not exist)
+
+Ensure “Saved your message as …” uses V1A_LABELS[field].
+
+--------------------------------------------------------------------------------
+E) Update get_save_buttons() to output V1A keys
+
+Stop suggesting known_vs_unknown and study_fit.
+Instead suggest:
+- market_geography
+- product_concept
+- target_audience
+- definition_useful_insight
+(and business_problem, decision_to_support as before)
+
+--------------------------------------------------------------------------------
+Testing (must do all):
+1) New draft study: “How do I start a study?” -> Mark answers in PB context, <=100 words, 1 question.
+2) After BP + Decision filled -> Mark asks Market/Geography or Product/Concept next.
+3) Saving market_geography + product_concept persists after refresh (stored in study_fit / known_vs_unknown).
+4) No KeyError / missing field exceptions in snapshot, report viewer, or Ben precheck.
+``

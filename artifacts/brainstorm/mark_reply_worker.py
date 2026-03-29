@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
+import json
 import sqlite3
 import time
 
@@ -39,7 +40,7 @@ def call_llm(model_id, messages):
 
 def main():
     if len(sys.argv) < 5:
-        print("Usage: mark_reply_worker.py <study_id> <placeholder_id> <model_id> <message>", flush=True)
+        print("Usage: mark_reply_worker.py <study_id> <placeholder_id> <model_id> <message> [fallback] [prompt_file]", flush=True)
         sys.exit(1)
 
     study_id = int(sys.argv[1])
@@ -47,10 +48,30 @@ def main():
     model_id = sys.argv[3]
     message_text = sys.argv[4]
     fallback_text = sys.argv[5] if len(sys.argv) > 5 else "I'm here to help! What would you like to work on?"
+    prompt_file = sys.argv[6] if len(sys.argv) > 6 else None
 
     print(f"WORKER_START study={study_id} placeholder={placeholder_id} model={model_id}", flush=True)
 
-    mark_reply = call_llm(model_id, [{"role": "user", "content": message_text}])
+    messages = []
+    if prompt_file and os.path.exists(prompt_file):
+        try:
+            with open(prompt_file, "r") as f:
+                prompt_data = json.load(f)
+            system_prompt = prompt_data.get("system_prompt", "")
+            chat_history = prompt_data.get("chat_history", [])
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            for msg in chat_history[-10:]:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+            messages.append({"role": "user", "content": message_text})
+            os.unlink(prompt_file)
+        except Exception as e:
+            print(f"WORKER: prompt file error: {e}, falling back to raw message", flush=True)
+            messages = [{"role": "user", "content": message_text}]
+    else:
+        messages = [{"role": "user", "content": message_text}]
+
+    mark_reply = call_llm(model_id, messages)
 
     if not mark_reply:
         mark_reply = fallback_text

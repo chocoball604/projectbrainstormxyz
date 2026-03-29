@@ -544,6 +544,28 @@ STUDY_TYPE_LIMITS = {
     "synthetic_focus_group": {"min_personas": 4, "max_personas": 6},
 }
 
+V1A_FIELD_MAP = {
+    "market_geography": "study_fit",
+    "product_concept": "known_vs_unknown",
+}
+
+def get_v1a_value(study_dict, key):
+    db_key = V1A_FIELD_MAP.get(key, key)
+    return (study_dict.get(db_key) or "").strip()
+
+def set_v1a_value(conn, study_id, key, value):
+    db_key = V1A_FIELD_MAP.get(key, key)
+    conn.execute(f"UPDATE studies SET {db_key} = ? WHERE id = ?", (value, study_id))
+
+V1A_LABELS = {
+    "business_problem": "Business Problem",
+    "decision_to_support": "Decision to Support",
+    "market_geography": "Market / Geography",
+    "product_concept": "Product / Concept",
+    "target_audience": "Target Audience",
+    "definition_useful_insight": "Definition of Useful Insight",
+}
+
 BUDGET_CEILINGS = {
     "synthetic_survey": 100_000,
     "synthetic_idi": 150_000,
@@ -3972,13 +3994,14 @@ def get_save_buttons(study):
         anchor_fields = [
             ("business_problem", "Save as Business Problem"),
             ("decision_to_support", "Save as Decision to Support"),
-            ("known_vs_unknown", "Save as Known vs Unknown"),
+            ("market_geography", "Save as Market / Geography"),
+            ("product_concept", "Save as Product / Concept"),
             ("target_audience", "Save as Target Audience"),
-            ("study_fit", "Save as Study Fit"),
             ("definition_useful_insight", "Save as Definition of Useful Insight"),
         ]
+        study_dict = dict(study)
         for field, label in anchor_fields:
-            val = (study[field] or "").strip()
+            val = get_v1a_value(study_dict, field)
             if not val:
                 buttons.append((field, label))
                 if len(buttons) >= 3:
@@ -4030,9 +4053,14 @@ def get_coaching_nudge(study, persona_count):
                 "What specific decision will this research inform?",
             ),
             (
-                "known_vs_unknown",
-                "Known vs Unknown",
-                "What do you already know, and what remains unknown?",
+                "market_geography",
+                "Market / Geography",
+                "What market or geographic region is this study focused on?",
+            ),
+            (
+                "product_concept",
+                "Product / Concept",
+                "What product, service, or concept is being researched?",
             ),
             (
                 "target_audience",
@@ -4040,18 +4068,14 @@ def get_coaching_nudge(study, persona_count):
                 "Who is the target audience for this research?",
             ),
             (
-                "study_fit",
-                "Study Fit",
-                "Why is this study type appropriate, and what can it NOT answer?",
-            ),
-            (
                 "definition_useful_insight",
                 "Definition of Useful Insight",
                 "What would a useful insight look like for this study?",
             ),
         ]
+        study_dict = dict(study)
         for field, label, prompt in anchors:
-            val = (study[field] or "").strip()
+            val = get_v1a_value(study_dict, field)
             if not val:
                 return f"Next missing item: {label}. {prompt} (Fill it in the Research Brief section above.)"
         if st == "synthetic_idi":
@@ -4093,9 +4117,9 @@ def save_chat_field(study_id):
     valid_fields = {
         "business_problem",
         "decision_to_support",
-        "known_vs_unknown",
+        "market_geography",
+        "product_concept",
         "target_audience",
-        "study_fit",
         "definition_useful_insight",
         "survey_question_append",
     }
@@ -4122,12 +4146,15 @@ def save_chat_field(study_id):
             (json.dumps(sq), study_id),
         )
         save_label = f"Survey Question #{len(sq)}"
+    elif field in V1A_FIELD_MAP:
+        set_v1a_value(conn, study_id, field, value)
+        save_label = V1A_LABELS.get(field, field.replace("_", " ").title())
     else:
         conn.execute(
             f"UPDATE studies SET {field} = ? WHERE id = ?",
             (value, study_id),
         )
-        save_label = field.replace("_", " ").title()
+        save_label = V1A_LABELS.get(field, field.replace("_", " ").title())
 
     conn.execute(
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
@@ -4213,7 +4240,77 @@ def send_chat(study_id):
     mark_model_id = mc.get("mark_model")
     study_dict = dict(study)
 
-    placeholder_text = "⏳ Mark is thinking..."
+    anchor_keys = [
+        ("business_problem", "Business Problem"),
+        ("decision_to_support", "Decision to Support"),
+        ("market_geography", "Market / Geography"),
+        ("product_concept", "Product / Concept"),
+        ("target_audience", "Target Audience"),
+        ("definition_useful_insight", "Definition of Useful Insight"),
+    ]
+    snapshot_lines = [f"Study Title: {study_dict.get('title', 'Untitled')}"]
+    snapshot_lines.append(f"Study Type: {study_dict.get('study_type') or 'Not yet selected'}")
+    for key, label in anchor_keys:
+        val = get_v1a_value(study_dict, key)
+        snapshot_lines.append(f"{label}: {val or '[not yet provided]'}")
+    snapshot_lines.append(f"Personas attached: {persona_count}")
+    study_snapshot = "\n".join(snapshot_lines)
+
+    system_prompt = (
+        "You are Mark, the Market Intelligence Copilot for Project Brainstorm.\n\n"
+        "Project Brainstorm is an AI-native market research platform that helps users frame business problems "
+        "and run disciplined, governed market research simulations (Synthetic Survey, Synthetic IDI, Synthetic Focus Group) "
+        "to support real business decisions.\n\n"
+        "Project Brainstorm is NOT:\n"
+        "- a general-purpose chatbot\n"
+        "- an academic research tutor\n"
+        "- a prediction or forecasting engine\n"
+        "- a brainstorming partner for unrelated topics\n\n"
+        "Your role is to ORCHESTRATE research setup. You lead the process. The user provides inputs. "
+        "You decide what is required next.\n\n"
+        "Authority & behavior rules:\n"
+        "1) Be professional, direct, and succinct.\n"
+        "2) Do NOT explain generic research theory.\n"
+        "3) Ask exactly ONE targeted next question per turn.\n"
+        "4) Always move the study toward execution.\n"
+        "5) If the conversation loops or is vague: summarize in one sentence and propose the next action.\n"
+        "6) Do not invent details or speculate.\n\n"
+        "Response constraints:\n"
+        "- Replies must be 100 words or fewer.\n"
+        "- One question only.\n\n"
+        "Current study state:\n"
+        + study_snapshot
+        + "\n\n"
+        "V1A required anchors for IDI / Focus Group:\n"
+        "- Business Problem\n"
+        "- Decision to Support\n"
+        "- Market / Geography\n"
+        "- Product / Concept\n"
+        "- Target Audience\n"
+        "- Definition (example) of Useful Insight\n\n"
+        "Important:\n"
+        "- Do NOT ask the user to fill 'Study Fit' as a field; YOU explain fit when recommending a study type.\n"
+        "- Do NOT treat 'Known vs Unknown' as required; if it appears, frame it as a hypothesis only.\n\n"
+        "Task rules:\n"
+        "1) Briefly acknowledge the user's latest message.\n"
+        "2) Identify the single most important missing/unclear item.\n"
+        "3) Ask ONE precise question to resolve it.\n"
+        "4) End with a section titled exactly:\n"
+        " Suggested saves:\n"
+        " - List 1–3 keys from ONLY:\n"
+        " business_problem, decision_to_support, market_geography, product_concept,\n"
+        " target_audience, definition_useful_insight, survey_question_append\n"
+        " - Only include keys relevant to what the user just said or what you are asking.\n\n"
+        "Completion rule:\n"
+        "If the study appears complete and valid, confirm readiness and instruct the user to proceed to QA/execution."
+    )
+
+    chat_history = conn.execute(
+        "SELECT sender, message_text FROM chat_messages WHERE study_id = ? ORDER BY id",
+        (study_id,),
+    ).fetchall()
+
+    placeholder_text = "\u23f3 Mark is thinking..."
     cursor = conn.execute(
         "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
         (study_id, placeholder_text),
@@ -4225,13 +4322,28 @@ def send_chat(study_id):
     fallback = get_coaching_nudge(study_dict, persona_count)
 
     if mark_model_id:
+        import tempfile
+        prompt_data = {
+            "system_prompt": system_prompt,
+            "chat_history": [
+                {"role": "assistant" if m["sender"] == "mark" else "user", "content": m["message_text"]}
+                for m in chat_history
+                if m["message_text"] != placeholder_text
+            ],
+        }
+        prompt_file = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, dir="/tmp"
+        )
+        json.dump(prompt_data, prompt_file)
+        prompt_file.close()
+
         worker_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mark_reply_worker.py")
         env = os.environ.copy()
         log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.log")
         log_f = open(log_path, "a")
         subprocess.Popen(
             [sys.executable, worker_script,
-             str(study_id), str(placeholder_msg_id), mark_model_id, message_text, fallback],
+             str(study_id), str(placeholder_msg_id), mark_model_id, message_text, fallback, prompt_file.name],
             env=env,
             stdout=log_f,
             stderr=log_f,
