@@ -1518,6 +1518,16 @@ def index():
 
                 chat_save_buttons = get_save_buttons(configure_study)
 
+                if configure_study.get("status") == "draft" and configure_study.get("study_type"):
+                    auto_ben_precheck(conn, configure_study, user["id"])
+                    if configure_study.get("qa_status") == "precheck_failed" and configure_study.get("qa_notes"):
+                        try:
+                            configure_study["precheck_failures"] = json.loads(configure_study["qa_notes"])
+                        except (json.JSONDecodeError, TypeError):
+                            configure_study["precheck_failures"] = []
+                    else:
+                        configure_study["precheck_failures"] = []
+
                 study_uploads = [
                     dict(r)
                     for r in conn.execute(
@@ -3703,7 +3713,7 @@ def run_ben_qa(study_dict):
     }
 
 
-def ben_precheck(study, persona_count):
+def ben_precheck(study, persona_count, persona_dossiers=None):
     failures = []
     st = study["study_type"] or ""
 
@@ -3730,13 +3740,14 @@ def ben_precheck(study, persona_count):
         anchor_labels = [
             ("business_problem", "Business Problem"),
             ("decision_to_support", "Decision to Support"),
-            ("known_vs_unknown", "Known vs Unknown"),
+            ("market_geography", "Market / Geography"),
+            ("product_concept", "Product / Concept"),
             ("target_audience", "Target Audience"),
-            ("study_fit", "Study Fit"),
             ("definition_useful_insight", "Definition of Useful Insight"),
         ]
         for field, label in anchor_labels:
-            if not (study.get(field) or "").strip():
+            val = get_v1a_value(study, field)
+            if not val:
                 failures.append(f"{label} is missing.")
         if st == "synthetic_idi":
             if persona_count < 1 or persona_count > 3:
@@ -3748,10 +3759,76 @@ def ben_precheck(study, persona_count):
                 failures.append(
                     f"Focus Group requires 4–6 personas (currently {persona_count})."
                 )
+
+        target_audience = get_v1a_value(study, "target_audience")
+        market_geo = get_v1a_value(study, "market_geography")
+        if target_audience and persona_dossiers:
+            ta_lower = target_audience.lower()
+            mg_lower = (market_geo or "").lower()
+            for pd in persona_dossiers:
+                p_name = pd.get("name", "Unknown")
+                p_summary = (pd.get("persona_summary") or "").lower()
+                p_demo = (pd.get("demographic_frame") or "").lower()
+                p_context = (pd.get("contextual_constraints") or "").lower()
+                p_text = f"{p_summary} {p_demo} {p_context}"
+                if mg_lower and len(mg_lower) > 3:
+                    geo_tokens = [t.strip() for t in mg_lower.replace(",", " ").split() if len(t.strip()) > 3]
+                    geo_match = any(tok in p_text for tok in geo_tokens)
+                    if not geo_match and geo_tokens:
+                        failures.append(
+                            f"Persona '{p_name}' may not match Market / Geography '{market_geo}'. "
+                            "Review persona dossier for geographic fit."
+                        )
     else:
         failures.append(f"Unknown study type: {st}")
 
     return failures
+
+
+def auto_ben_precheck(conn, study, user_id):
+    st = study.get("study_type") or ""
+    if not st:
+        return
+    if study.get("status") != "draft":
+        return
+
+    study_dict = dict(study) if not isinstance(study, dict) else study
+    study_id = study_dict["id"]
+
+    raw_ids = normalize_personas_used(study_dict.get("personas_used"))
+    persona_count = 0
+    persona_dossiers = []
+    for pid in raw_ids:
+        p_row = conn.execute(
+            "SELECT name, persona_summary, demographic_frame, contextual_constraints "
+            "FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+            (pid, user_id),
+        ).fetchone()
+        if p_row:
+            persona_count += 1
+            persona_dossiers.append(dict(p_row))
+
+    if st in ("synthetic_idi", "synthetic_focus_group"):
+        if persona_count == 0:
+            min_p = 1 if st == "synthetic_idi" else 4
+            persona_count = min_p
+
+    failures = ben_precheck(study_dict, persona_count, persona_dossiers)
+
+    if failures:
+        conn.execute(
+            "UPDATE studies SET qa_status = 'precheck_failed', qa_notes = ? WHERE id = ?",
+            (json.dumps(failures), study_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE studies SET qa_status = 'precheck_passed', qa_notes = NULL WHERE id = ?",
+            (study_id,),
+        )
+    conn.commit()
+    study_dict["qa_status"] = "precheck_passed" if not failures else "precheck_failed"
+    study_dict["qa_notes"] = json.dumps(failures) if failures else None
+    print(f"AUTO_PRECHECK study={study_id} result={'FAIL' if failures else 'PASS'} failures={failures}", flush=True)
 
 
 @app.route("/ready-for-qa/<int:study_id>", methods=["POST"])
@@ -3769,29 +3846,7 @@ def ready_for_qa(study_id):
         conn.close()
         return render_error("Study not found or not in draft status.")
 
-    persona_count = 0
-    raw_ids = normalize_personas_used(study["personas_used"])
-    for pid in raw_ids:
-        p_row = conn.execute(
-            "SELECT 1 FROM personas WHERE persona_instance_id = ? AND user_id = ?",
-            (pid, user["id"]),
-        ).fetchone()
-        if p_row:
-            persona_count += 1
-
-    failures = ben_precheck(dict(study), persona_count)
-
-    if failures:
-        conn.execute(
-            "UPDATE studies SET qa_status = 'precheck_failed', qa_notes = ? WHERE id = ?",
-            (json.dumps(failures), study_id),
-        )
-    else:
-        conn.execute(
-            "UPDATE studies SET qa_status = 'precheck_passed', qa_notes = NULL WHERE id = ?",
-            (study_id,),
-        )
-    conn.commit()
+    auto_ben_precheck(conn, dict(study), user["id"])
     conn.close()
     return redirect(f"/?token={token}&configure={study_id}")
 
