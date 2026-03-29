@@ -1517,6 +1517,7 @@ def index():
                 ]
 
                 chat_save_buttons = get_save_buttons(configure_study)
+                chat_save_buttons = []
 
                 if configure_study.get("status") == "draft" and configure_study.get("study_type"):
                     auto_ben_precheck(conn, configure_study, user["id"])
@@ -1889,6 +1890,24 @@ def get_latest_blog_posts(limit=2):
     ]
     conn.close()
     return posts
+
+
+@app.route("/terms")
+def terms_page():
+    token = get_token()
+    return render_template("terms.html", token=token)
+
+
+@app.route("/privacy")
+def privacy_page():
+    token = get_token()
+    return render_template("privacy.html", token=token)
+
+
+@app.route("/disclaimer")
+def disclaimer_page():
+    token = get_token()
+    return render_template("disclaimer.html", token=token)
 
 
 @app.route("/blog")
@@ -4332,7 +4351,19 @@ def send_chat(study_id):
         "6) Do not invent details or speculate.\n\n"
         "Response constraints:\n"
         "- Replies must be 100 words or fewer.\n"
-        "- One question only.\n\n"
+        "- One question only.\n"
+        "- Do NOT include any 'Suggested saves' section or footer in your reply.\n"
+        "- End after your single question.\n\n"
+        "PHASE GATE (MANDATORY):\n"
+        "If Study Type is 'Not yet selected':\n"
+        "  a) If Business Problem is '[not yet provided]': ask ONLY for Business Problem.\n"
+        "  b) Else if Decision to Support is '[not yet provided]': ask ONLY for Decision to Support.\n"
+        "  c) Else (both BP and Decision are present): recommend ONE study type "
+        "(Synthetic Survey vs Synthetic IDI vs Synthetic Focus Group) based on the business problem, "
+        "then ask the user to confirm by selecting a study type using the buttons on this page. "
+        "Do NOT proceed to any other questions.\n"
+        "  d) You MUST NOT ask about Market/Geography, Product/Concept, Target Audience, "
+        "or Definition of Useful Insight until Study Type is selected.\n\n"
         "Current study state:\n"
         + study_snapshot
         + "\n\n"
@@ -4349,13 +4380,7 @@ def send_chat(study_id):
         "Task rules:\n"
         "1) Briefly acknowledge the user's latest message.\n"
         "2) Identify the single most important missing/unclear item.\n"
-        "3) Ask ONE precise question to resolve it.\n"
-        "4) End with a section titled exactly:\n"
-        " Suggested saves:\n"
-        " - List 1–3 keys from ONLY:\n"
-        " business_problem, decision_to_support, market_geography, product_concept,\n"
-        " target_audience, definition_useful_insight, survey_question_append\n"
-        " - Only include keys relevant to what the user just said or what you are asking.\n\n"
+        "3) Ask ONE precise question to resolve it.\n\n"
         "Completion rule:\n"
         "If the study appears complete and valid, confirm readiness and instruct the user to proceed to QA/execution."
     )

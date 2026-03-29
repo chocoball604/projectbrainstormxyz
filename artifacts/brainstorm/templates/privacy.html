@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy — Project Brainstorm</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #111; background: #fff; }
+        .legal-container { max-width: 800px; margin: 0 auto; padding: 40px 24px 60px; }
+        .legal-container h1 { font-size: 24px; margin-bottom: 24px; color: #1a1a2e; }
+        .legal-container h2 { font-size: 18px; margin: 28px 0 12px; color: #1a1a2e; }
+        .legal-container p { margin-bottom: 12px; }
+        .legal-container ul { margin: 8px 0 12px 24px; }
+        .legal-container li { margin-bottom: 6px; }
+        .legal-nav { max-width: 800px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+        .legal-nav a { color: #5C7E8F; text-decoration: none; font-size: 13px; }
+        .legal-nav a:hover { text-decoration: underline; }
+        .site-footer { background: #1a1a2e; color: rgba(255,255,255,0.6); text-align: center; padding: 24px 20px; font-size: 11px; line-height: 1.6; }
+        .site-footer a { color: rgba(255,255,255,0.8); text-decoration: none; }
+        .site-footer a:hover { text-decoration: underline; }
+        .site-footer .footer-links { margin-top: 8px; }
+        .site-footer .footer-links a { margin: 0 8px; }
+        .site-footer .footer-disclaimer { margin-top: 10px; font-size: 10px; color: rgba(255,255,255,0.45); max-width: 700px; margin-left: auto; margin-right: auto; }
+        .site-footer .footer-liability { margin-top: 8px; font-size: 9px; color: rgba(255,255,255,0.35); max-width: 700px; margin-left: auto; margin-right: auto; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+<div class="legal-nav">
+    <a href="{{ url_for('index', token=token) if token else url_for('landing_page') }}">&larr; Back</a>
+</div>
+<div class="legal-container">
+    <h1>Privacy Policy</h1>
+
+    <h2>1. Overview</h2>
+    <p>Project Brainstorm respects your privacy and is committed to handling personal information responsibly.</p>
+    <p>This Privacy Policy explains what information we collect, how we use it, and your choices.</p>
+
+    <h2>2. Information We Collect</h2>
+    <p>We collect only information necessary to operate the Service, including:</p>
+    <p>Information you provide during sign‑up:</p>
+    <ul>
+        <li>Name, company, role, industry, location</li>
+        <li>Email address and username</li>
+    </ul>
+    <p>Account metadata:</p>
+    <ul>
+        <li>Login timestamps</li>
+        <li>Verification and approval status</li>
+    </ul>
+    <p>We do not knowingly collect sensitive personal data.</p>
+
+    <h2>3. How We Use Information</h2>
+    <p>We use your information to:</p>
+    <ul>
+        <li>Create and manage user accounts</li>
+        <li>Authenticate and authorize access</li>
+        <li>Administer beta access</li>
+        <li>Improve platform functionality</li>
+        <li>Communicate service‑related messages (eg, verification, approval)</li>
+    </ul>
+    <p>We do not sell personal data.</p>
+
+    <h2>4. AI and Third‑Party Services</h2>
+    <ul>
+        <li>Project Brainstorm uses third‑party infrastructure and AI services.</li>
+        <li>We do not control how third‑party AI models are trained</li>
+        <li>We do not include personal user profile data in model training</li>
+        <li>Outputs are synthetic and not tied to real individuals</li>
+    </ul>
+
+    <h2>5. Data Retention</h2>
+    <p>We retain user data only as long as necessary to operate the Service or comply with legal obligations.</p>
+    <p>You may request account deletion by contacting us.</p>
+
+    <h2>6. Security</h2>
+    <p>We take reasonable steps to protect user data but cannot guarantee absolute security.</p>
+    <p>Use of the Service is at your own risk.</p>
+
+    <h2>7. Changes</h2>
+    <p>We may update this Privacy Policy from time to time. Continued use of the Service constitutes acceptance of changes.</p>
+
+    <h2>8. Contact</h2>
+    <p>For privacy questions, contact: <a href="mailto:legal@projectbrainstorm.xyz">legal@projectbrainstorm.xyz</a></p>
+</div>
+
+<div class="site-footer">
+    &copy; Project Brainstorm 2026. All rights reserved.
+    <div class="footer-links">
+        <a href="{{ url_for('terms_page', token=token) if token else url_for('terms_page') }}">Terms of Service</a>
+        <a href="{{ url_for('privacy_page', token=token) if token else url_for('privacy_page') }}">Privacy Policy</a>
+        <a href="{{ url_for('disclaimer_page', token=token) if token else url_for('disclaimer_page') }}">Disclaimer</a>
+    </div>
+    <div class="footer-disclaimer">Experimental Platform Notice: Project Brainstorm is an experimental AI powered simulation platform. Outputs are synthetic, probabilistic, and provided for informational purposes only. Do not rely on them as professional advice.</div>
+    <div class="footer-liability">TO THE MAXIMUM EXTENT PERMITTED BY LAW, PROJECT BRAINSTORM AND ALL ASSOCIATED PERSONS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, OR PUNITIVE DAMAGES.</div>
+</div>
+</body>
+</html>

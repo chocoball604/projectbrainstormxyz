@@ -783,10 +783,17 @@
     </div>
 </section>
 
-<div class="landing-footer">
-    &copy; 2026 Project Brainstorm. All rights reserved.
+<div class="landing-footer" style="line-height: 1.6;">
+    &copy; Project Brainstorm 2026. All rights reserved.
     &nbsp;&nbsp;&middot;&nbsp;&nbsp;
     <a href="#" onclick="openAuthModal('admin'); return false;" style="color: rgba(255,255,255,0.3); text-decoration: none; font-size: var(--font-small);">Admin</a>
+    <div style="margin-top: 8px;">
+        <a href="{{ url_for('terms_page') }}" style="color: rgba(255,255,255,0.8); text-decoration: none; margin: 0 8px;">Terms of Service</a>
+        <a href="{{ url_for('privacy_page') }}" style="color: rgba(255,255,255,0.8); text-decoration: none; margin: 0 8px;">Privacy Policy</a>
+        <a href="{{ url_for('disclaimer_page') }}" style="color: rgba(255,255,255,0.8); text-decoration: none; margin: 0 8px;">Disclaimer</a>
+    </div>
+    <div style="margin-top: 10px; font-size: 10px; color: rgba(255,255,255,0.45); max-width: 700px; margin-left: auto; margin-right: auto;">Experimental Platform Notice: Project Brainstorm is an experimental AI powered simulation platform. Outputs are synthetic, probabilistic, and provided for informational purposes only. Do not rely on them as professional advice.</div>
+    <div style="margin-top: 8px; font-size: 9px; color: rgba(255,255,255,0.35); max-width: 700px; margin-left: auto; margin-right: auto; text-transform: uppercase;">TO THE MAXIMUM EXTENT PERMITTED BY LAW, PROJECT BRAINSTORM AND ALL ASSOCIATED PERSONS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, OR PUNITIVE DAMAGES.</div>
 </div>
 
 <!-- Sign Up Modal -->

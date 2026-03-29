@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service — Project Brainstorm</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #111; background: #fff; }
+        .legal-container { max-width: 800px; margin: 0 auto; padding: 40px 24px 60px; }
+        .legal-container h1 { font-size: 24px; margin-bottom: 24px; color: #1a1a2e; }
+        .legal-container h2 { font-size: 18px; margin: 28px 0 12px; color: #1a1a2e; }
+        .legal-container p { margin-bottom: 12px; }
+        .legal-container ul { margin: 8px 0 12px 24px; }
+        .legal-container li { margin-bottom: 6px; }
+        .legal-nav { max-width: 800px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+        .legal-nav a { color: #5C7E8F; text-decoration: none; font-size: 13px; }
+        .legal-nav a:hover { text-decoration: underline; }
+        .site-footer { background: #1a1a2e; color: rgba(255,255,255,0.6); text-align: center; padding: 24px 20px; font-size: 11px; line-height: 1.6; }
+        .site-footer a { color: rgba(255,255,255,0.8); text-decoration: none; }
+        .site-footer a:hover { text-decoration: underline; }
+        .site-footer .footer-links { margin-top: 8px; }
+        .site-footer .footer-links a { margin: 0 8px; }
+        .site-footer .footer-disclaimer { margin-top: 10px; font-size: 10px; color: rgba(255,255,255,0.45); max-width: 700px; margin-left: auto; margin-right: auto; }
+        .site-footer .footer-liability { margin-top: 8px; font-size: 9px; color: rgba(255,255,255,0.35); max-width: 700px; margin-left: auto; margin-right: auto; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+<div class="legal-nav">
+    <a href="{{ url_for('index', token=token) if token else url_for('landing_page') }}">&larr; Back</a>
+</div>
+<div class="legal-container">
+    <h1>Terms of Service</h1>
+
+    <h2>1. Introduction</h2>
+    <p>Welcome to Project Brainstorm ("Project Brainstorm," "we," "us," or "our").</p>
+    <p>Project Brainstorm provides access to an experimental, AI‑powered market intelligence platform that generates simulated research outputs using large language models ("LLMs") and related technologies.</p>
+    <p>By accessing or using this website or any related services (the "Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Service.</p>
+
+    <h2>2. Experimental Nature of the Service</h2>
+    <p>Project Brainstorm is an experimental platform.</p>
+    <ul>
+        <li>The Service relies on artificial intelligence, simulation techniques, and probabilistic models.</li>
+        <li>Outputs are synthetic, simulated, and non‑deterministic.</li>
+        <li>Results may be incomplete, inaccurate, outdated, biased, or incorrect.</li>
+        <li>The Service is provided for exploratory and informational purposes only.</li>
+    </ul>
+    <p>You acknowledge that the Service does not provide professional advice, including but not limited to business, legal, financial, regulatory, medical, or investment advice.</p>
+
+    <h2>3. No Training or Ownership of Underlying Models and Data</h2>
+    <ul>
+        <li>Project Brainstorm does not develop, train, or own the underlying foundation models and data used in the Service.</li>
+        <li>The Service integrates third‑party LLMs and AI systems provided by external vendors.</li>
+        <li>We make no representations or warranties regarding how those models were trained, what data they were trained on, or their accuracy.</li>
+        <li>Model behaviour may change without notice due to upstream updates.</li>
+    </ul>
+
+    <h2>4. No Reliance; Use at Your Own Risk</h2>
+    <p>You agree that:</p>
+    <ul>
+        <li>All outputs are simulations, not representations of real people, real markets, or real outcomes.</li>
+        <li>You must not rely on any output as a substitute for independent research, professional judgment, or expert advice.</li>
+        <li>Any decisions you make based on the Service are made entirely at your own risk.</li>
+        <li>Project Brainstorm does not guarantee that outputs reflect real‑world behaviour, sentiment, legality, or outcomes.</li>
+    </ul>
+
+    <h2>5. No Warranties</h2>
+    <p>THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE."</p>
+    <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW, PROJECT BRAINSTORM DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO:</p>
+    <ul>
+        <li>MERCHANTABILITY</li>
+        <li>FITNESS FOR A PARTICULAR PURPOSE</li>
+        <li>ACCURACY OR COMPLETENESS</li>
+        <li>NON‑INFRINGEMENT</li>
+    </ul>
+    <p>We do not warrant that the Service will be uninterrupted, secure, error‑free, or free of harmful components.</p>
+
+    <h2>6. Limitation of Liability</h2>
+    <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW:</p>
+    <p>PROJECT BRAINSTORM AND ALL ASSOCIATED PERSONS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, OR PUNITIVE DAMAGES.</p>
+    <p>THIS INCLUDES, WITHOUT LIMITATION:</p>
+    <ul>
+        <li>lost profits</li>
+        <li>lost data</li>
+        <li>business interruption</li>
+        <li>reputational harm</li>
+        <li>regulatory or legal exposure</li>
+        <li>reliance on incorrect outputs</li>
+    </ul>
+    <p>THIS APPLIES EVEN IF WE HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.</p>
+
+    <h2>7. Indemnification</h2>
+    <p>You agree to indemnify, defend, and hold harmless Project Brainstorm and its founders, employees, contractors, partners, and affiliates from any claims, losses, liabilities, damages, or expenses arising out of:</p>
+    <ul>
+        <li>your use of the Service</li>
+        <li>your reliance on outputs</li>
+        <li>your violation of these Terms</li>
+        <li>your violation of any applicable law or regulation</li>
+    </ul>
+
+    <h2>8. No Liability for Third‑Party Content or Data</h2>
+    <ul>
+        <li>The Service may reference or cite third‑party sources.</li>
+        <li>We do not verify, endorse, or guarantee third‑party content.</li>
+        <li>Citations are provided for transparency only, not validation.</li>
+        <li>We are not responsible for the accuracy, legality, or availability of external sources.</li>
+    </ul>
+
+    <h2>9. Severability</h2>
+    <p>The clauses and paragraphs contained in these Terms are intended to be read and construed independently of each other. If any part of this document is held to be invalid, this invalidity will not affect the operation of any other part of these Terms.</p>
+
+    <h2>10. Modification and Termination</h2>
+    <p>We may modify, suspend, or discontinue the Service at any time, without notice.</p>
+    <p>We may update these Terms at any time. Continued use of the Service constitutes acceptance of the updated Terms.</p>
+
+    <h2>11. Governing Law</h2>
+    <p>These Terms are governed by the laws of the Hong Kong Special Administrative Region, without regard to conflict‑of‑laws principles.</p>
+
+    <h2>12. Contact</h2>
+    <p>For questions about these Terms, contact: <a href="mailto:legal@projectbrainstorm.xyz">legal@projectbrainstorm.xyz</a></p>
+</div>
+
+<div class="site-footer">
+    &copy; Project Brainstorm 2026. All rights reserved.
+    <div class="footer-links">
+        <a href="{{ url_for('terms_page', token=token) if token else url_for('terms_page') }}">Terms of Service</a>
+        <a href="{{ url_for('privacy_page', token=token) if token else url_for('privacy_page') }}">Privacy Policy</a>
+        <a href="{{ url_for('disclaimer_page', token=token) if token else url_for('disclaimer_page') }}">Disclaimer</a>
+    </div>
+    <div class="footer-disclaimer">Experimental Platform Notice: Project Brainstorm is an experimental AI powered simulation platform. Outputs are synthetic, probabilistic, and provided for informational purposes only. Do not rely on them as professional advice.</div>
+    <div class="footer-liability">TO THE MAXIMUM EXTENT PERMITTED BY LAW, PROJECT BRAINSTORM AND ALL ASSOCIATED PERSONS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, OR PUNITIVE DAMAGES.</div>
+</div>
+</body>
+</html>

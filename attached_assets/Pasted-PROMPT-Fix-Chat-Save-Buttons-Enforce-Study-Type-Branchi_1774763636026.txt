@@ -1,0 +1,247 @@
+PROMPT — Fix Chat Save Buttons + Enforce Study-Type Branching + Remove “Suggested saves” + ADD GLOBAL LEGAL FOOTER (PRD V4.03)
+
+READ FIRST (NON-NEGOTIABLE SAFETY RAILS)
+Source of truth: Follow [PRD_Mark-PBXYZ_V4.03.docx](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e&EntityRepresentationId=b8bd9904-cece-4be6-952e-635335d299ca) and V1A discipline (corrective + consolidation; no scope creep). [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+Hard constraints (NON-NEGOTIABLE):
+1) DO NOT change SQLite schema:
+   - No CREATE TABLE, ALTER TABLE, DROP TABLE
+   - No new columns, no migrations, no init_db schema edits [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+2) DO NOT modify frozen assets / DB artifacts:
+   - Do not edit brainstorm_v1_replit_singlepage_pack/
+   - Do not edit or commit brainstorm.db [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+3) Stability rules:
+   - Never hold a DB connection open during call_llm()
+   - Commit + close before LLM calls; reopen only for writes [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+4) Minimal edits only:
+   - Do not refactor unrelated code
+   - Avoid broad rewrites [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+5) Every response must end with:
+   (a) Files changed
+   (b) What changed
+   (c) How to test (step-by-step)
+
+GOALS (4 FIXES)
+Fix three chat issues + add mandatory site-wide legal footer:
+(1) “Save as …” buttons inside chat appear inconsistently (“randomly”) — eliminate entirely.
+(2) Mark runs ahead: after Business Problem + Decision to Support, Mark MUST branch and ask user to confirm study type (Survey vs IDI vs Focus Group) BEFORE asking for V1A anchors like market_geography/product_concept.
+(3) Mark keeps outputting “Suggested saves” footer — remove this requirement from Mark’s system prompt (chat).
+(4) Add a global footer on EVERY PAGE with:
+    - Copyright notice (required by PRD)
+    - Link to Terms of Service (full text = Appendix 3(1))
+    - Link to Privacy Policy (full text = Appendix 4)
+    - Short Website Disclaimer (Appendix 3(2)) in the footer
+    - Explicit Limitation of Liability sentence in the footer (from Appendix 3, Section 6)
+
+PRD FOOTER REQUIREMENT (must comply)
+PRD says footer appears on every page (landing, sign up, login, user dashboard, account management) and includes:
+- ©Project Brainstorm [YEAR]. All rights reserved.
+- Terms of Service link
+- Privacy Policy link [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+PRD also provides Short Website Disclaimer text for homepage/footer/signup in Appendix 3(2). [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+PRD also contains Limitation of Liability language in Appendix 3, Section 6. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+
+SCOPE (FILES YOU MAY EDIT)
+Allowed edits:
+- artifacts/brainstorm/app.py
+- templates/index.html
+- templates/landing.html
+- templates/blog_list.html
+- templates/blog_post.html
+- templates/base.html (IF IT EXISTS; preferred approach is to introduce/centralize footer here; otherwise implement footer in each template)
+- New templates allowed ONLY if needed for legal pages:
+  templates/terms.html
+  templates/privacy.html
+  templates/disclaimer.html
+No other files. No schema changes.
+
+-----------------------------------------
+PLAN (PRINT THIS PLAN BEFORE CODING)
+1) Disable chat save buttons deterministically (UI must never render them).
+2) Add a hard phase gate to Mark’s system prompt: if study_type is not set, Mark must recommend/confirm study type after BP+Decision; no V1A anchor questions before selection.
+3) Remove the “Suggested saves” requirement from Mark’s system prompt (chat).
+4) Implement a global footer on every page, with PRD-provided disclaimer + explicit liability limitation sentence + links to Terms/Privacy; add legal pages using the exact text from PRD appendices.
+
+-----------------------------------------
+IMPLEMENTATION DETAILS
+
+A) FIX (1): Remove chat save buttons from rendering (eliminate “random” appearance)
+Problem: chat_save_buttons are computed and rendered during refresh, so buttons appear/disappear depending on page reload timing.
+Required changes:
+1) In templates/index.html:
+   - Find the block that renders chat_save_buttons (loop rendering “Save as ...” buttons).
+   - Remove or fully disable this block so chat NEVER shows any “Save as …”/“Save to …” buttons.
+2) In artifacts/brainstorm/app.py (index() route):
+   - After chat_save_buttons is computed, force:
+     chat_save_buttons = []
+   - Pass it to template as usual.
+This guarantees no chat save buttons, even if the template changes later.
+
+DO NOT delete /save-chat-field route in this prompt.
+DO NOT remove mapping helpers or DB write logic.
+Only remove UI exposure.
+
+B) FIX (2): Enforce study-type branching BEFORE V1A anchors (Mark must not run ahead)
+PRD requires: Mark collects BP + Decision, THEN recommends and user confirms study type, THEN branch by type. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+Required changes (artifacts/brainstorm/app.py, send_chat()):
+1) Edit Mark’s system_prompt text to add an explicit PHASE GATE:
+   - If Study Type is NOT selected:
+     a) If Business Problem is missing: ask ONLY for Business Problem (ONE question).
+     b) Else if Decision to Support is missing: ask ONLY for Decision to Support (ONE question).
+     c) Else (BP + Decision present): Mark MUST:
+        - Recommend ONE study type (Synthetic Survey vs Synthetic IDI vs Synthetic Focus Group)
+        - Ask ONE question to confirm study type
+        - Direct user to confirm using existing UI controls/buttons (Use Survey / Use IDI / Use Focus Group).
+     d) Mark MUST NOT ask for any of these anchors until study_type is set:
+        market_geography, product_concept, target_audience, definition_useful_insight
+2) After study_type is selected, Mark may proceed to ask the next missing required items for that study type.
+
+Keep Mark constraints already in prompt (≤100 words, exactly one question, professional/direct).
+Do NOT introduce extra questions.
+
+C) FIX (3): Remove “Suggested saves” footer from Mark outputs (chat)
+Problem: current Mark system prompt forces a “Suggested saves” section in every reply.
+Required changes (artifacts/brainstorm/app.py, Mark system_prompt inside send_chat()):
+1) Remove the entire instruction block that requires:
+   - a section titled exactly “Suggested saves:”
+   - listing save keys
+2) Replace with a simpler rule:
+   - No special footer required in chat
+   - End after the single question
+
+DO NOT replace with alternate footer language (e.g., “Suggested fields”).
+We are removing the “Suggested saves” pattern entirely.
+
+IMPORTANT: This is the chat content footer only. The website footer (legal) is separate and MUST remain (see section D).
+
+D) FIX (4): Add GLOBAL WEBSITE FOOTER (legal + liability) on EVERY PAGE
+PRD requires a footer on every page with copyright + Terms link + Privacy link. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+PRD supplies Short Website Disclaimer text in Appendix 3(2). [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+PRD supplies Limitation of Liability language in Appendix 3, Section 6. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+
+Required changes:
+1) Create or use a shared footer (preferred):
+   - If templates/base.html exists, put footer there and ensure all pages extend it.
+   - If no base template exists, add the footer block to EACH of:
+     templates/index.html
+     templates/landing.html
+     templates/blog_list.html
+     templates/blog_post.html
+     (and any auth/account templates if present in your project)
+2) Footer MUST include these exact elements:
+   (a) Copyright (PRD):
+       "©Project Brainstorm 2026. All rights reserved."
+       (Use current year if you already have a year helper; otherwise hardcode 2026 for now.)
+   (b) Short Website Disclaimer (Appendix 3(2)) — use exact wording:
+       "Experimental Platform Notice: Project Brainstorm is an experimental AI powered simulation platform. Outputs are synthetic, probabilistic, and provided for informational purposes only. Do not rely on them as professional advice." [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+   (c) Limitation of Liability sentence (derived directly from Appendix 3, Section 6; MUST include this exact sentence):
+       "TO THE MAXIMUM EXTENT PERMITTED BY LAW, PROJECT BRAINSTORM AND ALL ASSOCIATED PERSONS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, OR PUNITIVE DAMAGES." [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+   (d) Links (PRD requirement):
+       "Terms of Service" (link)
+       "Privacy Policy" (link)
+       Also include "Disclaimer" link if you implement /disclaimer page (recommended for user clarity; optional if you reuse Terms-only).
+3) Routes and pages:
+   - Implement these routes in artifacts/brainstorm/app.py:
+     /terms        → renders templates/terms.html with the FULL text of Appendix 3(1)
+     /privacy       → renders templates/privacy.html with the FULL text of Appendix 4
+     /disclaimer    → renders templates/disclaimer.html with the Output Disclaimer text (Appendix 3(3)) OR a short page that points to Terms + repeats the short disclaimer. (Either is acceptable; do not invent legal language.)
+   The PRD explicitly provides full Terms text and full Privacy Policy text; you MUST use those exact texts. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+
+4) Token preservation (CRITICAL; don’t break logged-in navigation):
+   - The app uses token-based session handling in some flows; keep token in links when present. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+   - In templates where token exists in context:
+       url_for('terms', token=token)
+       url_for('privacy', token=token)
+       url_for('disclaimer', token=token)
+   - If token is not present (landing page), render links without token.
+   - Blog pages already pass token; preserve it (do not break “Home” returning to dashboard with token).
+
+5) No acceptance gating in this prompt:
+   - PRD mentions sign-up should require scrolling Terms to enable checkbox. That is OUT OF SCOPE for this prompt unless it is already implemented and broken.
+   - For this prompt, just ensure pages exist and footer links work.
+
+DO NOT remove or alter the existing PDF footer disclaimer logic.
+This task is WEBSITE footer, not PDF footer.
+
+-----------------------------------------
+REGRESSION GUARDRAILS (DO NOT BREAK)
+- Do not change DB schema. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+- Do not edit brainstorm.db or frozen pack. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+- Do not hold DB connections open during call_llm(). [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+- Do not re-add “Suggested saves” into chat prompts.
+- Do not change persona generation or QA logic beyond Mark prompt gating.
+- Do not invent legal text. Only use Appendix 3 and Appendix 4 content verbatim. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+
+-----------------------------------------
+HOW TO TEST (MANDATORY, STEP-BY-STEP)
+
+Test 1 — Chat save buttons never appear
+1) Open a draft study configure page.
+2) Send 5 chat messages; refresh page after each.
+Expected:
+- No “Save as …” buttons ever appear inside chat.
+
+Test 2 — Mark branches correctly after BP + Decision (study_type NOT set)
+1) Create/open a draft study with study_type NOT set.
+2) Provide Business Problem and Decision to Support via chat.
+Expected:
+- Mark recommends a study type and asks ONE question to confirm study type.
+- Mark does NOT ask for Market/Geography, Product/Concept, Target Audience, or Definition of Useful Insight before study type is selected. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+3) Click “Use Survey” or “Use IDI” or “Use Focus Group”.
+Expected:
+- Only after selection does Mark proceed to next required items for that branch.
+
+Test 3 — “Suggested saves” removed from Mark replies
+1) Send any chat message.
+Expected:
+- Mark response does not include “Suggested saves” or any footer section requiring save keys.
+
+Test 4 — Global footer exists on EVERY page (logged out)
+1) Open landing page (not logged in).
+Expected footer contains:
+- "©Project Brainstorm 2026. All rights reserved."
+- Short Website Disclaimer text (Appendix 3(2)) verbatim
+- Limitation of Liability sentence verbatim
+- Links: Terms of Service | Privacy Policy (and Disclaimer if implemented)
+2) Click Terms, Privacy, Disclaimer.
+Expected:
+- Pages load; footer remains visible on those pages too.
+
+Test 5 — Global footer exists on EVERY page (logged in; token preserved)
+1) Log in, open dashboard and a study configure page.
+Expected:
+- Footer visible; links include token (if token is present in template context).
+2) Click Terms / Privacy / Disclaimer.
+Expected:
+- Pages load and you remain authenticated (token preserved).
+3) Navigate back to dashboard (via your header “Home/Dashboard” or a back link if provided).
+
+Test 6 — Legal page content correctness
+1) Open /terms:
+Expected:
+- Contains Terms of Service text from Appendix 3(1) verbatim (including sections 1–12).
+2) Open /privacy:
+Expected:
+- Contains Privacy Policy text from Appendix 4 verbatim (sections 1–8).
+3) Open /disclaimer (if implemented):
+Expected:
+- Contains Output Disclaimer from Appendix 3(3) verbatim OR short page that repeats Appendix 3(2) and links to Terms (do not invent language). [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e)
+
+Test 7 — Regression smoke
+1) Visit blog list and blog post pages.
+Expected:
+- Footer visible; links work; token preserved if present.
+
+-----------------------------------------
+DELIVERABLE FORMAT (MANDATORY)
+At the end, output:
+
+Files changed:
+- ...
+What changed:
+- ...
+How to test:
+1) ...
+2) ...
+3) ...
+
+If you discover issues outside this scope (e.g., sign-up Terms scroll gating), list them under “Follow-ups” ONLY and do not implement them in this prompt.
