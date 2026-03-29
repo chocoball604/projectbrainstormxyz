@@ -1,0 +1,186 @@
+REPLIT AGENT PROMPT — Ensure Optional Context Enriches Mark/Lisa + Add Proof Log Lines (V1A) — MINIMAL ONLY
+
+SOURCE OF TRUTH
+Follow [Project Brainstorm - From V1 to V1A (3.28).docx](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=d9b62be3-cd0d-428f-b94a-7c631329d807&cid=bfec441e4a44d47e&EntityRepresentationId=8a427c56-ba82-4b6c-89f4-74511e33d65a).
+V1A explicitly defines Optional Context Prompts:
+- Competitive context
+- Cultural sensitivities
+- Adoption barriers
+- Risk tolerance
+These are OPTIONAL and must not block execution, but should enrich the study process by informing Mark/Lisa prompts. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=d9b62be3-cd0d-428f-b94a-7c631329d807&cid=bfec441e4a44d47e)
+
+CURRENT STATE (WHAT YOU MUST PRESERVE)
+- Optional Context UI exists and saves to studies.survey_brief JSON under optional_context.
+- Ben precheck remains based ONLY on required anchors + persona rules and must ignore optional context.
+- No DB schema changes.
+
+HARD CONSTRAINTS (NON-NEGOTIABLE)
+1) DO NOT change SQLite schema:
+   - No CREATE TABLE, ALTER TABLE, DROP TABLE
+   - No new columns
+   - No migrations
+2) DO NOT refactor unrelated code.
+3) DO NOT change any QA/precheck gating.
+4) DO NOT change user-facing copy except where explicitly required below (log lines are not user-facing).
+5) Minimal diff only.
+
+FILES YOU MAY EDIT (ONLY THESE)
+- artifacts/brainstorm/app.py
+- artifacts/brainstorm/mark_reply_worker.py
+- templates/index.html (ONLY if needed for wiring variables; avoid changes if not needed)
+
+GOAL
+Ensure optional_context is actually consumed by:
+A) Mark (chat orchestration) via study_snapshot / prompt context
+B) Lisa (persona generation + execution prompts) via brief_text / user prompts
+AND add deterministic log lines proving inclusion.
+
+--------------------------------------------
+PART 1 — Mark: Inject Optional Context into study_snapshot (send_chat)
+--------------------------------------------
+
+1.1 Locate the code building study_snapshot inside /send-chat/<study_id> (send_chat).
+It currently includes study title/type + V1A anchors + persona count.
+
+1.2 Fetch optional_context for the study from studies.survey_brief:
+- survey_brief is stored as JSON string or NULL.
+- Parse safely with try/except JSONDecodeError.
+- Extract:
+  optional_context = parsed.get("optional_context", {}) if dict else {}
+
+Fields to extract (strings, default empty):
+- competitive_context
+- cultural_sensitivities
+- adoption_barriers
+- risk_tolerance
+
+1.3 Append optional context to study_snapshot ONLY if at least one field is non-empty:
+Append block exactly like this (labels exact; values can be blank if included, but prefer to include only non-empty lines):
+
+"Optional context (optional):"
+"- Competitive context: <value>"
+"- Cultural sensitivities: <value>"
+"- Adoption barriers: <value>"
+"- Risk tolerance: <value>"
+
+Keep it compact. If a field is empty, omit that line.
+
+1.4 Add a proof log line (server log) when building Mark snapshot:
+Use print(..., flush=True) exactly once per send_chat request, after snapshot is finalized.
+
+Log format MUST be single-line and machine-greppable:
+OPTIONAL_CONTEXT_INJECT_MARK study=<study_id> included=<true|false> keys=<comma-separated keys present>
+
+Example:
+OPTIONAL_CONTEXT_INJECT_MARK study=24 included=true keys=adoption_barriers,risk_tolerance
+
+If none present:
+OPTIONAL_CONTEXT_INJECT_MARK study=24 included=false keys=
+
+NOTE:
+- Do not log the full values (avoid sensitive content in logs).
+- Keys list only.
+
+--------------------------------------------
+PART 2 — Lisa: Inject Optional Context into Lisa inputs (persona generation + execution)
+--------------------------------------------
+
+2.1 Persona generation path:
+Locate lisa_generate_personas(study_dict, n, lisa_model_id) in app.py.
+It currently builds brief_text from various study fields.
+
+Modify it to also append optional context as a block at the end of brief_text.
+
+Rules:
+- Read optional_context from study_dict["survey_brief"] if present (same parsing logic).
+- Append only if at least one field is non-empty.
+- Use same labels as in Part 1, but without bullet prefix requirements—keep simple:
+
+"Optional context (optional):"
+"Competitive context: ..."
+"Cultural sensitivities: ..."
+"Adoption barriers: ..."
+"Risk tolerance: ..."
+
+2.2 Qual execution path (IDI/FG):
+Locate the place where Lisa qual execution user prompt is built (the block that prepares lisa_system + lisa_user for IDI/FG).
+That code already builds brief_text by iterating fields.
+
+Append the same optional context block to brief_text (or to lisa_user right after Research Brief).
+
+2.3 Survey execution path (Synthetic Survey):
+Locate the Lisa survey execution prompt builder.
+Append optional context block to the Lisa user prompt OR to any study context section.
+(Keep it small; do not alter the JSON schema requirements for Lisa survey output.)
+
+2.4 Add proof log lines for Lisa injections:
+Add two log lines (print with flush=True), but DO NOT print values, only keys:
+- In lisa_generate_personas: OPTIONAL_CONTEXT_INJECT_LISA_PERSONA study=<study_id or ?> included=<true|false> keys=...
+  If study_id is not available in study_dict, log title instead:
+  OPTIONAL_CONTEXT_INJECT_LISA_PERSONA study_title="<title>" included=... keys=...
+
+- In Lisa execution (survey + qual): OPTIONAL_CONTEXT_INJECT_LISA_EXEC study=<study_id> type=<synthetic_survey|synthetic_idi|synthetic_focus_group> included=<true|false> keys=...
+
+IMPORTANT:
+- Do not add new DB columns to pass study_id around.
+- If you can access study_id in execution functions, use it; otherwise log title safely.
+
+--------------------------------------------
+PART 3 — Ensure Optional Context Does NOT affect Precheck/QA
+--------------------------------------------
+
+3.1 Confirm ben_precheck() and auto_ben_precheck() remain unchanged:
+- Do not add optional_context fields as failures
+- Do not change required anchor list
+- Do not change persona rules
+This is critical: optional context enriches prompts only, never gating.
+
+--------------------------------------------
+HOW TO TEST (MANDATORY)
+Use a deterministic “golden phrase” test so it’s impossible to miss.
+
+TEST 1 — Persistence (already exists; verify still ok)
+1) Open a draft study configure view (IDI or Survey).
+2) Fill Optional Context fields with something distinctive:
+   Adoption barriers: BANANA-FORKLIFT-TEST
+   Risk tolerance: HIGH-RISK-OK
+3) Click “Save Optional Context”, refresh page.
+Expected: fields persist in UI.
+
+TEST 2 — Mark injection proof (logs)
+1) Send a chat message to Mark in that study.
+2) Check server logs.
+Expected log line:
+OPTIONAL_CONTEXT_INJECT_MARK study=<id> included=true keys=adoption_barriers,risk_tolerance
+(Exact keys may include more if you filled them.)
+
+TEST 3 — Lisa persona generation proof (logs)
+1) Run a qual study path that triggers persona generation (or the auto persona path).
+2) Check server logs.
+Expected:
+OPTIONAL_CONTEXT_INJECT_LISA_PERSONA ... included=true keys=adoption_barriers,risk_tolerance
+
+TEST 4 — Lisa execution proof (logs)
+1) Execute a study (survey or qual) to invoke Lisa execution.
+2) Check server logs.
+Expected:
+OPTIONAL_CONTEXT_INJECT_LISA_EXEC study=<id> type=<...> included=true keys=...
+
+TEST 5 — Precheck unchanged
+1) Verify Precheck items remaining count does NOT change when Optional Context is filled.
+(Precheck should still be based only on required anchors + personas.) [2](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=d9b62be3-cd0d-428f-b94a-7c631329d807&cid=bfec441e4a44d47e)
+
+--------------------------------------------
+DELIVERABLE FORMAT (MANDATORY)
+At the end, output:
+
+Files changed:
+- ...
+What changed:
+- ...
+How to test:
+1) ...
+2) ...
+3) ...
+
+If you discover any extra improvements (e.g., better UI layout), add them to “Follow-ups” only—do not implement.

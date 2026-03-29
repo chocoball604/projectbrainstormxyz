@@ -470,6 +470,35 @@ def is_gpt_family(model_id: str) -> bool:
     )
 
 
+def _extract_optional_context(study_dict):
+    oc = {}
+    sb_raw = study_dict.get("survey_brief") or ""
+    if sb_raw:
+        try:
+            sb = json.loads(sb_raw) if isinstance(sb_raw, str) else sb_raw
+            if isinstance(sb, dict):
+                oc = sb.get("optional_context", {})
+                if not isinstance(oc, dict):
+                    oc = {}
+        except (json.JSONDecodeError, TypeError):
+            pass
+    fields = [
+        ("competitive_context", "Competitive context"),
+        ("cultural_sensitivities", "Cultural sensitivities"),
+        ("adoption_barriers", "Adoption barriers"),
+        ("risk_tolerance", "Risk tolerance"),
+    ]
+    present = {k: (oc.get(k) or "").strip() for k, _ in fields if (oc.get(k) or "").strip()}
+    if not present:
+        return "", []
+    lines = ["Optional context (optional):"]
+    for k, label in fields:
+        v = present.get(k)
+        if v:
+            lines.append(f"  {label}: {v}")
+    return "\n".join(lines), sorted(present.keys())
+
+
 def lisa_generate_personas(study_dict, n, lisa_model_id):
     brief_fields = [
         ("business_problem", "Business Problem"),
@@ -508,8 +537,14 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
         "6. Each field must be substantive (50-200 words), not placeholder text."
     )
 
+    oc_block, oc_keys = _extract_optional_context(study_dict)
+    if oc_block:
+        brief_text += f"\n{oc_block}\n"
+    study_title = study_dict.get("title", "Untitled Study")
+    print(f'OPTIONAL_CONTEXT_INJECT_LISA_PERSONA study_title="{study_title}" included={"true" if oc_keys else "false"} keys={",".join(oc_keys)}', flush=True)
+
     user_prompt = (
-        f"Study: {study_dict.get('title', 'Untitled Study')}\n"
+        f"Study: {study_title}\n"
         f"Type: {study_type_label}\n\n"
         f"Research Brief:\n{brief_text}\n"
         f"Generate {n} persona(s) for this study."
@@ -4372,7 +4407,12 @@ def send_chat(study_id):
         val = get_v1a_value(study_dict, key)
         snapshot_lines.append(f"{label}: {val or '[not yet provided]'}")
     snapshot_lines.append(f"Personas attached: {persona_count}")
+    oc_block, oc_keys = _extract_optional_context(study_dict)
+    if oc_block:
+        snapshot_lines.append("")
+        snapshot_lines.append(oc_block)
     study_snapshot = "\n".join(snapshot_lines)
+    print(f"OPTIONAL_CONTEXT_INJECT_MARK study={study_id} included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
 
     system_prompt = (
         "You are Mark, the Market Intelligence Copilot for Project Brainstorm.\n\n"
@@ -4710,13 +4750,18 @@ def run_study(study_id):
                 "7. Be realistic and culturally grounded for Asia-Pacific markets where relevant."
             )
 
+            oc_block, oc_keys = _extract_optional_context(study_dict)
+            oc_section = f"\n{oc_block}\n" if oc_block else ""
+            print(f"OPTIONAL_CONTEXT_INJECT_LISA_EXEC study={study_id} type=synthetic_survey included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
+
             lisa_user = (
                 f"Generate synthetic survey results for:\n"
                 f"Title: {study_dict.get('title', 'Untitled Study')}\n"
                 f"Business Problem: {bp or 'Not specified'}\n"
                 f"Target Audience: {ta or 'Not specified'}\n"
                 f"Respondent Count: {r_count}\n"
-                f"Questions ({q_count}):\n{questions_text}\n\n"
+                f"Questions ({q_count}):\n{questions_text}\n"
+                f"{oc_section}\n"
                 f"Return ONLY the JSON object, nothing else."
             )
 
@@ -4772,6 +4817,11 @@ def run_study(study_id):
             for field, label in brief_fields:
                 val = (study_dict.get(field) or "").strip()
                 brief_text += f"{label}: {val or 'Not specified'}\n"
+
+            oc_block, oc_keys = _extract_optional_context(study_dict)
+            if oc_block:
+                brief_text += f"\n{oc_block}\n"
+            print(f"OPTIONAL_CONTEXT_INJECT_LISA_EXEC study={study_id} type={study_type} included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
 
             persona_dossiers = []
             for pid in personas_used:
