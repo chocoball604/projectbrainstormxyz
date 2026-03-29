@@ -77,18 +77,28 @@ def main():
         mark_reply = fallback_text
         print(f"WORKER: using fallback", flush=True)
 
-    try:
-        conn = get_db()
-        conn.execute(
-            "UPDATE chat_messages SET message_text = ? WHERE id = ?",
-            (mark_reply, placeholder_id),
-        )
-        conn.commit()
-        conn.close()
-        print(f"WORKER_DONE study={study_id} placeholder={placeholder_id}", flush=True)
-    except Exception as e:
-        print(f"WORKER_DB_ERROR: {e}", flush=True)
-        sys.exit(1)
+    retries = 3
+    for attempt in range(retries):
+        try:
+            conn = get_db()
+            conn.execute(
+                "UPDATE chat_messages SET message_text = ? WHERE id = ?",
+                (mark_reply, placeholder_id),
+            )
+            conn.commit()
+            conn.close()
+            print(f"WORKER_DONE study={study_id} placeholder={placeholder_id}", flush=True)
+            break
+        except Exception as e:
+            print(f"WORKER_DB_ERROR attempt={attempt+1}: {e}", flush=True)
+            try:
+                conn.close()
+            except Exception:
+                pass
+            if attempt < retries - 1:
+                time.sleep(1)
+            else:
+                sys.exit(1)
 
 if __name__ == "__main__":
     main()

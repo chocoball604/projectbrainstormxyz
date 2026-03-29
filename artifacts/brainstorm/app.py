@@ -355,72 +355,73 @@ def run_model_health_check(run_type="manual"):
 
 def generate_weekly_qa_report():
     conn = get_db()
-    from datetime import timedelta
+    try:
+        from datetime import timedelta
 
-    today = datetime.utcnow().date()
-    week_start = today - timedelta(days=today.weekday())
-    week_start_str = week_start.strftime("%Y-%m-%d")
+        today = datetime.utcnow().date()
+        week_start = today - timedelta(days=today.weekday())
+        week_start_str = week_start.strftime("%Y-%m-%d")
 
-    existing = conn.execute(
-        "SELECT id FROM weekly_qa_reports WHERE week_start_date = ?", (week_start_str,)
-    ).fetchone()
-    if existing:
+        existing = conn.execute(
+            "SELECT id FROM weekly_qa_reports WHERE week_start_date = ?", (week_start_str,)
+        ).fetchone()
+        if existing:
+            return None
+
+        last_check = conn.execute(
+            "SELECT * FROM model_health_checks ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        health_rows = conn.execute(
+            "SELECT * FROM model_health_status ORDER BY model_id"
+        ).fetchall()
+        mc = {
+            r["key"]: r["value"]
+            for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+        }
+        pool_total = conn.execute("SELECT COUNT(*) FROM persona_model_pool").fetchone()[0]
+        pool_active = conn.execute(
+            "SELECT COUNT(*) FROM persona_model_pool WHERE status='active'"
+        ).fetchone()[0]
+
+        lines = [f"Weekly QA Report — Week of {week_start_str}", "=" * 50, ""]
+        lines.append("## System Model Health")
+        if last_check:
+            lines.append(f"Integration Mode: {last_check['integration_mode']}")
+            lines.append(f"Last Daily Check: {last_check['finished_at']}")
+            lines.append(f"Summary Status: {last_check['summary_status'].upper()}")
+        else:
+            lines.append("No health checks have been run yet.")
+        lines.append("")
+        lines.append(f"Mark Model: {mc.get('mark_model', 'not set')}")
+        lines.append(f"Lisa Model: {mc.get('lisa_model', 'not set')}")
+        lines.append(f"Ben Model: {mc.get('ben_model', 'not set')}")
+        lines.append(f"Persona Pool: {pool_active} active / {pool_total} total")
+        lines.append("")
+
+        failing = [dict(r) for r in health_rows if r["status"] == "fail"]
+        not_connected = [dict(r) for r in health_rows if r["status"] == "not_connected"]
+        if failing:
+            lines.append("### Failing Models:")
+            for f in failing:
+                lines.append(f"  - {f['model_id']}: {f['last_error'] or 'unknown error'}")
+        if not_connected:
+            lines.append("### Not Connected Models:")
+            for nc in not_connected:
+                lines.append(
+                    f"  - {nc['model_id']}: {nc['last_error'] or 'placeholder mode'}"
+                )
+        if not failing and not not_connected:
+            lines.append("All models OK or no checks run yet.")
+
+        report_text = "\n".join(lines)
+        conn.execute(
+            "INSERT INTO weekly_qa_reports (week_start_date, report_text) VALUES (?, ?)",
+            (week_start_str, report_text),
+        )
+        conn.commit()
+        return report_text
+    finally:
         conn.close()
-        return None
-
-    last_check = conn.execute(
-        "SELECT * FROM model_health_checks ORDER BY id DESC LIMIT 1"
-    ).fetchone()
-    health_rows = conn.execute(
-        "SELECT * FROM model_health_status ORDER BY model_id"
-    ).fetchall()
-    mc = {
-        r["key"]: r["value"]
-        for r in conn.execute("SELECT key, value FROM model_config").fetchall()
-    }
-    pool_total = conn.execute("SELECT COUNT(*) FROM persona_model_pool").fetchone()[0]
-    pool_active = conn.execute(
-        "SELECT COUNT(*) FROM persona_model_pool WHERE status='active'"
-    ).fetchone()[0]
-
-    lines = [f"Weekly QA Report — Week of {week_start_str}", "=" * 50, ""]
-    lines.append("## System Model Health")
-    if last_check:
-        lines.append(f"Integration Mode: {last_check['integration_mode']}")
-        lines.append(f"Last Daily Check: {last_check['finished_at']}")
-        lines.append(f"Summary Status: {last_check['summary_status'].upper()}")
-    else:
-        lines.append("No health checks have been run yet.")
-    lines.append("")
-    lines.append(f"Mark Model: {mc.get('mark_model', 'not set')}")
-    lines.append(f"Lisa Model: {mc.get('lisa_model', 'not set')}")
-    lines.append(f"Ben Model: {mc.get('ben_model', 'not set')}")
-    lines.append(f"Persona Pool: {pool_active} active / {pool_total} total")
-    lines.append("")
-
-    failing = [dict(r) for r in health_rows if r["status"] == "fail"]
-    not_connected = [dict(r) for r in health_rows if r["status"] == "not_connected"]
-    if failing:
-        lines.append("### Failing Models:")
-        for f in failing:
-            lines.append(f"  - {f['model_id']}: {f['last_error'] or 'unknown error'}")
-    if not_connected:
-        lines.append("### Not Connected Models:")
-        for nc in not_connected:
-            lines.append(
-                f"  - {nc['model_id']}: {nc['last_error'] or 'placeholder mode'}"
-            )
-    if not failing and not not_connected:
-        lines.append("All models OK or no checks run yet.")
-
-    report_text = "\n".join(lines)
-    conn.execute(
-        "INSERT INTO weekly_qa_reports (week_start_date, report_text) VALUES (?, ?)",
-        (week_start_str, report_text),
-    )
-    conn.commit()
-    conn.close()
-    return report_text
 
 
 EMAIL_VERIFY_INTERVAL_DAYS = 7
@@ -1361,9 +1362,15 @@ def index():
         ).fetchone()
         conn2.close()
         if not today_check:
-            run_model_health_check("auto_daily")
+            try:
+                run_model_health_check("auto_daily")
+            except Exception as e:
+                print(f"AUTO_HEALTH_CHECK_ERROR: {e}", flush=True)
 
-        generate_weekly_qa_report()
+        try:
+            generate_weekly_qa_report()
+        except Exception as e:
+            print(f"WEEKLY_REPORT_ERROR: {e}", flush=True)
 
         conn3 = get_db()
         health_status_list = [
@@ -1520,7 +1527,10 @@ def index():
                 chat_save_buttons = []
 
                 if configure_study.get("status") == "draft" and configure_study.get("study_type"):
-                    auto_ben_precheck(conn, configure_study, user["id"])
+                    try:
+                        auto_ben_precheck(conn, configure_study, user["id"])
+                    except Exception as e:
+                        print(f"AUTO_BEN_PRECHECK_ERROR study={configure_study.get('id')}: {e}", flush=True)
                     if configure_study.get("qa_status") == "precheck_failed" and configure_study.get("qa_notes"):
                         try:
                             configure_study["precheck_failures"] = json.loads(configure_study["qa_notes"])
@@ -4293,26 +4303,34 @@ def send_chat(study_id):
         conn.close()
         return redirect(f"/?token={token}&configure={study_id}")
 
-    conn.execute(
-        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'user', ?)",
-        (study_id, message_text),
-    )
+    try:
+        conn.execute(
+            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'user', ?)",
+            (study_id, message_text),
+        )
 
-    persona_count = 0
-    raw_ids = normalize_personas_used(study["personas_used"])
-    for pid in raw_ids:
-        if conn.execute(
-            "SELECT 1 FROM personas WHERE persona_instance_id = ? AND user_id = ?",
-            (pid, user["id"]),
-        ).fetchone():
-            persona_count += 1
+        persona_count = 0
+        raw_ids = normalize_personas_used(study["personas_used"])
+        for pid in raw_ids:
+            if conn.execute(
+                "SELECT 1 FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+                (pid, user["id"]),
+            ).fetchone():
+                persona_count += 1
 
-    mc = {
-        r["key"]: r["value"]
-        for r in conn.execute("SELECT key, value FROM model_config").fetchall()
-    }
-    mark_model_id = mc.get("mark_model")
-    study_dict = dict(study)
+        mc = {
+            r["key"]: r["value"]
+            for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+        }
+        mark_model_id = mc.get("mark_model")
+        study_dict = dict(study)
+    except Exception as e:
+        print(f"SEND_CHAT_DB_ERROR study={study_id}: {e}", flush=True)
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return redirect(f"/?token={token}&configure={study_id}")
 
     anchor_keys = [
         ("business_problem", "Business Problem"),
@@ -4420,14 +4438,29 @@ def send_chat(study_id):
         worker_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mark_reply_worker.py")
         env = os.environ.copy()
         log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.log")
-        log_f = open(log_path, "a")
-        subprocess.Popen(
-            [sys.executable, worker_script,
-             str(study_id), str(placeholder_msg_id), mark_model_id, message_text, fallback, prompt_file.name],
-            env=env,
-            stdout=log_f,
-            stderr=log_f,
-        )
+        try:
+            log_f = open(log_path, "a")
+            subprocess.Popen(
+                [sys.executable, worker_script,
+                 str(study_id), str(placeholder_msg_id), mark_model_id, message_text, fallback, prompt_file.name],
+                env=env,
+                stdout=log_f,
+                stderr=log_f,
+            )
+            log_f.close()
+        except Exception as e:
+            print(f"WORKER_SPAWN_ERROR: {e}", flush=True)
+            try:
+                log_f.close()
+            except Exception:
+                pass
+            conn2 = get_db()
+            conn2.execute(
+                "UPDATE chat_messages SET message_text = ? WHERE id = ?",
+                (fallback, placeholder_msg_id),
+            )
+            conn2.commit()
+            conn2.close()
     else:
         conn2 = get_db()
         conn2.execute(
@@ -4516,7 +4549,10 @@ def run_study(study_id):
                 lisa_mid = mc.get("lisa_model", "")
                 if not lisa_mid:
                     raise ValueError("lisa_model not configured in model_config")
-                generated = lisa_generate_personas(dict(study), auto_n, lisa_mid)
+                study_snapshot = dict(study)
+                conn.close()
+                generated = lisa_generate_personas(study_snapshot, auto_n, lisa_mid)
+                conn = get_db()
                 new_persona_ids = []
                 for p_data in generated:
                     p_instance_id = f"P-{secrets.token_hex(4).upper()}"
@@ -6143,4 +6179,4 @@ def admin_llm_smoke():
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)
