@@ -4,8 +4,18 @@ import os
 import json
 import sqlite3
 import time
+import signal
+import secrets
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brainstorm.db")
+
+HARD_TIMEOUT_SECONDS = 45
+
+TIMEOUT_USER_MESSAGE = (
+    "Mark couldn\u2019t respond in time using the currently selected model. "
+    "This request was not completed. An admin has been notified. "
+    "Please try again or ask your admin to select a faster model."
+)
 
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=30)
@@ -16,6 +26,12 @@ def get_db():
     conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
+class LLMTimeoutError(Exception):
+    pass
+
+def _timeout_handler(signum, frame):
+    raise LLMTimeoutError(f"LLM call exceeded {HARD_TIMEOUT_SECONDS}s wall-clock timeout")
+
 def call_llm(model_id, messages):
     import openai as _openai
     base_url = os.environ.get("AI_INTEGRATIONS_OPENROUTER_BASE_URL")
@@ -25,18 +41,94 @@ def call_llm(model_id, messages):
         return None
     client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=90)
     start = time.time()
+    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(HARD_TIMEOUT_SECONDS)
     try:
         resp = client.chat.completions.create(
             model=model_id,
             messages=messages,
             max_tokens=256,
         )
+        signal.alarm(0)
         result = resp.choices[0].message.content or ""
         print(f"WORKER_LLM_OK took={time.time()-start:.1f}s chars={len(result)}", flush=True)
         return result
+    except LLMTimeoutError:
+        print(f"WORKER_LLM_TIMEOUT took={time.time()-start:.1f}s model={model_id}", flush=True)
+        raise
     except Exception as e:
+        signal.alarm(0)
         print(f"WORKER_LLM_ERROR took={time.time()-start:.1f}s err={e}", flush=True)
         return None
+    finally:
+        signal.signal(signal.SIGALRM, old_handler)
+
+def record_timeout_incident(model_id, study_id):
+    from datetime import datetime, timezone
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    run_id = secrets.token_hex(8)
+    conn = None
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO model_health_status (model_id, status, last_tested_at, last_error) "
+            "VALUES (?, 'degraded', ?, ?) "
+            "ON CONFLICT(model_id) DO UPDATE SET status='degraded', last_tested_at=?, last_error=?",
+            (
+                model_id,
+                now_str,
+                f"mark_chat_timeout study_id={study_id}",
+                now_str,
+                f"mark_chat_timeout study_id={study_id}",
+            ),
+        )
+        details = {
+            "incident": "mark_chat_timeout",
+            "model_id": model_id,
+            "study_id": study_id,
+            "timeout_seconds": HARD_TIMEOUT_SECONDS,
+            "context": "send_chat/mark_reply_worker",
+        }
+        conn.execute(
+            "INSERT INTO model_health_checks "
+            "(run_id, run_type, started_at, finished_at, integration_mode, summary_status, details_json) "
+            "VALUES (?, 'incident_mark_chat_timeout', ?, ?, 'live_calls_enabled', 'fail', ?)",
+            (run_id, now_str, now_str, json.dumps(details)),
+        )
+        conn.commit()
+        print(f"WORKER_INCIDENT_RECORDED model={model_id} study={study_id} run_id={run_id}", flush=True)
+    except Exception as e:
+        print(f"WORKER_INCIDENT_RECORD_ERROR: {e}", flush=True)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+def update_placeholder(placeholder_id, message_text):
+    retries = 3
+    for attempt in range(retries):
+        conn = None
+        try:
+            conn = get_db()
+            conn.execute(
+                "UPDATE chat_messages SET message_text = ? WHERE id = ?",
+                (message_text, placeholder_id),
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"WORKER_DB_ERROR attempt={attempt+1}: {e}", flush=True)
+            if attempt < retries - 1:
+                time.sleep(1)
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+    return False
 
 def main():
     if len(sys.argv) < 5:
@@ -71,34 +163,26 @@ def main():
     else:
         messages = [{"role": "user", "content": message_text}]
 
-    mark_reply = call_llm(model_id, messages)
+    timed_out = False
+    try:
+        mark_reply = call_llm(model_id, messages)
+    except LLMTimeoutError:
+        mark_reply = None
+        timed_out = True
 
-    if not mark_reply:
-        mark_reply = fallback_text
-        print(f"WORKER: using fallback", flush=True)
-
-    retries = 3
-    for attempt in range(retries):
-        try:
-            conn = get_db()
-            conn.execute(
-                "UPDATE chat_messages SET message_text = ? WHERE id = ?",
-                (mark_reply, placeholder_id),
-            )
-            conn.commit()
-            conn.close()
+    if timed_out:
+        update_placeholder(placeholder_id, TIMEOUT_USER_MESSAGE)
+        record_timeout_incident(model_id, study_id)
+        print(f"WORKER_TIMEOUT study={study_id} placeholder={placeholder_id} model={model_id}", flush=True)
+    else:
+        if not mark_reply:
+            mark_reply = fallback_text
+            print(f"WORKER: using fallback", flush=True)
+        if update_placeholder(placeholder_id, mark_reply):
             print(f"WORKER_DONE study={study_id} placeholder={placeholder_id}", flush=True)
-            break
-        except Exception as e:
-            print(f"WORKER_DB_ERROR attempt={attempt+1}: {e}", flush=True)
-            try:
-                conn.close()
-            except Exception:
-                pass
-            if attempt < retries - 1:
-                time.sleep(1)
-            else:
-                sys.exit(1)
+        else:
+            print(f"WORKER_FAILED_DB study={study_id} placeholder={placeholder_id}", flush=True)
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()

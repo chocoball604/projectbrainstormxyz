@@ -1,0 +1,260 @@
+REPLIT AGENT PROMPT — Model Timeout + Reliability Flagging + Optional Context Fields (V1A) — MINIMAL, NO SCOPE CREEP
+
+READ FIRST — NON-NEGOTIABLE CONSTRAINTS
+Source of truth: [Project Brainstorm - From V1 to V1A (3.28).docx](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=d9b62be3-cd0d-428f-b94a-7c631329d807&cid=bfec441e4a44d47e&EntityRepresentationId=8a427c56-ba82-4b6c-89f4-74511e33d65a) (V1A change log) and [PRD_Mark-PBXYZ_V4.03.docx](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=67348095-1002-4f0c-bc14-df012cf07249&cid=bfec441e4a44d47e&EntityRepresentationId=b8bd9904-cece-4be6-952e-635335d299ca). [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=d9b62be3-cd0d-428f-b94a-7c631329d807&cid=bfec441e4a44d47e)[2](https://onedrive.live.com?cid=BFEC441E4A44D47E&id=BFEC441E4A44D47E!sde171a4ca17d46ba9a80c6df20ef363a)
+
+Hard constraints:
+1) DO NOT change SQLite schema:
+   - No CREATE TABLE, ALTER TABLE, DROP TABLE
+   - No new columns
+   - No migrations or schema edits
+2) DO NOT refactor unrelated code or UX.
+3) DO NOT change Mark/Lisa/Ben product behavior beyond what is described below.
+4) DO NOT silently switch models. The system cannot auto-switch; never imply it can.
+
+Goal (two parts):
+A) Prevent slow/timeout Mark models from “breaking the app” by enforcing a hard worker timeout that:
+   - replaces “⏳ Mark is thinking…” with a clear error message (no crash, no hang)
+   - exits the worker cleanly
+   - flags admin immediately via existing health tables
+   - adds a reliability flag into the Weekly QA Report
+
+B) Add Optional Context Prompts (non-required, do NOT affect precheck) to enrich the study process:
+   - Competitive context
+   - Cultural sensitivities
+   - Adoption barriers
+   - Risk tolerance
+This is explicitly mentioned as Optional Context Prompts in V1A. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=d9b62be3-cd0d-428f-b94a-7c631329d807&cid=bfec441e4a44d47e)
+Today the UI shows only required anchors and precheck items; there is no optional context section. [2](https://onedrive.live.com?cid=BFEC441E4A44D47E&id=BFEC441E4A44D47E!sde171a4ca17d46ba9a80c6df20ef363a)
+
+FILES YOU MAY EDIT (ONLY THESE)
+- artifacts/brainstorm/app.py
+- artifacts/brainstorm/mark_reply_worker.py
+- templates/index.html
+(Do not touch other templates unless strictly necessary.)
+
+--------------------------------------------
+PART A — MODEL TIMEOUT + RELIABILITY FLAGGING (NO AUTO-SWITCH)
+--------------------------------------------
+
+A1) Implement a hard timeout in mark_reply_worker.py (must not crash Flask)
+Problem: Slow models (e.g., gpt-5.4-pro) can exceed the OpenAI client timeout or hang, leaving “⏳ Mark is thinking…” forever and degrading UX.
+We need a deterministic timeout + graceful failure path.
+
+Requirements:
+1) Add a hard wall-clock timeout in mark_reply_worker.py for the Mark LLM call.
+   - Use 45 seconds (or 50 max, but must be less than the 60s client timeout).
+   - If timeout occurs:
+     a) Worker must NOT crash the Flask app
+     b) Worker must update the placeholder message in chat_messages to a clear error message
+     c) Worker must exit cleanly (return code 0 is fine)
+
+2) The error message shown to the user MUST NOT claim model switching.
+   Use EXACT copy below (verbatim):
+   "Mark couldn't respond in time using the currently selected model. This request was not completed. An admin has been notified. Please try again or ask your admin to select a faster model."
+
+3) Always replace the placeholder:
+   - The chat message row with message_text == "⏳ Mark is thinking..." must be updated to either:
+     - the actual Mark response, OR
+     - the timeout error message above, OR
+     - a generic safe failure message if something unexpected happens
+
+4) The worker MUST NOT leave dangling DB connections.
+   - Use try/finally to close sqlite3 connection(s).
+   - Never hold DB open while performing the LLM call.
+
+A2) Record an “incident” without schema changes (use existing tables)
+We need immediate admin visibility and weekly QA report inclusion, without schema changes.
+
+Implement incident logging using existing tables:
+- model_health_status (already exists)
+- model_health_checks (already exists)
+
+On timeout in mark_reply_worker.py:
+1) UPDATE model_health_status for that model_id:
+   - status = "degraded"
+   - last_tested_at = current UTC string
+   - last_error = a short message including: "mark_chat_timeout" and the study_id
+   (Do NOT invent new columns; use existing fields.)
+
+2) INSERT a row into model_health_checks:
+   - run_id: new random token
+   - run_type: "incident_mark_chat_timeout"
+   - started_at: UTC timestamp
+   - finished_at: UTC timestamp
+   - integration_mode: "live_calls_enabled" (or "error" if unknown)
+   - summary_status: "fail"
+   - details_json: JSON string containing:
+       { "incident": "mark_chat_timeout",
+         "model_id": "<model_id>",
+         "study_id": <study_id>,
+         "timeout_seconds": 45,
+         "context": "send_chat/mark_reply_worker"
+       }
+
+This achieves: “admin immediately flagged” + auditable record, without schema changes.
+
+A3) Surface reliability issues in Weekly QA Report (generate_weekly_qa_report)
+V1A expects trust/QA discipline and calls out QA flow hardening. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=d9b62be3-cd0d-428f-b94a-7c631329d807&cid=bfec441e4a44d47e)
+We must ensure reliability incidents are visible in the weekly QA report.
+
+Modify generate_weekly_qa_report() in app.py:
+1) Add a new section titled exactly:
+   "## Model Reliability Issues"
+
+2) Query model_health_checks for the current week window (same week_start logic already used):
+   - rows where run_type == "incident_mark_chat_timeout"
+   - group by model_id (parse details_json)
+   - count incidents per model
+   - include the latest timestamp and last_error (if available)
+
+3) Append lines like:
+   - "Model <model_id>: <count> Mark chat timeouts this week (latest: <timestamp>)"
+
+4) If there are no incidents:
+   - Add: "No reliability incidents recorded this week."
+
+IMPORTANT: Do not change how the report is stored; keep inserting into weekly_qa_reports as it currently does.
+
+A4) Do NOT implement model auto-switch
+This is explicit:
+- Do NOT change mark_model automatically.
+- Do NOT attempt to “retry with a faster model”.
+- Do NOT claim that the system “switched to a faster model.”
+Only notify admin + instruct user to ask admin.
+
+--------------------------------------------
+PART B — OPTIONAL CONTEXT PROMPTS (NON-REQUIRED) — V1A
+--------------------------------------------
+
+B0) Why this is required
+V1A change log explicitly includes Optional Context Prompts:
+- Competitive context
+- Cultural sensitivities
+- Adoption barriers
+- Risk tolerance [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=d9b62be3-cd0d-428f-b94a-7c631329d807&cid=bfec441e4a44d47e)
+
+Current UI only shows required anchors and precheck items; there is no place for optional context. [2](https://onedrive.live.com?cid=BFEC441E4A44D47E&id=BFEC441E4A44D47E!sde171a4ca17d46ba9a80c6df20ef363a)
+
+We will add an optional section that:
+- does not affect precheck
+- does not affect run gating
+- persists per study
+- does NOT require DB schema changes
+
+B1) Storage approach (NO schema change)
+Store optional context in studies.survey_brief as JSON for ALL study types.
+This column already exists and is already parsed into configure_study["survey_brief_data"] in the index route. (Do not create new columns.)
+
+Rules:
+- For survey studies, survey_brief is already used.
+  - Add optional context keys nested under e.g. "optional_context": {...} (do not break existing keys).
+- For IDI/FG studies, survey_brief may be null today.
+  - Create/overwrite survey_brief as JSON containing only optional_context (and leave other keys absent).
+- Never overwrite existing survey_brief keys; always merge.
+
+B2) Add UI section in templates/index.html
+In the Study Configure panel (where anchors are shown), add a new section:
+
+Header:
+"Optional context (optional — does not affect Precheck)"
+
+Fields (all textarea or input):
+1) Competitive context (optional)
+2) Cultural sensitivities (optional)
+3) Adoption barriers (optional)
+4) Risk tolerance (optional)
+
+Helper text (exact):
+"Optional context to enrich Mark/Lisa’s work. These fields never block execution and do not change Precheck."
+
+Button:
+"Save Optional Context"
+
+Pre-fill:
+- If configure_study["survey_brief_data"].get("optional_context") exists, populate the fields.
+
+B3) Add a save endpoint in app.py
+Add a POST route:
+POST /save-optional-context/<int:study_id>
+
+Behavior:
+1) Validate user is active and owns the draft study (same pattern as other save routes).
+2) Read the 4 optional values from form.
+3) Load existing study["survey_brief"] JSON if present; else start {}.
+4) Merge:
+   data["optional_context"] = {
+      "competitive_context": <str>,
+      "cultural_sensitivities": <str>,
+      "adoption_barriers": <str>,
+      "risk_tolerance": <str>
+   }
+5) Write back:
+   UPDATE studies SET survey_brief = json.dumps(data) WHERE id = ?
+6) Redirect back to configure view.
+
+B4) Ensure Ben precheck ignores optional context
+Do NOT add any optional fields to ben_precheck failures.
+Precheck remains driven ONLY by required anchors + persona count (as currently shown in UI). [2](https://onedrive.live.com?cid=BFEC441E4A44D47E&id=BFEC441E4A44D47E!sde171a4ca17d46ba9a80c6df20ef363a)
+
+--------------------------------------------
+DO-NOT LIST (STRICT)
+- DO NOT change DB schema (no new tables/columns).
+- DO NOT change model selection automatically.
+- DO NOT change Mark’s orchestration flow beyond error handling.
+- DO NOT add background job frameworks; keep current worker approach.
+- DO NOT touch unrelated routes/UI (uploads, personas, execution) unless needed for compile/runtime correctness.
+
+--------------------------------------------
+HOW TO TEST (MANDATORY)
+
+TEST A — Mark chat timeout handling (no crash, no hang)
+1) In Admin panel, set Mark model to a slow model (e.g., openai/gpt-5.4-pro) to reproduce timeouts.
+2) Open any draft study and send a chat message to Mark.
+Expected:
+- Within ~45 seconds (hard timeout), the placeholder "⏳ Mark is thinking..." is replaced by:
+  "Mark couldn't respond in time using the currently selected model. This request was not completed. An admin has been notified. Please try again or ask your admin to select a faster model."
+- The app does NOT crash and page remains usable.
+
+TEST B — Immediate admin flagging
+1) After the timeout above, open the Admin dashboard.
+Expected:
+- The timed-out model appears as status "degraded" in model_health_status (wherever displayed).
+- last_error reflects a mark_chat_timeout note.
+
+TEST C — Weekly QA report includes reliability incidents
+1) Trigger at least one timeout as above.
+2) Generate or view the weekly QA report.
+Expected:
+- A section "## Model Reliability Issues" exists.
+- It lists the model and number of timeouts this week.
+
+TEST D — Optional context section exists and persists (does not affect precheck)
+1) Open an IDI draft study configure page (where anchors are shown).
+2) Confirm you see:
+   "Optional context (optional — does not affect Precheck)"
+3) Fill in all 4 fields, click "Save Optional Context".
+4) Refresh the page.
+Expected:
+- The fields persist (loaded from survey_brief JSON).
+- Precheck item count does NOT change because of these fields.
+
+TEST E — No regression
+1) Confirm surveys still work and existing survey_brief keys remain intact after saving optional context.
+2) Confirm IDI/FG precheck remains based only on required anchors + persona counts (unchanged).
+
+--------------------------------------------
+DELIVERABLE FORMAT
+At the end, output:
+
+Files changed:
+- ...
+What changed:
+- ...
+How to test:
+1) ...
+2) ...
+3) ...
+
+If you encounter conflicts, write a “Follow-ups” section — do not expand scope.
+``

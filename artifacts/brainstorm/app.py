@@ -413,6 +413,32 @@ def generate_weekly_qa_report():
         if not failing and not not_connected:
             lines.append("All models OK or no checks run yet.")
 
+        lines.append("")
+        lines.append("## Model Reliability Issues")
+        incident_rows = conn.execute(
+            "SELECT details_json, finished_at FROM model_health_checks "
+            "WHERE run_type = 'incident_mark_chat_timeout' AND started_at >= ?",
+            (week_start_str,),
+        ).fetchall()
+        if incident_rows:
+            incident_counts = {}
+            incident_latest = {}
+            for row in incident_rows:
+                try:
+                    d = json.loads(row["details_json"])
+                    mid = d.get("model_id", "unknown")
+                except (json.JSONDecodeError, TypeError):
+                    mid = "unknown"
+                incident_counts[mid] = incident_counts.get(mid, 0) + 1
+                ts = row["finished_at"] or ""
+                if ts > incident_latest.get(mid, ""):
+                    incident_latest[mid] = ts
+            for mid, count in sorted(incident_counts.items()):
+                latest = incident_latest.get(mid, "unknown")
+                lines.append(f"  Model {mid}: {count} Mark chat timeouts this week (latest: {latest})")
+        else:
+            lines.append("No reliability incidents recorded this week.")
+
         report_text = "\n".join(lines)
         conn.execute(
             "INSERT INTO weekly_qa_reports (week_start_date, report_text) VALUES (?, ?)",
@@ -5072,6 +5098,47 @@ def save_remaining_anchors(study_id):
     )
     conn.commit()
     conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
+@app.route("/save-optional-context/<int:study_id>", methods=["POST"])
+def save_optional_context(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    try:
+        study = conn.execute(
+            "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+            (study_id, user["id"]),
+        ).fetchone()
+        if not study:
+            conn.close()
+            return render_error("Draft study not found.")
+
+        existing_brief = {}
+        if study["survey_brief"]:
+            try:
+                existing_brief = json.loads(study["survey_brief"])
+            except (json.JSONDecodeError, TypeError):
+                existing_brief = {}
+
+        existing_brief["optional_context"] = {
+            "competitive_context": (request.form.get("competitive_context") or "").strip(),
+            "cultural_sensitivities": (request.form.get("cultural_sensitivities") or "").strip(),
+            "adoption_barriers": (request.form.get("adoption_barriers") or "").strip(),
+            "risk_tolerance": (request.form.get("risk_tolerance") or "").strip(),
+        }
+
+        conn.execute(
+            "UPDATE studies SET survey_brief = ? WHERE id = ?",
+            (json.dumps(existing_brief), study_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
 
 

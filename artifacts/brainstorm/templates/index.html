@@ -658,11 +658,38 @@
                 <p style="margin: 0 0 4px;"><strong>Survey Brief:</strong></p>
                 <ul style="margin: 4px 0 0 20px; line-height: 1.6;">
                     {% for k, v in configure_study.survey_brief_data.items() %}
+                    {% if k != 'optional_context' %}
                     <li><strong>{{ k | replace('_', ' ') | title }}:</strong> {{ v }}</li>
+                    {% endif %}
                     {% endfor %}
                 </ul>
             </div>
             {% endif %}
+
+            {% set oc_survey = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Optional context <span style="font-weight: 400; font-size: 12px; color: #999;">(optional — does not affect Precheck)</span></h3>
+            <p style="font-size: 12px; color: #999; margin-bottom: 12px;">Optional context to enrich Mark/Lisa's work. These fields never block execution and do not change Precheck.</p>
+            <form action="/save-optional-context/{{ configure_study.id }}" method="POST">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div class="form-group">
+                    <label>Competitive context <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                    <textarea name="competitive_context" rows="2" placeholder="Key competitors, market positioning, competitive dynamics...">{{ oc_survey.get('competitive_context', '') if oc_survey else '' }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Cultural sensitivities <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                    <textarea name="cultural_sensitivities" rows="2" placeholder="Cultural factors, local norms, sensitivities to consider...">{{ oc_survey.get('cultural_sensitivities', '') if oc_survey else '' }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Adoption barriers <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                    <textarea name="adoption_barriers" rows="2" placeholder="Known barriers to adoption, switching costs, resistance factors...">{{ oc_survey.get('adoption_barriers', '') if oc_survey else '' }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Risk tolerance <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                    <textarea name="risk_tolerance" rows="2" placeholder="Risk appetite of the target audience or business context...">{{ oc_survey.get('risk_tolerance', '') if oc_survey else '' }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="background: #5C7E8F;">Save Optional Context</button>
+            </form>
 
             {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
 
@@ -714,6 +741,31 @@
                 </ul>
             </div>
             {% endif %}
+
+            {% set oc = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Optional context <span style="font-weight: 400; font-size: 12px; color: #999;">(optional — does not affect Precheck)</span></h3>
+            <p style="font-size: 12px; color: #999; margin-bottom: 12px;">Optional context to enrich Mark/Lisa's work. These fields never block execution and do not change Precheck.</p>
+            <form action="/save-optional-context/{{ configure_study.id }}" method="POST">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div class="form-group">
+                    <label>Competitive context <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                    <textarea name="competitive_context" rows="2" placeholder="Key competitors, market positioning, competitive dynamics...">{{ oc.get('competitive_context', '') if oc else '' }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Cultural sensitivities <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                    <textarea name="cultural_sensitivities" rows="2" placeholder="Cultural factors, local norms, sensitivities to consider...">{{ oc.get('cultural_sensitivities', '') if oc else '' }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Adoption barriers <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                    <textarea name="adoption_barriers" rows="2" placeholder="Known barriers to adoption, switching costs, resistance factors...">{{ oc.get('adoption_barriers', '') if oc else '' }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Risk tolerance <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                    <textarea name="risk_tolerance" rows="2" placeholder="Risk appetite of the target audience or business context...">{{ oc.get('risk_tolerance', '') if oc else '' }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="background: #5C7E8F;">Save Optional Context</button>
+            </form>
 
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Personas</h3>
             {% if configure_study.study_type == 'synthetic_idi' %}
