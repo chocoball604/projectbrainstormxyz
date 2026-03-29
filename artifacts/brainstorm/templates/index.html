@@ -402,8 +402,16 @@
                         <td>{{ s.study_type or '—' }}</td>
                         <td>
                             <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
-                            {% if s.qa_status %}
-                            <span class="badge badge-qa-{{ s.qa_status }}" style="margin-left: 4px;">QA: {{ s.qa_status|upper }}</span>
+                            {% if s.qa_status == 'precheck_passed' %}
+                            <span class="badge badge-qa-precheck_passed" style="margin-left: 4px;">Ready</span>
+                            {% elif s.qa_status == 'precheck_failed' %}
+                            <span class="badge badge-qa-precheck_failed" style="margin-left: 4px;">Items remaining</span>
+                            {% elif s.qa_status == 'pass' %}
+                            <span class="badge badge-qa-pass" style="margin-left: 4px;">QA: Pass</span>
+                            {% elif s.qa_status == 'fail' %}
+                            <span class="badge badge-qa-fail" style="margin-left: 4px;">QA: Needs review</span>
+                            {% elif s.qa_status == 'downgrade' %}
+                            <span class="badge badge-qa-downgrade" style="margin-left: 4px;">QA: Downgrade</span>
                             {% endif %}
                         </td>
                         <td>{{ s.created_at }}</td>
@@ -455,16 +463,16 @@
         {% set rc_panel = configure_study.respondent_count or 0 %}
         {% set has_bp_panel = configure_study.business_problem and configure_study.business_problem|trim|length > 0 %}
         {% set has_ds_panel = configure_study.decision_to_support and configure_study.decision_to_support|trim|length > 0 %}
-        {% set has_ku_panel = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
+        {% set has_mg_panel = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
+        {% set has_pc_panel = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
         {% set has_ta_panel = configure_study.target_audience and configure_study.target_audience|trim|length > 0 %}
-        {% set has_sf_panel = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
         {% set has_dui_panel = configure_study.definition_useful_insight and configure_study.definition_useful_insight|trim|length > 0 %}
         {% set persona_count_panel = configure_study_personas|length %}
 
         {% if configure_study.study_type == 'synthetic_survey' %}
             {% set checklist_complete = rc_panel >= 1 and q_count_panel >= 1 and sq_list_panel|length == q_count_panel %}
         {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
-            {% set all_anchors_panel = has_bp_panel and has_ds_panel and has_ku_panel and has_ta_panel and has_sf_panel and has_dui_panel %}
+            {% set all_anchors_panel = has_bp_panel and has_ds_panel and has_mg_panel and has_pc_panel and has_ta_panel and has_dui_panel %}
             {% if configure_study.study_type == 'synthetic_idi' %}
                 {% set personas_valid_panel = persona_count_panel >= 1 and persona_count_panel <= 3 %}
             {% else %}
@@ -658,32 +666,32 @@
 
             {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
 
-            {% set has_ku = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
+            {% set has_mg = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
+            {% set has_pc = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
             {% set has_ta = configure_study.target_audience and configure_study.target_audience|trim|length > 0 %}
-            {% set has_sf = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
             {% set has_dui = configure_study.definition_useful_insight and configure_study.definition_useful_insight|trim|length > 0 %}
-            {% set all_anchors_complete = has_ku and has_ta and has_sf and has_dui %}
+            {% set all_anchors_complete = has_mg and has_pc and has_ta and has_dui %}
 
             {% if not all_anchors_complete %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <div style="background: #fff3cd; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ffc107;">
-                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Complete Research Brief (Required)</h3>
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Required to run this study</h3>
                 <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
-                    Business Problem and Decision to Support were collected during discovery. Please complete the remaining 4 anchors below.
+                    Business Problem and Decision to Support were collected during discovery. Please complete the remaining anchors below.
                 </p>
                 <form action="/save-remaining-anchors/{{ configure_study.id }}" method="POST">
                     <input type="hidden" name="token" value="{{ token }}">
                     <div class="form-group">
-                        <label>3. Known vs Unknown</label>
-                        <textarea name="known_vs_unknown" rows="2" required placeholder="What do you already know, and what remains unknown?">{{ configure_study.known_vs_unknown or '' }}</textarea>
+                        <label>3. Market / Geography</label>
+                        <textarea name="market_geography" rows="2" required placeholder="What market or geography does this study focus on?">{{ configure_study.study_fit or '' }}</textarea>
                     </div>
                     <div class="form-group">
-                        <label>4. Target Audience</label>
+                        <label>4. Product / Concept</label>
+                        <textarea name="product_concept" rows="2" required placeholder="What product, service, or concept is being researched?">{{ configure_study.known_vs_unknown or '' }}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>5. Target Audience</label>
                         <textarea name="target_audience" rows="2" required placeholder="Who is the target audience for this research?">{{ configure_study.target_audience or '' }}</textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>5. Study Fit (why this study + what it cannot answer)</label>
-                        <textarea name="study_fit" rows="2" required placeholder="Why is this study type appropriate? What can it NOT answer?">{{ configure_study.study_fit or '' }}</textarea>
                     </div>
                     <div class="form-group">
                         <label>6. Definition of Useful Insight</label>
@@ -699,9 +707,9 @@
                 <ul style="margin: 8px 0 0 20px; line-height: 1.6;">
                     <li><strong>Business Problem:</strong> {{ configure_study.business_problem }}</li>
                     <li><strong>Decision to Support:</strong> {{ configure_study.decision_to_support }}</li>
-                    <li><strong>Known vs Unknown:</strong> {{ configure_study.known_vs_unknown }}</li>
+                    <li><strong>Market / Geography:</strong> {{ configure_study.study_fit }}</li>
+                    <li><strong>Product / Concept:</strong> {{ configure_study.known_vs_unknown }}</li>
                     <li><strong>Target Audience:</strong> {{ configure_study.target_audience }}</li>
-                    <li><strong>Study Fit:</strong> {{ configure_study.study_fit }}</li>
                     <li><strong>Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}</li>
                 </ul>
             </div>
@@ -860,27 +868,30 @@
 
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Run Study</h3>
             {% if configure_study.qa_status == 'precheck_passed' %}
-                <p style="font-size: 13px; color: #27ae60; margin-bottom: 12px; font-weight: 600;">
-                    Ben QA precheck passed. You may now run the study.
+                <p style="font-size: 13px; color: #27ae60; margin-bottom: 4px; font-weight: 600;">
+                    Precheck: Ready to run
                 </p>
+                <p style="font-size: 12px; color: #888; margin: 0 0 12px;">Precheck updates automatically as you fill in the brief.</p>
                 <form action="/run-study/{{ configure_study.id }}" method="POST">
                     <input type="hidden" name="token" value="{{ token }}">
                     <button type="submit" class="btn btn-success" onclick="return confirm('Run this study?');">Run Study</button>
                 </form>
             {% elif configure_study.qa_status == 'precheck_failed' %}
-                <p style="color: #e74c3c; font-size: 13px; margin-bottom: 8px; font-weight: 600;">
-                    Ben QA precheck failed. Fix the issues below and try again.
+                <p style="color: #e67e22; font-size: 13px; margin-bottom: 4px; font-weight: 600;">
+                    Precheck: {{ configure_study.precheck_failures|length }} item{{ 's' if configure_study.precheck_failures|length != 1 else '' }} remaining
                 </p>
-                {% if configure_study.qa_notes %}
-                <ul style="color: #e74c3c; font-size: 13px; margin: 0 0 0 20px; line-height: 1.8;">
+                <p style="font-size: 12px; color: #888; margin: 0 0 8px;">Precheck updates automatically as you fill in the brief.</p>
+                {% if configure_study.precheck_failures %}
+                <ul style="color: #856404; font-size: 13px; margin: 0 0 8px 20px; line-height: 1.8;">
                     {% for note in configure_study.precheck_failures %}
                     <li>{{ note }}</li>
                     {% endfor %}
                 </ul>
                 {% endif %}
+                <p style="color: #888; font-size: 12px; margin: 0;">Cannot run yet. Please complete the remaining required items listed above.</p>
             {% else %}
                 <p style="color: #888; font-size: 13px;">
-                    Click "Ready for QA Review" in the side panel to run Ben's precheck before executing the study.
+                    Set a study type to see precheck status.
                 </p>
             {% endif %}
 
@@ -1051,7 +1062,7 @@
                     <div><strong>Status:</strong> <span class="badge badge-{{ configure_study.status }}">{{ configure_study.status }}</span></div>
                 </div>
 
-                <h4 style="font-size: 13px; color: #1a1a2e; margin: 16px 0 8px; font-weight: 600;">Required Items</h4>
+                <h4 style="font-size: 13px; color: #1a1a2e; margin: 16px 0 8px; font-weight: 600;">Required to run this study</h4>
 
                 {% if configure_study.study_type == 'synthetic_survey' %}
                 <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px;">
@@ -1074,14 +1085,14 @@
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_ds_panel else '#e74c3c' }};">
                         {{ '&#10003;' if has_ds_panel else '&#10007;' }} Decision to Support
                     </li>
-                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_ku_panel else '#e74c3c' }};">
-                        {{ '&#10003;' if has_ku_panel else '&#10007;' }} Known vs Unknown
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_mg_panel else '#e74c3c' }};">
+                        {{ '&#10003;' if has_mg_panel else '&#10007;' }} Market / Geography
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_pc_panel else '#e74c3c' }};">
+                        {{ '&#10003;' if has_pc_panel else '&#10007;' }} Product / Concept
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_ta_panel else '#e74c3c' }};">
                         {{ '&#10003;' if has_ta_panel else '&#10007;' }} Target Audience
-                    </li>
-                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_sf_panel else '#e74c3c' }};">
-                        {{ '&#10003;' if has_sf_panel else '&#10007;' }} Study Fit
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_dui_panel else '#e74c3c' }};">
                         {{ '&#10003;' if has_dui_panel else '&#10007;' }} Definition of Useful Insight
@@ -1098,34 +1109,16 @@
 
                 {% if configure_study.qa_status == 'precheck_passed' %}
                 <div style="margin-top: 16px; padding: 10px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; text-align: center;">
-                    <span style="font-size: 13px; color: #155724; font-weight: 600;">Ben QA Precheck: PASSED</span>
+                    <span style="font-size: 13px; color: #155724; font-weight: 600;">Precheck: Ready to run</span>
                 </div>
                 {% elif configure_study.qa_status == 'precheck_failed' %}
-                <div style="margin-top: 16px; padding: 10px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 6px;">
-                    <span style="font-size: 13px; color: #721c24; font-weight: 600;">Ben QA Precheck: FAILED</span>
-                    {% if configure_study.precheck_failures %}
-                    <ul style="font-size: 12px; color: #721c24; margin: 6px 0 6px 16px; padding: 0; line-height: 1.6;">
-                        {% for note in configure_study.precheck_failures %}
-                        <li>{{ note }}</li>
-                        {% endfor %}
-                    </ul>
-                    {% endif %}
-                    <form action="/ready-for-qa/{{ configure_study.id }}" method="POST" style="margin-top: 6px;">
-                        <input type="hidden" name="token" value="{{ token }}">
-                        <button type="submit" class="btn btn-warning" style="width: 100%; font-size: 12px; background: #ffc107; color: #333; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Re-run QA Precheck</button>
-                    </form>
+                <div style="margin-top: 16px; padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px;">
+                    <span style="font-size: 13px; color: #856404; font-weight: 600;">Precheck: {{ configure_study.precheck_failures|length }} item{{ 's' if configure_study.precheck_failures|length != 1 else '' }} remaining</span>
+                    <p style="font-size: 11px; color: #999; margin: 4px 0 0;">Precheck updates automatically as you fill in the brief.</p>
                 </div>
                 {% else %}
-                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #eee;">
-                    {% if checklist_complete %}
-                    <form action="/ready-for-qa/{{ configure_study.id }}" method="POST">
-                        <input type="hidden" name="token" value="{{ token }}">
-                        <button type="submit" class="btn btn-success" style="width: 100%; font-size: 13px;">Ready for QA Review</button>
-                    </form>
-                    {% else %}
-                    <button disabled class="btn" style="width: 100%; font-size: 13px; background: #ccc; color: #888; cursor: not-allowed; border: none; padding: 8px 16px; border-radius: 6px;">Ready for QA Review</button>
-                    <p style="font-size: 11px; color: #999; margin: 6px 0 0; text-align: center;">Complete all items above to enable.</p>
-                    {% endif %}
+                <div style="margin-top: 16px; padding: 10px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; text-align: center;">
+                    <span style="font-size: 12px; color: #999;">Set a study type to see precheck status.</span>
                 </div>
                 {% endif %}
             </div>
@@ -1143,8 +1136,12 @@
             <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                 <span class="badge badge-{{ view_study_output.status }}">{{ view_study_output.status }}</span>
                 <span style="font-size: 13px; color: #777;">Type: {{ view_study_output.study_type or '—' }}</span>
-                {% if view_study_output.qa_status %}
-                <span class="badge badge-qa-{{ view_study_output.qa_status }}">QA: {{ view_study_output.qa_status|upper }}</span>
+                {% if view_study_output.qa_status == 'pass' %}
+                <span class="badge badge-qa-pass">QA: Pass</span>
+                {% elif view_study_output.qa_status == 'fail' %}
+                <span class="badge badge-qa-fail">QA: Needs review</span>
+                {% elif view_study_output.qa_status == 'downgrade' %}
+                <span class="badge badge-qa-downgrade">QA: Downgrade</span>
                 {% endif %}
             </div>
 

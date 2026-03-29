@@ -4985,29 +4985,29 @@ def save_remaining_anchors(study_id):
             "Remaining anchors only apply to IDI or Focus Group studies."
         )
 
-    ku = (request.form.get("known_vs_unknown") or "").strip()
+    mg = (request.form.get("market_geography") or "").strip()
+    pc = (request.form.get("product_concept") or "").strip()
     ta = (request.form.get("target_audience") or "").strip()
-    sf = (request.form.get("study_fit") or "").strip()
     dui = (request.form.get("definition_useful_insight") or "").strip()
 
     missing = []
-    if not ku:
-        missing.append("Known vs Unknown")
+    if not mg:
+        missing.append("Market / Geography")
+    if not pc:
+        missing.append("Product / Concept")
     if not ta:
         missing.append("Target Audience")
-    if not sf:
-        missing.append("Study Fit")
     if not dui:
         missing.append("Definition of Useful Insight")
 
     if missing:
         conn.close()
-        return render_error(f"The following anchors are required: {', '.join(missing)}")
+        return render_error("Please complete the remaining required items.")
 
     conn.execute(
-        """UPDATE studies SET known_vs_unknown = ?, target_audience = ?,
-           study_fit = ?, definition_useful_insight = ? WHERE id = ?""",
-        (ku, ta, sf, dui, study_id),
+        """UPDATE studies SET study_fit = ?, known_vs_unknown = ?,
+           target_audience = ?, definition_useful_insight = ? WHERE id = ?""",
+        (mg, pc, ta, dui, study_id),
     )
     conn.commit()
     conn.close()

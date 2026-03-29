@@ -1,0 +1,178 @@
+TASK
+Clean up QA and Research Brief UI to fully align with V1A anchors and live precheck behavior.
+
+This task is UI + presentation only.
+DO NOT change the database schema.
+DO NOT change Ben precheck logic.
+DO NOT reintroduce Known vs Unknown or Study Fit into QA gating.
+
+---
+
+BACKGROUND (READ CAREFULLY)
+
+The system now uses V1A anchors as the ONLY required inputs for IDI / Focus Group studies:
+
+V1A REQUIRED ANCHORS:
+- Business Problem
+- Decision to Support
+- Market / Geography
+- Product / Concept
+- Target Audience
+- Definition of Useful Insight
+
+The following fields still exist in the DB but are OPTIONAL CONTEXT ONLY:
+- Known vs Unknown
+- Study Fit
+
+They must never:
+- Appear in QA failure lists
+- Appear in “required items” checklists
+- Block study execution
+- Increase QA remaining counts
+
+Ben’s precheck logic is already correct.
+The problem to fix is UI copy + checklist drift.
+
+---
+
+CHANGES TO IMPLEMENT
+
+1) QA STATUS COPY (GLOBAL)
+
+REMOVE all usage of:
+- “Ben QA Precheck: FAILED”
+- “QA Failed”
+- “QA: FAIL”
+
+REPLACE with dynamic status text:
+
+- If there are missing required items:
+  "Precheck: X items remaining"
+
+- If zero items remain:
+  "Precheck: Ready to run"
+
+Add this static helper text near the status:
+"Precheck updates automatically as you fill in the brief."
+
+Do NOT use the word “FAIL” anywhere in the UI.
+
+---
+
+2) QA / REMAINING ITEMS LISTS
+
+Anywhere the UI lists:
+- Missing items
+- QA failures
+- Required fields
+- Remaining anchors
+
+Only list V1A anchors.
+
+ALLOWED SOURCE OF TRUTH:
+- V1A_LABELS
+- get_v1a_value(...)
+- Ben precheck failures array
+
+STRICTLY FORBIDDEN:
+- Known vs Unknown
+- Study Fit
+- Any legacy Research Brief field lists
+- Any DB-column-based inference of required fields
+
+If it is not a V1A anchor, it must NEVER appear in QA UI.
+
+---
+
+3) REQUIRED ITEMS / CHECKLIST UI
+
+Rename section header to:
+"Required to run this study"
+
+List ONLY:
+- Business Problem
+- Decision to Support
+- Market / Geography
+- Product / Concept
+- Target Audience
+- Definition of Useful Insight
+
+Do NOT display Known vs Unknown or Study Fit in this section.
+
+---
+
+4) OPTIONAL FIELD RECLASSIFICATION
+
+If Known vs Unknown is shown in the UI:
+
+Label:
+"Known vs Unknown (optional)"
+
+Helper text:
+"Optional context or hypotheses. This does not affect QA or study readiness."
+
+If Study Fit is shown in the UI:
+
+Label:
+"Study Fit (optional)"
+
+Helper text:
+"Optional notes. Study fit is evaluated automatically and does not block execution."
+
+These fields must NEVER be marked required.
+
+---
+
+5) RUN STUDY BLOCKING MESSAGE
+
+When a user attempts to run a study before precheck is ready, use:
+
+"Cannot run yet. Please complete the remaining required items listed above."
+
+Do NOT enumerate fields in the error message.
+Do NOT mention Known vs Unknown or Study Fit.
+
+---
+
+STRICT DO-NOT RULES (HARD)
+
+- DO NOT change DB schema
+- DO NOT delete DB columns
+- DO NOT add new required fields
+- DO NOT restore manual QA triggers
+- DO NOT add logic that waits for “all fields filled”
+- DO NOT reference Known vs Unknown or Study Fit in QA logic
+- DO NOT use “FAIL” language anywhere
+
+---
+
+HOW TO TEST (MANDATORY)
+
+1) Open a draft IDI or Focus Group with missing V1A fields
+   - Status shows: "Precheck: X items remaining"
+   - Only V1A anchors appear in the list
+
+2) Leave Known vs Unknown and Study Fit empty
+   - They do NOT appear in remaining items
+   - Precheck still passes once V1A anchors are complete
+
+3) Fill all 6 V1A anchors
+   - Status updates automatically to "Precheck: Ready to run"
+   - Run Study button is enabled
+
+4) Reload the page mid-progress
+   - Precheck recalculates correctly
+   - No “FAILED” language appears
+
+5) Attach personas with geo mismatch
+   - Warning may appear (if implemented)
+   - Remaining-items count does NOT increase
+
+---
+
+SUCCESS CRITERIA
+
+- QA UI communicates progress, not failure
+- Only V1A anchors block execution
+- Known vs Unknown and Study Fit never confuse users again
+- No schema or logic regressions
