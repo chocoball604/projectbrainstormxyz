@@ -143,6 +143,56 @@ V1A_ANCHOR_ORDER = [
     ("definition_useful_insight", "Definition of Useful Insight"),
 ]
 
+_CONFIRMATION_PREFIXES = ("yes", "ok", "save", "confirmed", "confirm", "sure", "go ahead", "do it", "yep", "yeah")
+
+def _is_confirmation_only(text):
+    return text.lower().strip().startswith(_CONFIRMATION_PREFIXES) and len(text.strip()) < 40
+
+def _detect_answer_no_proposal(mark_reply, study_id, user_message, chat_history_msgs):
+    if not mark_reply or "Proposed updates:" in mark_reply:
+        return False
+    if not user_message or _is_confirmation_only(user_message):
+        return False
+    prev_mark_msgs = [m for m in chat_history_msgs if m.get("role") == "assistant"]
+    if not prev_mark_msgs:
+        return False
+    last_mark = prev_mark_msgs[-1].get("content", "")
+    if "?" not in last_mark:
+        return False
+    return True
+
+def _auto_nudge_mark(model_id, messages, study_id):
+    nudge_msg = (
+        "It looks like you answered my question, but I didn't propose an update yet. "
+        "Let me do that properly now."
+    )
+    forced_instruction = (
+        "SYSTEM: The user has provided a valid answer to your last question. "
+        "You must now emit a proposal for the appropriate field using the mandatory proposal format. "
+        "Do not acknowledge or ask a question. Emit a proposal only."
+    )
+    retry_messages = list(messages)
+    retry_messages.append({"role": "assistant", "content": nudge_msg})
+    retry_messages.append({"role": "system", "content": forced_instruction})
+
+    print(f"WORKER_AUTO_NUDGE study={study_id} retrying once", flush=True)
+    try:
+        retry_reply = call_llm(model_id, retry_messages)
+    except LLMTimeoutError:
+        print(f"WORKER_AUTO_NUDGE_TIMEOUT study={study_id}", flush=True)
+        return nudge_msg, None
+    except Exception as e:
+        print(f"WORKER_AUTO_NUDGE_ERROR study={study_id}: {e}", flush=True)
+        return nudge_msg, None
+
+    if retry_reply and "Proposed updates:" in retry_reply:
+        print(f"WORKER_AUTO_NUDGE_OK study={study_id}", flush=True)
+        return nudge_msg, retry_reply
+    else:
+        print(f"WORKER_AUTO_NUDGE_STILL_NO_PROPOSAL study={study_id}", flush=True)
+        return nudge_msg, retry_reply
+
+
 def _maybe_append_fallback_proposal(mark_reply, study_id, user_message):
     if not user_message or len(user_message.strip()) > 200:
         return mark_reply
@@ -236,6 +286,32 @@ def main():
             print(f"WORKER: using fallback", flush=True)
         if mark_reply and "Proposed updates:" not in mark_reply:
             mark_reply = _maybe_append_fallback_proposal(mark_reply, study_id, message_text)
+        if mark_reply and "Proposed updates:" not in mark_reply:
+            if _detect_answer_no_proposal(mark_reply, study_id, message_text, messages):
+                nudge_msg, retry_reply = _auto_nudge_mark(model_id, messages + [{"role": "assistant", "content": mark_reply}], study_id)
+                update_placeholder(placeholder_id, mark_reply)
+                conn = get_db()
+                try:
+                    cursor = conn.execute(
+                        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+                        (study_id, nudge_msg),
+                    )
+                    nudge_id = cursor.lastrowid
+                    if retry_reply:
+                        conn.execute(
+                            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+                            (study_id, retry_reply),
+                        )
+                    conn.commit()
+                except Exception as e:
+                    print(f"WORKER_NUDGE_DB_ERROR study={study_id}: {e}", flush=True)
+                finally:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                print(f"WORKER_DONE_WITH_NUDGE study={study_id} placeholder={placeholder_id}", flush=True)
+                sys.exit(0)
         if update_placeholder(placeholder_id, mark_reply):
             print(f"WORKER_DONE study={study_id} placeholder={placeholder_id}", flush=True)
         else:
