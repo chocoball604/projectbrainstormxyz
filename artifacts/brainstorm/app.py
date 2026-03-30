@@ -1042,6 +1042,20 @@ def policy_apply_save(conn, study_id, field, value):
     return save_label
 
 
+def parse_mark_proposal_or_none(chat_messages):
+    if not chat_messages:
+        return None
+    last = chat_messages[-1]
+    if last.get("sender") != "mark":
+        return None
+    text = last.get("message_text", "")
+    if "Proposed updates:" in text:
+        before_proposal = text.split("Proposed updates:", 1)[0]
+        if "?" in before_proposal:
+            return None
+    return policy_parse_last_mark_proposal(chat_messages)
+
+
 # Legacy aliases (used by worker fallback)
 _parse_proposed_update = policy_parse_last_mark_proposal
 compute_server_confidence = lambda msgs, pu, sd: policy_score_proposal(msgs, dict(pu), sd)["server_confidence"]
@@ -2018,7 +2032,7 @@ def index():
                 ]
 
                 chat_save_buttons = []
-                proposed_update = policy_parse_last_mark_proposal(chat_messages)
+                proposed_update = parse_mark_proposal_or_none(chat_messages)
                 if proposed_update and configure_study:
                     proposed_update = policy_score_proposal(
                         chat_messages, proposed_update, dict(configure_study)
@@ -4707,7 +4721,7 @@ def save_chat_field(study_id):
             (study_id,),
         ).fetchall()
     ]
-    if policy_parse_last_mark_proposal(all_msgs):
+    if parse_mark_proposal_or_none(all_msgs):
         conn.close()
         return render_error("Cannot use chat save when a proposal exists. Use the Confirm & Save button instead.")
 

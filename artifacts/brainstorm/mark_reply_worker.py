@@ -161,6 +161,44 @@ def _detect_answer_no_proposal(mark_reply, study_id, user_message, chat_history_
         return False
     return True
 
+def _is_illegal_mixed_turn(mark_reply):
+    if "Proposed updates:" not in mark_reply:
+        return False
+    before_proposal = mark_reply.split("Proposed updates:", 1)[0]
+    return "?" in before_proposal
+
+def _retry_malformed_proposal(model_id, messages, study_id):
+    restate_msg = (
+        "I attempted to propose an update incorrectly. "
+        "Let me restate it properly."
+    )
+    forced_instruction = (
+        "SYSTEM: Emit the proposal again using the exact mandatory format. "
+        "Do NOT ask a question. Emit ONLY the proposal block and the "
+        "confirmation question."
+    )
+    retry_messages = list(messages)
+    retry_messages.append({"role": "assistant", "content": restate_msg})
+    retry_messages.append({"role": "system", "content": forced_instruction})
+
+    print(f"WORKER_MALFORMED_RETRY study={study_id} retrying once", flush=True)
+    try:
+        retry_reply = call_llm(model_id, retry_messages)
+    except LLMTimeoutError:
+        print(f"WORKER_MALFORMED_RETRY_TIMEOUT study={study_id}", flush=True)
+        return restate_msg, None
+    except Exception as e:
+        print(f"WORKER_MALFORMED_RETRY_ERROR study={study_id}: {e}", flush=True)
+        return restate_msg, None
+
+    if retry_reply and "Proposed updates:" in retry_reply and not _is_illegal_mixed_turn(retry_reply):
+        print(f"WORKER_MALFORMED_RETRY_OK study={study_id}", flush=True)
+        return restate_msg, retry_reply
+    else:
+        print(f"WORKER_MALFORMED_RETRY_STILL_BAD study={study_id}", flush=True)
+        return restate_msg, retry_reply
+
+
 def _auto_nudge_mark(model_id, messages, study_id):
     nudge_msg = (
         "It looks like you answered my question, but I didn't propose an update yet. "
@@ -286,6 +324,32 @@ def main():
             print(f"WORKER: using fallback", flush=True)
         if mark_reply and "Proposed updates:" not in mark_reply:
             mark_reply = _maybe_append_fallback_proposal(mark_reply, study_id, message_text)
+        if mark_reply and _is_illegal_mixed_turn(mark_reply):
+            restate_msg, retry_reply = _retry_malformed_proposal(
+                model_id, messages + [{"role": "assistant", "content": mark_reply}], study_id
+            )
+            update_placeholder(placeholder_id, mark_reply)
+            conn = get_db()
+            try:
+                conn.execute(
+                    "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+                    (study_id, restate_msg),
+                )
+                if retry_reply:
+                    conn.execute(
+                        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+                        (study_id, retry_reply),
+                    )
+                conn.commit()
+            except Exception as e:
+                print(f"WORKER_MALFORMED_DB_ERROR study={study_id}: {e}", flush=True)
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            print(f"WORKER_DONE_MALFORMED_RETRY study={study_id} placeholder={placeholder_id}", flush=True)
+            sys.exit(0)
         if mark_reply and "Proposed updates:" not in mark_reply:
             if _detect_answer_no_proposal(mark_reply, study_id, message_text, messages):
                 nudge_msg, retry_reply = _auto_nudge_mark(model_id, messages + [{"role": "assistant", "content": mark_reply}], study_id)
