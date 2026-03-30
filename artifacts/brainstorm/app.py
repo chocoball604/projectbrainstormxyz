@@ -642,11 +642,12 @@ def _parse_proposed_update(chat_messages):
     lines = text.split("\n")
     field = None
     value_lines = []
+    model_confidence = None
     capturing_value = False
     for line in lines:
         stripped = line.strip()
-        if stripped.startswith("- field:"):
-            field = stripped.split("- field:", 1)[1].strip()
+        if stripped.startswith("- field:") or stripped.startswith("field:"):
+            field = stripped.split("field:", 1)[1].strip()
             capturing_value = False
             value_lines = []
         elif field and (stripped.startswith("value:") or stripped.startswith("- value:")):
@@ -654,6 +655,11 @@ def _parse_proposed_update(chat_messages):
             if val_part:
                 value_lines.append(val_part)
             capturing_value = True
+        elif stripped.startswith("confidence:") or stripped.startswith("- confidence:"):
+            conf_val = stripped.split("confidence:", 1)[1].strip().lower()
+            if conf_val in ("high", "medium", "low"):
+                model_confidence = conf_val
+            capturing_value = False
         elif capturing_value:
             if stripped.lower().startswith("confirmation question") or "Should I save" in stripped or stripped == "":
                 capturing_value = False
@@ -664,7 +670,60 @@ def _parse_proposed_update(chat_messages):
     value = " ".join(value_lines).strip()
     if not value:
         return None
-    return {"field": field, "value": value}
+    return {"field": field, "value": value, "model_confidence": model_confidence}
+
+
+_FIELD_QUESTION_KEYWORDS = {
+    "business_problem": ["business problem", "problem are you trying", "challenge"],
+    "decision_to_support": ["decision", "inform", "support"],
+    "market_geography": ["market / geography", "market", "geography", "region", "country", "city"],
+    "product_concept": ["product / concept", "product", "service", "concept", "offering"],
+    "target_audience": ["target audience", "who is the audience", "customer segment"],
+    "definition_useful_insight": ["useful insight", "definition", "what would a useful insight"],
+}
+
+_UNCERTAINTY_WORDS = ["not sure", "i don't know", "maybe", "tbd", "depends", "unsure"]
+_MULTI_TOPIC_MARKERS = [" and ", " also ", " plus ", " as well as ", ";", " / ", " then "]
+
+def _model_confidence_to_num(mc):
+    if mc == "high":
+        return 0.90
+    if mc == "medium":
+        return 0.70
+    if mc == "low":
+        return 0.40
+    return None
+
+def compute_server_confidence(chat_messages, proposed_update, study_dict):
+    score = 0.40
+    field = proposed_update["field"]
+    value = proposed_update["value"]
+    mark_msgs_before = []
+    found_last_user = False
+    for m in reversed(chat_messages[:-1]):
+        if m.get("sender") == "user" and not found_last_user:
+            found_last_user = True
+            continue
+        if m.get("sender") == "mark" and found_last_user:
+            mark_msgs_before.append(m.get("message_text", ""))
+            break
+    if mark_msgs_before:
+        prev_mark = mark_msgs_before[0].lower()
+        keywords = _FIELD_QUESTION_KEYWORDS.get(field, [])
+        if any(kw in prev_mark for kw in keywords):
+            score += 0.35
+    vlen = len(value)
+    if 3 <= vlen <= 180:
+        score += 0.15
+    line_count = value.count("\n") + 1
+    if line_count <= 2:
+        score += 0.05
+    val_lower = value.lower()
+    if any(uw in val_lower for uw in _UNCERTAINTY_WORDS):
+        score -= 0.40
+    if any(mt in val_lower for mt in _MULTI_TOPIC_MARKERS):
+        score -= 0.20
+    return max(0.0, min(1.0, score))
 
 
 BUDGET_CEILINGS = {
@@ -1626,6 +1685,22 @@ def index():
 
                 chat_save_buttons = []
                 proposed_update = _parse_proposed_update(chat_messages)
+                if proposed_update and configure_study:
+                    server_score = compute_server_confidence(chat_messages, proposed_update, dict(configure_study))
+                    mc_num = _model_confidence_to_num(proposed_update.get("model_confidence"))
+                    if mc_num is not None:
+                        final_conf = min(server_score, mc_num)
+                    else:
+                        final_conf = server_score
+                    proposed_update["server_confidence"] = round(server_score, 2)
+                    proposed_update["final_confidence"] = round(final_conf, 2)
+                    allow = final_conf >= 0.70
+                    print(
+                        f"PROPOSAL_CONFIDENCE study={configure_study['id']} field={proposed_update['field']} "
+                        f"server={server_score:.2f} model={proposed_update.get('model_confidence') or 'none'} "
+                        f"final={final_conf:.2f} allow={'true' if allow else 'false'}",
+                        flush=True,
+                    )
 
                 if configure_study.get("status") == "draft" and configure_study.get("study_type"):
                     try:
@@ -4362,6 +4437,8 @@ def confirm_proposed_updates():
     value = request.form.get("value", "").strip()
     if not study_id or not field or not value:
         return render_error("Missing required fields.")
+    if len(value) > 2000:
+        return render_error("Proposed value is too long; please clarify in chat.")
     if field not in _VALID_V1A_FIELDS:
         return render_error("Invalid field.")
     conn = get_db()
@@ -4550,11 +4627,13 @@ def send_chat(study_id):
         "When the user provides a usable answer for a V1A anchor, you MUST end your reply with EXACTLY this structure:\n\n"
         "Proposed updates:\n"
         "- field: <one V1A key from the list below>\n"
-        "  value: <short extracted text, 1-2 lines, no analysis>\n\n"
+        "  value: <short extracted text, 1-2 lines, no analysis>\n"
+        "  confidence: <high|medium|low>\n\n"
         "Confirmation question:\n"
         "Should I save these updates?\n\n"
         "Valid field keys: business_problem, decision_to_support, market_geography, product_concept, target_audience, definition_useful_insight\n"
-        "Rules: exactly ONE field per turn, value is concise, no auto-saving, no follow-up questions in the same turn, no proposing multiple fields at once."
+        "confidence: high = user was clear and specific, medium = reasonable but could be refined, low = vague or ambiguous.\n"
+        "Rules: exactly ONE field per turn, value is concise, the Proposed updates block IS the required ending, the confirmation question inside it IS the only question. No auto-saving, no proposing multiple fields at once."
     )
 
     chat_history = conn.execute(
