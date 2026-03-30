@@ -1046,15 +1046,19 @@ def policy_apply_save(conn, study_id, field, value):
 def parse_mark_proposal_or_none(chat_messages):
     if not chat_messages:
         return None
-    last = chat_messages[-1]
-    if last.get("sender") != "mark":
-        return None
-    text = last.get("message_text", "")
-    if "Proposed updates:" in text:
+    for msg in reversed(chat_messages):
+        if msg.get("sender") != "mark":
+            continue
+        text = msg.get("message_text", "")
+        if "Proposed updates:" not in text:
+            continue
         before_proposal = text.split("Proposed updates:", 1)[0]
         if "?" in before_proposal:
-            return None
-    return policy_parse_last_mark_proposal(chat_messages)
+            continue
+        parsed = policy_parse_last_mark_proposal([msg])
+        if parsed:
+            return parsed
+    return None
 
 
 # Legacy aliases (used by worker fallback)
