@@ -976,6 +976,8 @@ def policy_should_show_confirm(proposal):
     return bool(proposal.get("allow_confirm"))
 
 
+_CONFIRMATION_PREFIXES = ("yes", "ok", "save", "confirmed", "confirm", "sure", "go ahead", "do it", "yep", "yeah")
+
 def policy_validate_for_save(field, value):
     if not field or not value:
         return False, "Missing required fields."
@@ -983,6 +985,8 @@ def policy_validate_for_save(field, value):
         return False, "Proposed value is too long; please clarify in chat."
     if field not in _VALID_V1A_FIELDS:
         return False, "Invalid field."
+    if value.lower().strip().startswith(_CONFIRMATION_PREFIXES) and len(value) < 40:
+        return False, "Confirmation text cannot be saved as study content."
     return True, None
 
 
@@ -4653,6 +4657,18 @@ def save_chat_field(study_id):
         return render_error("Study not found or not in draft status.")
 
     field = (request.form.get("field") or "").strip()
+
+    all_msgs = [
+        dict(r)
+        for r in conn.execute(
+            "SELECT * FROM chat_messages WHERE study_id = ? ORDER BY id ASC",
+            (study_id,),
+        ).fetchall()
+    ]
+    if policy_parse_last_mark_proposal(all_msgs):
+        conn.close()
+        return render_error("Cannot use chat save when a proposal exists. Use the Confirm & Save button instead.")
+
     last_user_msg = conn.execute(
         "SELECT message_text FROM chat_messages WHERE study_id = ? AND sender = 'user' ORDER BY id DESC LIMIT 1",
         (study_id,),
