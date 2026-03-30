@@ -1,0 +1,116 @@
+TASK: Fix “no way to save” + “Waiting freeze” in Project Brainstorm chat-proposal flow.
+
+PROBLEM (repro)
+- Mark Discovery fields are read-only and show [not yet provided].
+- Manual save buttons were removed.
+- The only remaining save path is the proposal confirm flow.
+- BUT the Confirm & Save UI is not appearing because Mark’s proposal output often does not match the server parser.
+- Result: user cannot persist Business Problem / Decision to Support at all.
+- Additionally, chat can get stuck at “Waiting…” which blocks the user from sending new messages to trigger cleanup.
+
+FILES
+- artifacts/brainstorm/app.py
+- artifacts/brainstorm/templates/index.html
+
+=========================================================
+PART 1 — Make proposal parsing robust (REQUIRED)
+=========================================================
+
+In app.py, improve policy_parse_last_mark_proposal(chat_messages):
+
+Current behavior:
+- Requires exact “Should I save these updates?”
+- Extracts value only if it appears on a separate line starting with “value:”
+
+New required behavior:
+- Still require the confirmation marker to treat it as a proposal, BUT:
+  - Accept “Proposed updates:” proposals that have field/value/confidence inline on one line:
+    Example: “- field: business_problem value: ... confidence: high”
+  - Accept “field:” without hyphen.
+  - If confidence is missing, set model_confidence = None (do not fail parse).
+  - If value is missing but message includes a sentence right after “value:”, capture it even if inline.
+
+Implementation approach:
+- When encountering a line with “field:”, parse the remainder for optional “value:” and “confidence:”
+- Use simple string splits:
+  - After parsing field, search the same line for “value:” and capture until “confidence:” or end of line.
+  - Search same line for “confidence:” and map if in {high, medium, low}.
+- Preserve multiline value behavior already implemented.
+
+Result:
+- proposal dict always includes:
+  field, value, model_confidence (optional)
+
+=========================================================
+PART 2 — Add a MANUAL Confirm & Save fallback UI (REQUIRED)
+=========================================================
+
+In index.html:
+- If proposed_update is None BUT the last Mark message contains “Proposed updates:” text,
+  show a “Manual Save” panel.
+
+Manual Save panel must include:
+- A select dropdown of valid fields:
+  business_problem, decision_to_support, market_geography, product_concept, target_audience, definition_useful_insight
+- A textarea prefilled with:
+  - Best-effort extracted value (if you can parse it client-side), otherwise empty.
+- A submit button “Confirm & Save” that POSTs to /confirm-proposed-updates with:
+  - study_id
+  - field
+  - value
+
+IMPORTANT:
+- This provides a user-visible physical save path even when parsing fails.
+- Do not rely on the Mark parser for this fallback.
+
+=========================================================
+PART 3 — Add “Clear Waiting / Reset Mark” recovery (REQUIRED)
+=========================================================
+
+A) Add a new endpoint in app.py:
+
+@app.route("/clear-chat-pending/<int:study_id>", methods=["POST"])
+def clear_chat_pending(study_id):
+    - Verify user owns the study
+    - DELETE pending placeholder messages:
+      WHERE study_id = ? AND sender='mark' AND message_text IN ('⏳ Mark is thinking...', '\u23f3 Mark is thinking...')
+    - Return redirect back to configure view
+
+B) In index.html:
+- If /chat-status indicates pending > 0 OR if there exists any pending placeholder rows,
+  show a button “Clear Waiting / Reset Mark” that POSTs to /clear-chat-pending/<study_id>.
+
+C) Move the stale placeholder cleanup so it also runs on page load:
+- In index() (server render), before fetching chat messages, run the same SQL cleanup:
+  DELETE pending placeholders older than 5 minutes.
+
+This ensures recovery works even if the UI is stuck and the user cannot send messages.
+
+=========================================================
+PART 4 — Prompt tightening to reduce drift (RECOMMENDED)
+=========================================================
+
+In MARK_SYSTEM_PROMPT:
+- Add one explicit rule:
+  “In Proposed updates, ‘field:’, ‘value:’, and ‘confidence:’ must each be on their own line. Never put field/value/confidence on the same line.”
+
+This reduces format drift but does not replace parsing robustness.
+
+=========================================================
+SUCCESS CRITERIA (MANDATORY)
+=========================================================
+
+1) If Mark outputs ANY reasonable proposal containing “Proposed updates”, the user always has a visible way to save:
+   - Either standard Confirm & Save (parsed proposal), or
+   - Manual Confirm & Save fallback panel
+
+2) User is never permanently blocked by “Waiting…”:
+   - Clear Waiting button exists
+   - Server-side cleanup runs on page load
+   - Pending placeholders can always be cleared
+
+3) Business Problem field can be saved end-to-end from chat without manual DB edits.
+
+DELIVERABLE
+- Commit the changes across app.py + index.html.
+
