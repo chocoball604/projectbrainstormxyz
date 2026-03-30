@@ -500,45 +500,25 @@
             <div style="background: #f0f4ff; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #d0d9f5;">
                 <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Mark Discovery</h3>
                 <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
-                    Answer two quick questions so Mark can recommend the best study type.
+                    Use the chat below to answer Mark. Mark will propose updates and you'll confirm before saving.
                 </p>
 
                 <div style="margin-bottom: 16px;">
                     <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">
                         1. Business Problem
-                        {% if bp_saved %}<span style="color: #27ae60; font-size: 12px; margin-left: 6px;">Saved</span>{% endif %}
                     </label>
-                    {% if bp_saved %}
                     <div style="background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #333;">
-                        {{ configure_study.business_problem }}
+                        {{ configure_study.business_problem or '[not yet provided]' }}
                     </div>
-                    {% else %}
-                    <form action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;">
-                        <input type="hidden" name="token" value="{{ token }}">
-                        <input type="hidden" name="field" value="business_problem">
-                        <input type="text" name="value" required placeholder="Describe the business problem in one sentence" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
-                        <button type="submit" class="btn btn-primary btn-small">Save</button>
-                    </form>
-                    {% endif %}
                 </div>
 
                 <div style="margin-bottom: 4px;">
                     <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">
                         2. Decision to Support
-                        {% if ds_saved %}<span style="color: #27ae60; font-size: 12px; margin-left: 6px;">Saved</span>{% endif %}
                     </label>
-                    {% if ds_saved %}
                     <div style="background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #333;">
-                        {{ configure_study.decision_to_support }}
+                        {{ configure_study.decision_to_support or '[not yet provided]' }}
                     </div>
-                    {% else %}
-                    <form action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;">
-                        <input type="hidden" name="token" value="{{ token }}">
-                        <input type="hidden" name="field" value="decision_to_support">
-                        <input type="text" name="value" required placeholder="What decision will this research support?" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
-                        <button type="submit" class="btn btn-primary btn-small">Save</button>
-                    </form>
-                    {% endif %}
                 </div>
             </div>
 

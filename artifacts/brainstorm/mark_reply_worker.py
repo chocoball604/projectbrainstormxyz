@@ -39,7 +39,7 @@ def call_llm(model_id, messages):
     if not base_url or not api_key:
         print("WORKER: no API credentials found", flush=True)
         return None
-    client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=90)
+    client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=HARD_TIMEOUT_SECONDS)
     start = time.time()
     old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
     signal.alarm(HARD_TIMEOUT_SECONDS)

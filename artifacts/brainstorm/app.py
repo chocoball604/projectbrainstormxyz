@@ -4554,6 +4554,26 @@ def send_chat(study_id):
     if not user or user["state"] != "active":
         return render_error("Unauthorized.")
 
+    try:
+        return _send_chat_inner(study_id, token, user)
+    except Exception as e:
+        print(f"SEND_CHAT_CRASH study={study_id}: {e}", flush=True)
+        try:
+            conn_err = get_db()
+            conn_err.execute(
+                "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+                (study_id, "Mark couldn't complete that request right now. Please try again."),
+            )
+            conn_err.commit()
+            conn_err.close()
+        except Exception:
+            pass
+        return redirect(f"/?token={token}&configure={study_id}")
+
+
+def _send_chat_inner(study_id, token, user):
+    import subprocess
+
     conn = get_db()
     study = conn.execute(
         "SELECT * FROM studies WHERE id = ? AND user_id = ?",
@@ -4565,6 +4585,19 @@ def send_chat(study_id):
 
     message_text = (request.form.get("message_text") or "").strip()
     if not message_text:
+        conn.close()
+        return redirect(f"/?token={token}&configure={study_id}")
+
+    pending_count = conn.execute(
+        "SELECT COUNT(*) as cnt FROM chat_messages WHERE study_id = ? AND sender = 'mark' AND message_text = ?",
+        (study_id, "\u23f3 Mark is thinking..."),
+    ).fetchone()["cnt"]
+    if pending_count > 0:
+        conn.execute(
+            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+            (study_id, "Mark is still working on the previous message. Please wait a moment and refresh."),
+        )
+        conn.commit()
         conn.close()
         return redirect(f"/?token={token}&configure={study_id}")
 
@@ -4699,7 +4732,12 @@ def send_chat(study_id):
 
     fallback = get_coaching_nudge(study_dict, persona_count)
 
-    if mark_model_id:
+    has_creds = (
+        os.environ.get("AI_INTEGRATIONS_OPENROUTER_BASE_URL")
+        and os.environ.get("AI_INTEGRATIONS_OPENROUTER_API_KEY")
+    )
+
+    if mark_model_id and has_creds:
         import tempfile
         prompt_data = {
             "system_prompt": system_prompt,
@@ -4742,6 +4780,8 @@ def send_chat(study_id):
             conn2.commit()
             conn2.close()
     else:
+        if not has_creds:
+            print(f"SEND_CHAT_NO_CREDS study={study_id}: skipping worker spawn", flush=True)
         conn2 = get_db()
         conn2.execute(
             "UPDATE chat_messages SET message_text = ? WHERE id = ?",

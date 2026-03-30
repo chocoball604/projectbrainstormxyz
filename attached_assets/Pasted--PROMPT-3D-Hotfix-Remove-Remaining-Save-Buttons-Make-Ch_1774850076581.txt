@@ -1,0 +1,164 @@
+✅ PROMPT 3D — Hotfix: Remove Remaining “Save” Buttons + Make Chat Send Crash Safe (No scope creep)
+
+REPLIT AGENT — PROMPT 3D HOTFIX (Targeted): remove remaining Save buttons + prevent chat send crash
+
+CONTEXT (OBSERVED FAILURES)
+1) In Preview, “Save” buttons are still visible immediately after login in the “Mark Discovery” section (Business Problem Save / Decision Save). This violates Prompt 3 Option B (“no manual save controls anywhere”). See screenshot evidence.  (Do NOT confuse these with chat “Save as …” buttons.) 
+2) When pressing “Send” to chat with Mark, the app freezes and the artifact crashes. This must be hardened so chat send cannot crash the Flask server even if the worker/LLM fails.
+
+FILES YOU MAY EDIT (ONLY THESE)
+- artifacts/brainstorm/templates/index.html
+- artifacts/brainstorm/app.py
+- artifacts/brainstorm/mark_reply_worker.py
+
+DO NOT
+- Change SQLite schema (no CREATE/ALTER/DROP, no new columns)
+- Modify brainstorm.db
+- Refactor unrelated code
+- Add new product workflows beyond removing manual saves and crash-hardening chat
+- Implement model auto-switching (not allowed)
+
+GOAL
+A) Remove ALL remaining manual Save buttons (including Mark Discovery “Save” buttons), so the only mutation path is:
+chat → Mark proposal → user confirmation → /confirm-proposed-updates save
+B) Make /send-chat and worker execution crash-safe:
+- No hang
+- No artifact crash
+- If worker fails, placeholder is replaced with a clear fallback message
+- Prevent runaway worker spawns
+
+==========================================================
+PART 1 — Remove Mark Discovery Save UI (Business Problem / Decision Save)
+==========================================================
+
+1.1 In templates/index.html:
+- Locate the “Mark Discovery” section that currently shows:
+  - “1. Business Problem … Save”
+  - “2. Decision to Support … Save”
+- Remove these forms/buttons entirely from the UI.
+- Replace the entire Mark Discovery panel content with read-only status text:
+  - Show Business Problem: <value or “[not yet provided]”>
+  - Show Decision to Support: <value or “[not yet provided]”>
+  - Add one instruction line:
+    “Use the chat below to answer Mark. Mark will propose updates and you’ll confirm before saving.”
+- Do NOT render any <form> that posts to /save-discovery anywhere.
+
+1.2 In artifacts/brainstorm/app.py:
+- Keep the /save-discovery/<study_id> route for now (do not delete), but ensure it is not referenced by templates.
+- Ensure any computed “save buttons” variables passed to the template are always empty:
+  - chat_save_buttons must remain []
+  - If index() still computes get_save_buttons(), do NOT pass it to template or override it to [] before render.
+
+SUCCESS CONDITION:
+- After login and opening any draft study, there are ZERO buttons labeled “Save”, “Save as …”, or “Save Remaining Anchors” in the study detail view.
+
+==========================================================
+PART 2 — Ensure BP/Decision are collected via Prompt 3 proposal-confirm flow
+==========================================================
+
+2.1 The confirmation endpoint already supports saving business_problem and decision_to_support.
+- Ensure Mark’s system prompt phase gate asks for Business Problem and Decision to Support via chat (already present).
+- Ensure Proposed updates supports these keys (already present).
+
+2.2 In templates/index.html, ensure the read-only display for Business Problem and Decision to Support uses the saved values (configure_study business_problem / decision_to_support).
+
+NO NEW FLOW:
+- Do not reintroduce any manual input fields for BP/Decision.
+
+==========================================================
+PART 3 — Crash-hardening: /send-chat must not crash the server
+==========================================================
+
+3.1 In artifacts/brainstorm/app.py send_chat():
+Add a top-level try/except around the entire POST handler body.
+If ANY exception occurs:
+- Write a safe Mark message into chat that clearly indicates failure
+- Redirect back to configure view
+- Never allow an unhandled exception to bubble and crash Flask
+
+Use this exact user-facing message on failure (single sentence):
+“Mark couldn’t complete that request right now. Please try again.”
+
+3.2 Prevent runaway workers:
+Before inserting a new “⏳ Mark is thinking...” placeholder:
+- Query chat_messages for this study:
+  count of messages where sender='mark' AND message_text == "⏳ Mark is thinking..."
+- If count > 0:
+  - Do NOT spawn a new worker
+  - Instead insert a Mark message:
+    “Mark is still working on the previous message. Please wait a moment and refresh.”
+  - Return redirect immediately
+
+3.3 Do not spawn worker when integration creds are missing:
+In send_chat(), before spawning subprocess, check env vars:
+- AI_INTEGRATIONS_OPENROUTER_BASE_URL
+- AI_INTEGRATIONS_OPENROUTER_API_KEY
+If missing:
+- Do NOT spawn worker
+- Immediately replace the placeholder message text with fallback coaching nudge (already computed as `fallback`)
+This avoids spawning workers that will fail immediately.
+
+3.4 Ensure placeholder is always replaced even on spawn error:
+If subprocess.Popen fails (exception):
+- Update placeholder message_text to `fallback` immediately
+- Commit and close
+- Return redirect
+
+==========================================================
+PART 4 — Worker hard timeout (minimal, no new tables)
+==========================================================
+
+4.1 In artifacts/brainstorm/mark_reply_worker.py:
+Implement a hard wall-clock timeout around the LLM call:
+- Target 45 seconds (must be < 60s)
+- If timeout occurs:
+  - mark_reply becomes EXACTLY:
+    “Mark couldn't respond in time using the currently selected model. This request was not completed. Please try again or ask your admin to select a faster model.”
+  - Continue to DB update placeholder message and exit cleanly
+
+Implementation suggestion (keep minimal):
+- Use time.time() start, and if time.time()-start exceeds 45, treat as timeout
+- Also set OpenAI client timeout to 45
+
+4.2 Ensure worker never leaves placeholder unmodified:
+- Even if call_llm throws, ensure mark_reply is set to fallback_text and DB update runs.
+
+==========================================================
+TESTING (MANDATORY, STEP-BY-STEP)
+==========================================================
+
+Test 1 — No Save buttons anywhere
+1) Login → open any draft study
+2) Confirm there are NO buttons labeled “Save”, “Save as …”, “Save Remaining Anchors”, or similar in the study detail panel.
+
+Test 2 — Send chat does not crash/hang
+1) Open a draft study → type any message → click Send
+Expected:
+- Page redirects back immediately
+- A “⏳ Mark is thinking...” message appears
+- Within a reasonable time it is replaced by either Mark reply or fallback text
+- App does NOT freeze and Replit artifact does NOT crash
+
+Test 3 — Prevent multiple workers
+1) Click Send twice quickly
+Expected:
+- Second click does NOT spawn a second placeholder
+- Mark posts: “Mark is still working on the previous message...”
+
+Test 4 — Missing creds behavior
+1) Temporarily unset API env vars (or simulate)
+2) Click Send
+Expected:
+- Placeholder is replaced immediately with fallback coaching text (no crash)
+
+DELIVERABLE FORMAT (MANDATORY)
+Files changed:
+- ...
+What changed:
+- ...
+How to test:
+1) ...
+2) ...
+3) ...
+
+If you discover other issues (e.g., optional context, footer, persona workflow), list as Follow-ups only — do not implement.
