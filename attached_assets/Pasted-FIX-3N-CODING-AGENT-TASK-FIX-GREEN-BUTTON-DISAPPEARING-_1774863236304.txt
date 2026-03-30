@@ -1,0 +1,93 @@
+FIX 3N:
+
+CODING AGENT TASK — FIX GREEN BUTTON DISAPPEARING AFTER USER MESSAGE
+Objective
+Fix the bug where a valid Mark proposal does not show the green “Confirm & Save” button if the user sends any message after the proposal.
+This must be fixed server side and must not rely on user behavior.
+ 
+Root Cause (Authoritative)
+The UI currently calls:
+parse_mark_proposal_or_none(chat_messages)
+``
+which only inspects chat_messages[-1].
+If the user sends any message after a valid Mark proposal, the proposal becomes invisible and the green button disappears.
+This is incorrect.
+ 
+Required Behavior (Invariant)
+✅ The UI must surface the most recent valid Mark proposal, even if later user messages exist
+✅ Only Mark-authored proposals count
+✅ User-authored “Proposed updates” text must be ignored
+✅ Confirmation text (“yes”, “save”) must NOT clear proposals
+ 
+Implementation Instructions
+1️⃣ Replace parse_mark_proposal_or_none with a backward scan
+Delete the current implementation.
+Replace it with this exact logic:
+def parse_mark_proposal_or_none(chat_messages):
+"""
+Return the most recent valid Mark proposal,
+even if newer user messages exist.
+"""
+for msg in reversed(chat_messages):
+if msg.get("sender") != "mark":
+continue
+
+text = msg.get("message_text", "")
+if "Proposed updates:" not in text:
+continue
+
+# Reject mixed question + proposal
+before = text.split("Proposed updates:", 1)[0]
+if "?" in before:
+continue
+
+parsed = policy_parse_last_mark_proposal([msg])
+if parsed:
+return parsed
+
+return None
+✅ This ensures proposals persist until explicitly replaced or saved.
+ 
+2️⃣ Explicitly ignore user-authored proposals
+Confirm this invariant (add if missing):
+if msg.get("sender") != "mark":
+continue
+User messages must never create proposals.
+ 
+3️⃣ Lock it with a regression test (MANDATORY)
+Add this test:
+Python
+def test_proposal_persists_after_user_message():
+chat = [
+{"sender": "mark", "message_text": "What is the business problem?"},
+{"sender": "user", "message_text": "I want to sell more running shoes but I don't know how"},
+{"sender": "mark", "message_text": (
+"Proposed updates:\n"
+"- field: business_problem\n"
+" value: I want to sell more running shoes but I don't know how\n"
+" confidence: high\n\n"
+"Confirmation question:\n"
+"Should I save these updates?"
+)},
+{"sender": "user", "message_text": "yes save"}
+]
+
+pu = parse_mark_proposal_or_none(chat)
+assert pu is not None
+assert pu["field"] == "business_problem"
+Show more lines
+This must fail before the fix and pass after.
+ 
+Explicit Non Goals
+❌ Do NOT require the proposal to be the last message
+❌ Do NOT rely on user silence
+❌ Do NOT auto-save
+❌ Do NOT parse user proposals
+❌ Do NOT change confidence logic
+ 
+Definition of Done
+✅ Green “Confirm & Save” button remains visible after user replies
+✅ Button disappears only after save or replacement
+✅ Human typing no longer breaks protocol
+✅ No regressions in other flows
+
