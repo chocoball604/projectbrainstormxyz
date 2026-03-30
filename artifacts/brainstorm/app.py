@@ -628,6 +628,30 @@ V1A_LABELS = {
     "definition_useful_insight": "Definition of Useful Insight",
 }
 
+_VALID_V1A_FIELDS = set(V1A_LABELS.keys())
+
+def _parse_proposed_update(chat_messages):
+    if not chat_messages:
+        return None
+    last = chat_messages[-1]
+    if last.get("sender") != "mark":
+        return None
+    text = last.get("message_text", "")
+    if "Should I save these updates?" not in text:
+        return None
+    import re
+    m = re.search(r"- field:\s*(\S+)\s*\n\s*value:\s*(.+?)(?:\n\n|\n*Confirmation question:)", text, re.DOTALL)
+    if not m:
+        return None
+    field = m.group(1).strip()
+    value = m.group(2).strip()
+    if field not in _VALID_V1A_FIELDS:
+        return None
+    if not value:
+        return None
+    return {"field": field, "value": value}
+
+
 BUDGET_CEILINGS = {
     "synthetic_survey": 100_000,
     "synthetic_idi": 150_000,
@@ -1338,6 +1362,7 @@ def index():
     view_study_output = None
     chat_messages = []
     chat_save_buttons = []
+    proposed_update = None
     mark_recommendation = ""
     mark_recommendation_label = ""
     mark_recommendation_reason = ""
@@ -1584,8 +1609,8 @@ def index():
                     ).fetchall()
                 ]
 
-                chat_save_buttons = get_save_buttons(configure_study)
                 chat_save_buttons = []
+                proposed_update = _parse_proposed_update(chat_messages)
 
                 if configure_study.get("status") == "draft" and configure_study.get("study_type"):
                     try:
@@ -1828,6 +1853,7 @@ def index():
         mark_recommendation_reason=mark_recommendation_reason,
         chat_messages=chat_messages,
         chat_save_buttons=chat_save_buttons,
+        proposed_update=proposed_update,
         studies_page=studies_page,
         studies_q=studies_q,
         studies_total_pages=studies_total_pages,
@@ -4310,6 +4336,45 @@ def save_chat_field(study_id):
     return redirect(f"/?token={token}&configure={study_id}")
 
 
+@app.route("/confirm-proposed-updates", methods=["POST"])
+def confirm_proposed_updates():
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("Session expired. Please log in again.")
+    study_id = request.form.get("study_id", type=int)
+    field = request.form.get("field", "").strip()
+    value = request.form.get("value", "").strip()
+    if not study_id or not field or not value:
+        return render_error("Missing required fields.")
+    if field not in _VALID_V1A_FIELDS:
+        return render_error("Invalid field.")
+    conn = get_db()
+    try:
+        study = conn.execute(
+            "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+            (study_id, user["id"]),
+        ).fetchone()
+        if not study:
+            conn.close()
+            return render_error("Study not found or not a draft.")
+        set_v1a_value(conn, study_id, field, value)
+        save_label = V1A_LABELS.get(field, field.replace("_", " ").title())
+        conn.execute(
+            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+            (study_id, f"Saved: {save_label}."),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"CONFIRM_PROPOSED_ERROR study={study_id}: {e}", flush=True)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return redirect(f"/?token={token}&configure={study_id}")
+
+
 @app.route("/chat-status/<int:study_id>")
 def chat_status(study_id):
     token = get_token()
@@ -4466,7 +4531,16 @@ def send_chat(study_id):
         "2) Identify the single most important missing/unclear item.\n"
         "3) Ask ONE precise question to resolve it.\n\n"
         "Completion rule:\n"
-        "If the study appears complete and valid, confirm readiness and instruct the user to proceed to QA/execution."
+        "If the study appears complete and valid, confirm readiness and instruct the user to proceed to QA/execution.\n\n"
+        "EXTRACTION FORMAT (MANDATORY):\n"
+        "When the user provides a usable answer for a V1A anchor, you MUST end your reply with EXACTLY this structure:\n\n"
+        "Proposed updates:\n"
+        "- field: <one V1A key from the list below>\n"
+        "  value: <short extracted text, 1-2 lines, no analysis>\n\n"
+        "Confirmation question:\n"
+        "Should I save these updates?\n\n"
+        "Valid field keys: business_problem, decision_to_support, market_geography, product_concept, target_audience, definition_useful_insight\n"
+        "Rules: exactly ONE field per turn, value is concise, no auto-saving, no follow-up questions in the same turn, no proposing multiple fields at once."
     )
 
     chat_history = conn.execute(
@@ -5817,6 +5891,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         mark_recommendation_reason="",
         chat_messages=[],
         chat_save_buttons=[],
+        proposed_update=None,
         studies_page=1,
         studies_q="",
         studies_total_pages=1,

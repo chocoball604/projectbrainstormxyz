@@ -702,30 +702,18 @@
             {% if not all_anchors_complete %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <div style="background: #fff3cd; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ffc107;">
-                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Required to run this study</h3>
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Research Brief (read-only — complete via chat with Mark)</h3>
                 <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
-                    Business Problem and Decision to Support were collected during discovery. Please complete the remaining anchors below.
+                    These fields are filled through your conversation with Mark. Chat with Mark to provide your answers — he will propose updates for your confirmation.
                 </p>
-                <form action="/save-remaining-anchors/{{ configure_study.id }}" method="POST">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <div class="form-group">
-                        <label>3. Market / Geography</label>
-                        <textarea name="market_geography" rows="2" required placeholder="What market or geography does this study focus on?">{{ configure_study.study_fit or '' }}</textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>4. Product / Concept</label>
-                        <textarea name="product_concept" rows="2" required placeholder="What product, service, or concept is being researched?">{{ configure_study.known_vs_unknown or '' }}</textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>5. Target Audience</label>
-                        <textarea name="target_audience" rows="2" required placeholder="Who is the target audience for this research?">{{ configure_study.target_audience or '' }}</textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>6. Definition of Useful Insight</label>
-                        <textarea name="definition_useful_insight" rows="2" required placeholder="What would a useful insight look like for this study?">{{ configure_study.definition_useful_insight or '' }}</textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Save Remaining Anchors</button>
-                </form>
+                <ul style="margin: 0; padding-left: 20px; line-height: 2; font-size: 13px;">
+                    <li><strong>Business Problem:</strong> {{ configure_study.business_problem or '[not yet provided — tell Mark]' }}</li>
+                    <li><strong>Decision to Support:</strong> {{ configure_study.decision_to_support or '[not yet provided — tell Mark]' }}</li>
+                    <li><strong>Market / Geography:</strong> {{ configure_study.study_fit or '[not yet provided — tell Mark]' }}</li>
+                    <li><strong>Product / Concept:</strong> {{ configure_study.known_vs_unknown or '[not yet provided — tell Mark]' }}</li>
+                    <li><strong>Target Audience:</strong> {{ configure_study.target_audience or '[not yet provided — tell Mark]' }}</li>
+                    <li><strong>Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight or '[not yet provided — tell Mark]' }}</li>
+                </ul>
             </div>
             {% else %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
@@ -971,24 +959,24 @@
                         <div style="font-size: 11px; color: #999; margin-top: 2px; padding: 0 4px;">
                             {{ msg.sender|capitalize }} &middot; {{ msg.timestamp_utc }}
                         </div>
-                        {% if loop.last and msg.sender == 'mark' and chat_save_buttons %}
-                        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
-                            {% for field_key, btn_label in chat_save_buttons %}
-                            <form action="/save-chat-field/{{ configure_study.id }}" method="POST" style="display: inline;">
+                        {% if loop.last and msg.sender == 'mark' and proposed_update %}
+                        <div style="margin-top: 8px;">
+                            <form action="/confirm-proposed-updates" method="POST" style="display: inline;">
                                 <input type="hidden" name="token" value="{{ token }}">
-                                <input type="hidden" name="field" value="{{ field_key }}">
+                                <input type="hidden" name="study_id" value="{{ configure_study.id }}">
+                                <input type="hidden" name="field" value="{{ proposed_update.field }}">
+                                <input type="hidden" name="value" value="{{ proposed_update.value }}">
                                 <button type="submit" style="
-                                    padding: 5px 12px;
-                                    font-size: 12px;
-                                    border: 1px solid #5C7E8F;
-                                    background: #fff;
-                                    color: #5C7E8F;
+                                    padding: 6px 16px;
+                                    font-size: 13px;
+                                    border: 1px solid #27ae60;
+                                    background: #27ae60;
+                                    color: #fff;
                                     border-radius: 16px;
                                     cursor: pointer;
-                                    white-space: nowrap;
-                                ">{{ btn_label }}</button>
+                                    font-weight: 600;
+                                ">Confirm &amp; Save</button>
                             </form>
-                            {% endfor %}
                         </div>
                         {% endif %}
                     </div>
