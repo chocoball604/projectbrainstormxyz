@@ -1,0 +1,202 @@
+✅ PROMPT 3C — Refactor into Proposal Policy Module (No Behavior Change)
+
+REPLIT AGENT — Refactor extraction into a reusable Proposal Policy module (NO behavior changes)
+
+FILES YOU MAY EDIT
+- artifacts/brainstorm/app.py
+- templates/index.html (ONLY if needed to adjust variable names / rendering flags after refactor)
+
+DO NOT
+- Change SQLite schema (no new tables/columns, no ALTER/CREATE/DROP)
+- Add new endpoints (must keep using existing /confirm-proposed-updates)
+- Change product behavior or user flow (Prompt 3 behavior must remain identical)
+- Reintroduce any “Save as …” buttons or editable brief fields
+- Refactor unrelated code
+
+GOAL
+Create a single “Proposal Policy” layer that becomes the one source of truth for:
+- parsing Mark’s Proposed updates block
+- computing confidence (server + model confidence)
+- gating whether Confirm & Save is shown
+- validating proposals
+- applying proposals (saving)
+
+This is a REFACTOR ONLY:
+- Same UI behavior as before
+- Same data saved as before
+- Same endpoint semantics as before
+- Same Mark messages saved as before
+Just less duplication and fewer future regressions.
+
+CURRENT CONTEXT (WHAT YOU ARE REFACTORING)
+- app.py contains:
+  - V1A_LABELS, V1A_FIELD_MAP, _VALID_V1A_FIELDS
+  - _parse_proposed_update(chat_messages) (currently brittle)
+  - /confirm-proposed-updates endpoint
+  - proposed_update passed from index() into templates
+- The extraction/confirmation logic is spread across:
+  - Mark system prompt text
+  - _parse_proposed_update()
+  - index() proposing UI flags
+  - template conditional rendering
+  - confirm endpoint validation
+Refactor these decisions into one policy block. [1](https://onedrive.live.com?cid=BFEC441E4A44D47E&id=BFEC441E4A44D47E!s64c6e79528994206981df5362573a002)
+
+==========================================================
+PART 1 — Create Proposal Policy block in app.py (single source of truth)
+==========================================================
+
+1.1 Add a clearly delimited section near the helper/constants area:
+
+# ============================================================
+# PROPOSAL POLICY (V1A Prompt 3) — single source of truth
+# ============================================================
+
+Inside this section define:
+
+A) Proposal structure
+- Use a simple dict schema:
+  Proposal = {
+    "field": str,
+    "value": str,
+    "model_confidence": "high"|"medium"|"low"|None,
+    "server_confidence": float|None,
+    "final_confidence": float|None,
+    "allow_confirm": bool|None,
+    "block_reason": str|None
+  }
+
+B) Functions (exact names suggested; you may choose similar names but keep responsibilities identical):
+- policy_parse_last_mark_proposal(chat_messages) -> Proposal|None
+- policy_score_proposal(chat_messages, proposal, study_dict) -> Proposal (adds server_confidence/model_confidence/final_confidence/allow_confirm/block_reason)
+- policy_should_show_confirm(proposal) -> bool
+- policy_validate_for_save(field, value) -> (ok:bool, error_msg:str|None)
+- policy_apply_save(conn, study_id, field, value) -> save_label (uses set_v1a_value() for mapped fields, direct update for native fields if applicable)
+
+1.2 IMPORTANT: This module must NOT import new packages beyond stdlib.
+No new dependencies.
+
+==========================================================
+PART 2 — Move existing logic into policy functions (no behavior changes)
+==========================================================
+
+2.1 Parsing
+Take the existing _parse_proposed_update(chat_messages) functionality and move it into:
+policy_parse_last_mark_proposal(chat_messages)
+
+- Keep semantics: parse ONLY from the last Mark message.
+- Require “Should I save these updates?” to exist.
+- Extract field and value (robust line-based parse; no single fragile regex).
+- Optionally extract model_confidence if “confidence: high|medium|low” exists.
+Return Proposal dict with field/value/model_confidence set.
+
+2.2 Scoring + gating
+Move confidence scoring logic into:
+policy_score_proposal(chat_messages, proposal, study_dict)
+
+- Compute deterministic server score (as currently designed in your latest plan).
+- Map model confidence to numeric if present.
+- Combine conservatively: final = min(server, model_num) if model present else final = server
+- Threshold: allow_confirm = final >= 0.70
+- If blocked, set block_reason to a short string like:
+  "low_confidence" or "format_invalid" or "ambiguous_value"
+
+Add a single log line (flush=True) inside policy_score_proposal whenever a proposal is parsed:
+PROPOSAL_CONFIDENCE study=<id> field=<field> server=<0.xx> model=<high|medium|low|none> final=<0.xx> allow=<true|false>
+
+2.3 Validation + apply-save
+Move field/value validation currently duplicated in /confirm-proposed-updates into:
+policy_validate_for_save(field,value)
+
+- Validate field is in _VALID_V1A_FIELDS
+- Validate value non-empty
+- Validate length sane (e.g. <=2000 chars)
+Return ok/err.
+
+Move save logic into:
+policy_apply_save(conn, study_id, field, value)
+- Use set_v1a_value(conn, study_id, field, value) for mapped keys
+- Use V1A_LABELS for save label
+Return save label.
+
+==========================================================
+PART 3 — Update call sites to use the policy (minimal diffs)
+==========================================================
+
+3.1 In index() route:
+- Replace direct call to _parse_proposed_update(chat_messages) with:
+  proposal = policy_parse_last_mark_proposal(chat_messages)
+- If proposal:
+    proposal = policy_score_proposal(chat_messages, proposal, configure_study)
+- Pass proposal to template as proposed_update (same name) to minimize template changes.
+
+3.2 In /confirm-proposed-updates endpoint:
+- Replace inline validation with policy_validate_for_save()
+- Replace inline save with policy_apply_save()
+- Keep same redirect behavior.
+- Keep inserting the “Saved: <label>.” Mark message exactly as today.
+
+3.3 Template (only if needed):
+- If template currently checks proposed_update truthiness to show Confirm button:
+  update it to check proposed_update.allow_confirm == true
+- If allow_confirm == false but proposed_update exists:
+  show a neutral hint:
+  “Mark needs one clarification before saving this. Please respond in chat.”
+Do NOT add new buttons or flows.
+
+==========================================================
+PART 4 — Preserve Prompt 3 behavior (NO reopen)
+==========================================================
+
+4.1 Do not change the Prompt 3 flow:
+- No manual “Save as …” buttons
+- Read-only brief state
+- Confirm & Save appears only for valid proposals
+- Confirm saves via /confirm-proposed-updates
+
+4.2 Do not change Ben precheck or personas logic.
+
+==========================================================
+TESTING (MANDATORY)
+==========================================================
+
+Test 1 — No behavior regression
+- Create a draft study
+- Confirm no “Save as …” buttons appear anywhere
+
+Test 2 — Proposal parsing still works
+- Send a chat message that triggers Mark’s proposal
+- proposed_update should appear
+- If confidence >= threshold, Confirm & Save button appears
+
+Test 3 — Confidence gating still works
+- Provide an ambiguous message (multi-topic)
+- Confirm button should be hidden (allow_confirm=false)
+- Hint text should appear
+
+Test 4 — Confirm endpoint unchanged behavior
+- When Confirm shows, click it
+- Field is saved into the study
+- Mark posts “Saved: <Field Label>.”
+- Page refresh shows updated brief state
+
+Test 5 — Logging
+- Verify server logs include:
+  PROPOSAL_CONFIDENCE study=<id> field=... server=... model=... final=... allow=...
+
+==========================================================
+DELIVERABLE FORMAT (MANDATORY)
+==========================================================
+
+Files changed:
+- …
+
+What changed:
+- …
+
+How to test:
+1) …
+2) …
+3) …
+
+If you find cleanup opportunities outside proposal parsing/scoring/confirm, list them as Follow-ups only — do not implement.

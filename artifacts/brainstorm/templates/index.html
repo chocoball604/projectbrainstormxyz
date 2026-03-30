@@ -961,7 +961,7 @@
                         </div>
                         {% if loop.last and msg.sender == 'mark' and proposed_update %}
                         <div style="margin-top: 8px;">
-                            {% if proposed_update.final_confidence is defined and proposed_update.final_confidence >= 0.70 %}
+                            {% if proposed_update.allow_confirm %}
                             <form action="/confirm-proposed-updates" method="POST" style="display: inline;">
                                 <input type="hidden" name="token" value="{{ token }}">
                                 <input type="hidden" name="study_id" value="{{ configure_study.id }}">

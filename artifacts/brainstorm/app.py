@@ -630,7 +630,27 @@ V1A_LABELS = {
 
 _VALID_V1A_FIELDS = set(V1A_LABELS.keys())
 
-def _parse_proposed_update(chat_messages):
+# ============================================================
+# PROPOSAL POLICY (V1A Prompt 3) — single source of truth
+# ============================================================
+
+_FIELD_QUESTION_KEYWORDS = {
+    "business_problem": ["business problem", "problem are you trying", "challenge"],
+    "decision_to_support": ["decision", "inform", "support"],
+    "market_geography": ["market / geography", "market", "geography", "region", "country", "city"],
+    "product_concept": ["product / concept", "product", "service", "concept", "offering"],
+    "target_audience": ["target audience", "who is the audience", "customer segment"],
+    "definition_useful_insight": ["useful insight", "definition", "what would a useful insight"],
+}
+
+_UNCERTAINTY_WORDS = ["not sure", "i don't know", "maybe", "tbd", "depends", "unsure"]
+_MULTI_TOPIC_MARKERS = [" and ", " also ", " plus ", " as well as ", ";", " / ", " then "]
+
+_MODEL_CONFIDENCE_MAP = {"high": 0.90, "medium": 0.70, "low": 0.40}
+_CONFIDENCE_THRESHOLD = 0.70
+
+
+def policy_parse_last_mark_proposal(chat_messages):
     if not chat_messages:
         return None
     last = chat_messages[-1]
@@ -657,7 +677,7 @@ def _parse_proposed_update(chat_messages):
             capturing_value = True
         elif stripped.startswith("confidence:") or stripped.startswith("- confidence:"):
             conf_val = stripped.split("confidence:", 1)[1].strip().lower()
-            if conf_val in ("high", "medium", "low"):
+            if conf_val in _MODEL_CONFIDENCE_MAP:
                 model_confidence = conf_val
             capturing_value = False
         elif capturing_value:
@@ -670,34 +690,21 @@ def _parse_proposed_update(chat_messages):
     value = " ".join(value_lines).strip()
     if not value:
         return None
-    return {"field": field, "value": value, "model_confidence": model_confidence}
+    return {
+        "field": field,
+        "value": value,
+        "model_confidence": model_confidence,
+        "server_confidence": None,
+        "final_confidence": None,
+        "allow_confirm": None,
+        "block_reason": None,
+    }
 
 
-_FIELD_QUESTION_KEYWORDS = {
-    "business_problem": ["business problem", "problem are you trying", "challenge"],
-    "decision_to_support": ["decision", "inform", "support"],
-    "market_geography": ["market / geography", "market", "geography", "region", "country", "city"],
-    "product_concept": ["product / concept", "product", "service", "concept", "offering"],
-    "target_audience": ["target audience", "who is the audience", "customer segment"],
-    "definition_useful_insight": ["useful insight", "definition", "what would a useful insight"],
-}
-
-_UNCERTAINTY_WORDS = ["not sure", "i don't know", "maybe", "tbd", "depends", "unsure"]
-_MULTI_TOPIC_MARKERS = [" and ", " also ", " plus ", " as well as ", ";", " / ", " then "]
-
-def _model_confidence_to_num(mc):
-    if mc == "high":
-        return 0.90
-    if mc == "medium":
-        return 0.70
-    if mc == "low":
-        return 0.40
-    return None
-
-def compute_server_confidence(chat_messages, proposed_update, study_dict):
+def policy_score_proposal(chat_messages, proposal, study_dict, study_id=None):
+    field = proposal["field"]
+    value = proposal["value"]
     score = 0.40
-    field = proposed_update["field"]
-    value = proposed_update["value"]
     mark_msgs_before = []
     found_last_user = False
     for m in reversed(chat_messages[:-1]):
@@ -715,15 +722,73 @@ def compute_server_confidence(chat_messages, proposed_update, study_dict):
     vlen = len(value)
     if 3 <= vlen <= 180:
         score += 0.15
-    line_count = value.count("\n") + 1
-    if line_count <= 2:
+    if (value.count("\n") + 1) <= 2:
         score += 0.05
     val_lower = value.lower()
     if any(uw in val_lower for uw in _UNCERTAINTY_WORDS):
         score -= 0.40
     if any(mt in val_lower for mt in _MULTI_TOPIC_MARKERS):
         score -= 0.20
-    return max(0.0, min(1.0, score))
+    server_score = max(0.0, min(1.0, score))
+    mc_num = _MODEL_CONFIDENCE_MAP.get(proposal.get("model_confidence"))
+    if mc_num is not None:
+        final_conf = min(server_score, mc_num)
+    else:
+        final_conf = server_score
+    proposal["server_confidence"] = round(server_score, 2)
+    proposal["final_confidence"] = round(final_conf, 2)
+    proposal["allow_confirm"] = final_conf >= _CONFIDENCE_THRESHOLD
+    if not proposal["allow_confirm"]:
+        if any(uw in val_lower for uw in _UNCERTAINTY_WORDS):
+            proposal["block_reason"] = "ambiguous_value"
+        elif mc_num is not None and mc_num < _CONFIDENCE_THRESHOLD:
+            proposal["block_reason"] = "low_confidence"
+        else:
+            proposal["block_reason"] = "low_confidence"
+    sid = study_id or (study_dict.get("id") if isinstance(study_dict, dict) else None) or "?"
+    print(
+        f"PROPOSAL_CONFIDENCE study={sid} field={field} "
+        f"server={server_score:.2f} model={proposal.get('model_confidence') or 'none'} "
+        f"final={final_conf:.2f} allow={'true' if proposal['allow_confirm'] else 'false'}",
+        flush=True,
+    )
+    return proposal
+
+
+def policy_should_show_confirm(proposal):
+    if proposal is None:
+        return False
+    return bool(proposal.get("allow_confirm"))
+
+
+def policy_validate_for_save(field, value):
+    if not field or not value:
+        return False, "Missing required fields."
+    if len(value) > 2000:
+        return False, "Proposed value is too long; please clarify in chat."
+    if field not in _VALID_V1A_FIELDS:
+        return False, "Invalid field."
+    return True, None
+
+
+def policy_apply_save(conn, study_id, field, value):
+    set_v1a_value(conn, study_id, field, value)
+    save_label = V1A_LABELS.get(field, field.replace("_", " ").title())
+    conn.execute(
+        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
+        (study_id, f"Saved: {save_label}."),
+    )
+    return save_label
+
+
+# Legacy aliases (used by worker fallback)
+_parse_proposed_update = policy_parse_last_mark_proposal
+compute_server_confidence = lambda msgs, pu, sd: policy_score_proposal(msgs, dict(pu), sd)["server_confidence"]
+_model_confidence_to_num = lambda mc: _MODEL_CONFIDENCE_MAP.get(mc)
+
+# ============================================================
+# END PROPOSAL POLICY
+# ============================================================
 
 
 BUDGET_CEILINGS = {
@@ -1684,22 +1749,10 @@ def index():
                 ]
 
                 chat_save_buttons = []
-                proposed_update = _parse_proposed_update(chat_messages)
+                proposed_update = policy_parse_last_mark_proposal(chat_messages)
                 if proposed_update and configure_study:
-                    server_score = compute_server_confidence(chat_messages, proposed_update, dict(configure_study))
-                    mc_num = _model_confidence_to_num(proposed_update.get("model_confidence"))
-                    if mc_num is not None:
-                        final_conf = min(server_score, mc_num)
-                    else:
-                        final_conf = server_score
-                    proposed_update["server_confidence"] = round(server_score, 2)
-                    proposed_update["final_confidence"] = round(final_conf, 2)
-                    allow = final_conf >= 0.70
-                    print(
-                        f"PROPOSAL_CONFIDENCE study={configure_study['id']} field={proposed_update['field']} "
-                        f"server={server_score:.2f} model={proposed_update.get('model_confidence') or 'none'} "
-                        f"final={final_conf:.2f} allow={'true' if allow else 'false'}",
-                        flush=True,
+                    proposed_update = policy_score_proposal(
+                        chat_messages, proposed_update, dict(configure_study)
                     )
 
                 if configure_study.get("status") == "draft" and configure_study.get("study_type"):
@@ -4435,12 +4488,11 @@ def confirm_proposed_updates():
     study_id = request.form.get("study_id", type=int)
     field = request.form.get("field", "").strip()
     value = request.form.get("value", "").strip()
-    if not study_id or not field or not value:
+    if not study_id:
         return render_error("Missing required fields.")
-    if len(value) > 2000:
-        return render_error("Proposed value is too long; please clarify in chat.")
-    if field not in _VALID_V1A_FIELDS:
-        return render_error("Invalid field.")
+    ok, err = policy_validate_for_save(field, value)
+    if not ok:
+        return render_error(err)
     conn = get_db()
     try:
         study = conn.execute(
@@ -4450,12 +4502,7 @@ def confirm_proposed_updates():
         if not study:
             conn.close()
             return render_error("Study not found or not a draft.")
-        set_v1a_value(conn, study_id, field, value)
-        save_label = V1A_LABELS.get(field, field.replace("_", " ").title())
-        conn.execute(
-            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
-            (study_id, f"Saved: {save_label}."),
-        )
+        policy_apply_save(conn, study_id, field, value)
         conn.commit()
     except Exception as e:
         print(f"CONFIRM_PROPOSED_ERROR study={study_id}: {e}", flush=True)
