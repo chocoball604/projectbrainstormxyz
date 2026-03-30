@@ -962,6 +962,39 @@
                             <p style="font-size: 12px; color: #999; margin: 4px 0 0;">Mark needs one clarification before saving this. Please respond in chat.</p>
                             {% endif %}
                         </div>
+                        {% elif loop.last and msg.sender == 'mark' and last_mark_has_proposal_text %}
+                        <div style="margin-top: 8px; background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 12px;">
+                            <p style="font-size: 12px; color: #f57f17; margin: 0 0 8px; font-weight: 600;">Mark proposed an update but it couldn't be parsed automatically. You can save it manually:</p>
+                            <form action="/confirm-proposed-updates" method="POST">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <input type="hidden" name="study_id" value="{{ configure_study.id }}">
+                                <div style="margin-bottom: 8px;">
+                                    <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Field</label>
+                                    <select name="field" style="width: 100%; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+                                        <option value="business_problem">Business Problem</option>
+                                        <option value="decision_to_support">Decision to Support</option>
+                                        <option value="market_geography">Market Geography</option>
+                                        <option value="product_concept">Product Concept</option>
+                                        <option value="target_audience">Target Audience</option>
+                                        <option value="definition_useful_insight">Definition of Useful Insight</option>
+                                    </select>
+                                </div>
+                                <div style="margin-bottom: 8px;">
+                                    <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">Value</label>
+                                    <textarea name="value" rows="3" style="width: 100%; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; resize: vertical;" placeholder="Paste or type the value from Mark's proposal"></textarea>
+                                </div>
+                                <button type="submit" style="
+                                    padding: 6px 16px;
+                                    font-size: 13px;
+                                    border: 1px solid #f57f17;
+                                    background: #f57f17;
+                                    color: #fff;
+                                    border-radius: 16px;
+                                    cursor: pointer;
+                                    font-weight: 600;
+                                ">Confirm &amp; Save (Manual)</button>
+                            </form>
+                        </div>
                         {% endif %}
                     </div>
                     {% endfor %}
@@ -970,6 +1003,25 @@
                 {% endif %}
             </div>
 
+            {% if has_pending_mark %}
+            <div style="background: #fff3e0; border: 1px solid #ffcc80; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 13px; color: #e65100;">Mark appears to be stuck. You can clear the waiting state and try again.</span>
+                <form action="/clear-chat-pending/{{ configure_study.id }}" method="POST" style="margin: 0;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <button type="submit" style="
+                        padding: 6px 14px;
+                        font-size: 12px;
+                        border: 1px solid #e65100;
+                        background: #e65100;
+                        color: #fff;
+                        border-radius: 16px;
+                        cursor: pointer;
+                        font-weight: 600;
+                        white-space: nowrap;
+                    ">Clear Waiting / Reset Mark</button>
+                </form>
+            </div>
+            {% endif %}
             <form id="chat-form" style="display: flex; gap: 8px;">
                 <input type="text" id="chat-input" name="message_text" required placeholder="Type your message to Mark..." style="flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
                 <button type="submit" class="btn btn-primary" id="chat-send-btn" style="white-space: nowrap;">Send</button>

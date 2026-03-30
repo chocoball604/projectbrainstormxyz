@@ -767,6 +767,8 @@ MARK_SYSTEM_PROMPT = (
     "Rules:\n"
     "- Exactly ONE field.\n"
     "- No explanations after the proposal block.\n"
+    "- In Proposed updates, 'field:', 'value:', and 'confidence:' must each be on their own line. "
+    "Never put field/value/confidence on the same line.\n"
     "- The confirmation question must be the FINAL line.\n\n"
     "VALID FIELD KEYS\n"
     "business_problem\n"
@@ -847,7 +849,7 @@ def policy_parse_last_mark_proposal(chat_messages):
     if last.get("sender") != "mark":
         return None
     text = last.get("message_text", "")
-    if "Should I save these updates?" not in text:
+    if "Proposed updates:" not in text:
         return None
     lines = text.split("\n")
     field = None
@@ -857,13 +859,36 @@ def policy_parse_last_mark_proposal(chat_messages):
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("- field:") or stripped.startswith("field:"):
-            field = stripped.split("field:", 1)[1].strip()
-            capturing_value = False
-            value_lines = []
+            remainder = stripped.split("field:", 1)[1].strip()
+            if "value:" in remainder:
+                field_part, rest = remainder.split("value:", 1)
+                field = field_part.strip()
+                rest = rest.strip()
+                if "confidence:" in rest:
+                    val_part, conf_part = rest.rsplit("confidence:", 1)
+                    value_lines = [val_part.strip()] if val_part.strip() else []
+                    conf_val = conf_part.strip().lower()
+                    if conf_val in _MODEL_CONFIDENCE_MAP:
+                        model_confidence = conf_val
+                else:
+                    value_lines = [rest] if rest else []
+                capturing_value = True
+            else:
+                field = remainder.strip()
+                capturing_value = False
+                value_lines = []
         elif field and (stripped.startswith("value:") or stripped.startswith("- value:")):
             val_part = stripped.split("value:", 1)[1].strip()
-            if val_part:
-                value_lines.append(val_part)
+            if "confidence:" in val_part:
+                v, c = val_part.rsplit("confidence:", 1)
+                if v.strip():
+                    value_lines.append(v.strip())
+                conf_val = c.strip().lower()
+                if conf_val in _MODEL_CONFIDENCE_MAP:
+                    model_confidence = conf_val
+            else:
+                if val_part:
+                    value_lines.append(val_part)
             capturing_value = True
         elif stripped.startswith("confidence:") or stripped.startswith("- confidence:"):
             conf_val = stripped.split("confidence:", 1)[1].strip().lower()
@@ -1692,6 +1717,8 @@ def index():
     chat_messages = []
     chat_save_buttons = []
     proposed_update = None
+    last_mark_has_proposal_text = False
+    has_pending_mark = False
     mark_recommendation = ""
     mark_recommendation_label = ""
     mark_recommendation_reason = ""
@@ -1930,6 +1957,12 @@ def index():
                     if p["persona_instance_id"] not in attached_ids
                 ]
 
+                conn.execute(
+                    "DELETE FROM chat_messages "
+                    "WHERE sender='mark' AND message_text='\u23f3 Mark is thinking...' "
+                    "AND timestamp_utc < datetime('now','-5 minutes')"
+                )
+
                 chat_messages = [
                     dict(r)
                     for r in conn.execute(
@@ -1944,6 +1977,15 @@ def index():
                     proposed_update = policy_score_proposal(
                         chat_messages, proposed_update, dict(configure_study)
                     )
+                last_mark_has_proposal_text = False
+                if not proposed_update and chat_messages:
+                    last_msg = chat_messages[-1]
+                    if last_msg.get("sender") == "mark" and "Proposed updates:" in last_msg.get("message_text", ""):
+                        last_mark_has_proposal_text = True
+                has_pending_mark = any(
+                    m.get("sender") == "mark" and m.get("message_text", "").startswith("\u23f3 Mark is thinking")
+                    for m in chat_messages
+                )
 
                 if configure_study.get("status") == "draft" and configure_study.get("study_type"):
                     try:
@@ -2187,6 +2229,8 @@ def index():
         chat_messages=chat_messages,
         chat_save_buttons=chat_save_buttons,
         proposed_update=proposed_update,
+        last_mark_has_proposal_text=last_mark_has_proposal_text,
+        has_pending_mark=has_pending_mark,
         studies_page=studies_page,
         studies_q=studies_q,
         studies_total_pages=studies_total_pages,
@@ -4740,6 +4784,31 @@ def chat_status(study_id):
     conn.close()
     messages = [{"id": m["id"], "sender": m["sender"], "text": m["message_text"], "time": m["timestamp_utc"]} for m in msgs]
     return jsonify({"ready": pending == 0, "pending": pending, "messages": messages})
+
+
+@app.route("/clear-chat-pending/<int:study_id>", methods=["POST"])
+def clear_chat_pending(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return redirect(f"/?error=auth")
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return redirect(f"/?token={token}&error=study_not_found")
+    deleted = conn.execute(
+        "DELETE FROM chat_messages WHERE study_id = ? AND sender='mark' "
+        "AND message_text IN ('\u23f3 Mark is thinking...', '\u23f3 Mark is thinking...')",
+        (study_id,),
+    ).rowcount
+    conn.commit()
+    conn.close()
+    print(f"CLEAR_CHAT_PENDING study={study_id} deleted={deleted}", flush=True)
+    return redirect(f"/?token={token}&configure={study_id}")
 
 
 @app.route("/send-chat/<int:study_id>", methods=["POST", "GET"])
