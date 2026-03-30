@@ -982,8 +982,9 @@ def policy_score_proposal(chat_messages, proposal, study_dict, study_id=None):
     if (value.count("\n") + 1) <= 2:
         score += 0.05
     val_lower = value.lower()
-    if any(uw in val_lower for uw in _UNCERTAINTY_WORDS):
-        score -= 0.40
+    if field != "business_problem":
+        if any(uw in val_lower for uw in _UNCERTAINTY_WORDS):
+            score -= 0.40
     if any(mt in val_lower for mt in _MULTI_TOPIC_MARKERS):
         score -= 0.20
     server_score = max(0.0, min(1.0, score))
@@ -996,7 +997,7 @@ def policy_score_proposal(chat_messages, proposal, study_dict, study_id=None):
     proposal["final_confidence"] = round(final_conf, 2)
     proposal["allow_confirm"] = final_conf >= _CONFIDENCE_THRESHOLD
     if not proposal["allow_confirm"]:
-        if any(uw in val_lower for uw in _UNCERTAINTY_WORDS):
+        if field != "business_problem" and any(uw in val_lower for uw in _UNCERTAINTY_WORDS):
             proposal["block_reason"] = "ambiguous_value"
         elif mc_num is not None and mc_num < _CONFIDENCE_THRESHOLD:
             proposal["block_reason"] = "low_confidence"
