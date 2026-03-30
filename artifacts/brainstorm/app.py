@@ -22,12 +22,9 @@ import hashlib
 import io
 import json
 import os
-import signal
 import sys
 import secrets
 import sqlite3
-import time
-from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from flask import (
@@ -138,50 +135,6 @@ BLOG_STATIC_DIR = os.path.join(
 os.makedirs(BLOG_STATIC_DIR, exist_ok=True)
 
 
-LLM_HARD_TIMEOUT_SECONDS = 75
-
-
-class LLMHardTimeout(Exception):
-    pass
-
-
-@contextmanager
-def hard_timeout(seconds):
-    def _raise(signum, frame):
-        raise LLMHardTimeout(f"LLM hard timeout after {seconds}s")
-    old_handler = signal.signal(signal.SIGALRM, _raise)
-    signal.alarm(seconds)
-    try:
-        yield
-    finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
-
-
-def _record_llm_incident(model_id, purpose, error_type, error_msg):
-    try:
-        conn = get_db()
-        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        run_id = secrets.token_hex(8)
-        run_type = f"incident_{purpose}" if purpose else "incident_llm_call"
-        details = {
-            "model_id": model_id,
-            "error_type": error_type,
-            "error_message": str(error_msg)[:500],
-        }
-        conn.execute(
-            "INSERT INTO model_health_checks "
-            "(run_id, run_type, started_at, finished_at, integration_mode, summary_status, details_json) "
-            "VALUES (?, ?, ?, ?, 'live_calls_enabled', 'fail', ?)",
-            (run_id, run_type, now_str, now_str, json.dumps(details)),
-        )
-        conn.commit()
-        conn.close()
-        print(f"LLM_INCIDENT model={model_id} type={error_type} run_id={run_id}", flush=True)
-    except Exception as e:
-        print(f"LLM_INCIDENT_RECORD_ERROR: {e}", flush=True)
-
-
 def call_llm(model_id, messages, purpose=""):
     """Single wrapper for all LLM calls via Replit AI Integrations (OpenRouter)."""
     import openai as _openai
@@ -193,21 +146,15 @@ def call_llm(model_id, messages, purpose=""):
 
     client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=60)
     try:
-        with hard_timeout(LLM_HARD_TIMEOUT_SECONDS):
-            resp = client.chat.completions.create(
-                model=model_id,
-                messages=messages,
-                max_tokens=8192,
-            )
-            return resp.choices[0].message.content or ""
-    except LLMHardTimeout as e:
-        _record_llm_incident(model_id, purpose, "hard_timeout", e)
-        raise
+        resp = client.chat.completions.create(
+            model=model_id,
+            messages=messages,
+            max_tokens=8192,
+        )
+        return resp.choices[0].message.content or ""
     except _openai.APITimeoutError as e:
-        _record_llm_incident(model_id, purpose, "api_timeout", e)
         raise RuntimeError(f"LLM timeout for {model_id}: {str(e)[:200]}")
     except _openai.APIError as e:
-        _record_llm_incident(model_id, purpose, "api_error", e)
         raise RuntimeError(f"LLM error for {model_id}: {str(e)[:200]}")
 
 
@@ -301,33 +248,23 @@ def run_model_health_check(run_type="manual"):
                     per_model[mid] = {
                         "status": "fail",
                         "error": "Model not in active allowed list",
-                        "latency_s": None,
                     }
                     continue
                 try:
-                    t0 = time.time()
                     result = call_llm(
                         mid,
                         [{"role": "user", "content": "Reply with the single word OK"}],
                         purpose="health_check",
                     )
-                    latency = round(time.time() - t0, 2)
-                    if latency > 10:
-                        per_model[mid] = {
-                            "status": "fail",
-                            "error": f"High latency: {latency}s",
-                            "latency_s": latency,
-                        }
-                    elif "ok" in (result or "").lower():
-                        per_model[mid] = {"status": "pass", "error": None, "latency_s": latency}
+                    if "ok" in (result or "").lower():
+                        per_model[mid] = {"status": "pass", "error": None}
                     else:
                         per_model[mid] = {
                             "status": "fail",
                             "error": f"Unexpected response: {(result or '')[:300]}",
-                            "latency_s": latency,
                         }
                 except Exception as e:
-                    per_model[mid] = {"status": "fail", "error": str(e)[:300], "latency_s": None}
+                    per_model[mid] = {"status": "fail", "error": str(e)[:300]}
 
             if not config_valid:
                 summary_status = "fail"
@@ -337,14 +274,6 @@ def run_model_health_check(run_type="manual"):
                 summary_status = "pass"
 
         conn = get_db()
-
-        pending = conn.execute(
-            "SELECT COUNT(*) FROM chat_messages "
-            "WHERE sender='mark' AND message_text='\u23f3 Mark is thinking...'"
-        ).fetchone()[0]
-        if pending > 0:
-            summary_status = "fail"
-
         for mid, info in per_model.items():
             conn.execute(
                 "INSERT INTO model_health_status (model_id, status, last_tested_at, last_error) "
@@ -361,21 +290,12 @@ def run_model_health_check(run_type="manual"):
                 ),
             )
 
-        for model_id, info in per_model.items():
-            if info["status"] == "fail":
-                conn.execute(
-                    "UPDATE allowed_models SET status='disabled' WHERE model_id = ?",
-                    (model_id,),
-                )
-
         finished_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         details = {
             "config_errors": config_errors,
             "per_model": per_model,
             "models_checked": list(all_model_ids),
         }
-        if pending > 0:
-            details["stuck_mark_messages"] = pending
 
         conn.execute(
             "INSERT INTO model_health_checks "
@@ -707,369 +627,6 @@ V1A_LABELS = {
     "target_audience": "Target Audience",
     "definition_useful_insight": "Definition of Useful Insight",
 }
-
-_VALID_V1A_FIELDS = set(V1A_LABELS.keys())
-
-# ============================================================
-# MARK SYSTEM PROMPT — single source of truth (hardened)
-# ============================================================
-
-MARK_SYSTEM_PROMPT = (
-    "You are Mark, the Market Intelligence Copilot for Project Brainstorm.\n\n"
-    "Project Brainstorm is an AI native market research platform that helps users "
-    "define business problems and make disciplined, evidence based decisions "
-    "using structured research (Synthetic Survey, Synthetic IDI, Synthetic Focus Group).\n\n"
-    "AUTHORITY BOUNDARY (CRITICAL)\n"
-    "- You do NOT know whether data was saved.\n"
-    "- You MUST NEVER claim that anything was \"saved\", \"applied\", or \"persisted\".\n"
-    "- Only the system can confirm persistence.\n"
-    "- If the user confirms an action, you acknowledge and WAIT for the UI to reflect the change.\n\n"
-    "ROLE\n"
-    "You guide the user through research setup.\n"
-    "You propose updates. The system executes them.\n\n"
-    "CORE BEHAVIOR RULES\n"
-    "1) Be professional, direct, and concise.\n"
-    "2) Ask EXACTLY ONE targeted question per turn.\n"
-    "3) Always move the study toward execution.\n"
-    "4) Never invent state changes.\n"
-    "5) Never repeat or stack proposals if the UI state has not changed.\n"
-    "6) Never propose more than ONE field at a time.\n"
-    "7) Never proceed to later fields if earlier phase gate fields are missing.\n\n"
-    "PHASE GATE (STRICT — NO EXCEPTIONS)\n\n"
-    "If Study Type is NOT selected:\n\n"
-    "A) If Business Problem is not present:\n"
-    "   - You may ONLY ask for or propose Business Problem.\n"
-    "   - You MUST NOT propose Decision to Support or anything else.\n\n"
-    "B) Else if Decision to Support is not present:\n"
-    "   - You may ONLY ask for or propose Decision to Support.\n\n"
-    "C) Else (Business Problem AND Decision to Support are present):\n"
-    "   - Recommend ONE study type.\n"
-    "   - Ask the user to confirm by selecting a study type using UI buttons.\n"
-    "   - DO NOT propose any additional fields.\n\n"
-    "You MUST NOT proceed past a phase gate unless the UI confirms the field exists.\n\n"
-    "CONFIRMATION HANDLING (HARD — NO EXCEPTIONS)\n\n"
-    "When the user says \"yes\", \"ok\", \"confirm\", \"save\", or any confirmation:\n"
-    "- Acknowledge briefly.\n"
-    "- DO NOT say \"saved\", \"applied\", or \"done\".\n"
-    "- DO NOT propose a new field in the same turn.\n"
-    "- DO NOT ask the next question in the same turn.\n"
-    "- WAIT for the system to reflect the update before continuing.\n"
-    "- Only after the UI shows the updated field may you proceed.\n\n"
-    "Required response pattern:\n"
-    "\"Thanks -- once the update is reflected in the UI, we'll move to the next step.\"\n\n"
-    "CONFIRMATION TEXT IS NEVER CONTENT\n\n"
-    "Confirmation language (\"yes\", \"ok\", \"save\", \"confirmed\", \"sure\", etc.) "
-    "is NEVER valid study content.\n"
-    "If the user sends only confirmation text without substantive content:\n"
-    "- Do NOT propose it as a value.\n"
-    "- Do NOT rephrase it into a value.\n"
-    "- Do NOT infer meaning from it.\n"
-    "- Instead, ask one clarification question for the actual content.\n\n"
-    "Example (correct):\n"
-    "User: \"yes save\"\n"
-    "Mark: \"I need the actual statement here, not a confirmation. "
-    "Please describe the business problem in one clear sentence.\"\n\n"
-    "FIELD REPLACEMENT (OVERWRITE) RULES\n\n"
-    "A saved field may be replaced ONLY through an explicit proposal + confirmation flow.\n"
-    "Silent overwrites are forbidden.\n\n"
-    "Mark MAY propose replacing an existing field ONLY when:\n"
-    "- The field already has a saved value, AND\n"
-    "- The user explicitly indicates correction, deletion, or replacement intent "
-    "(e.g. \"that's wrong\", \"replace it with...\", \"delete that\", \"that's not right\")\n\n"
-    "When replacing, use the standard proposal format but change the confirmation question to:\n"
-    "\"This will replace the existing <Field Label>. Should I save this update?\"\n\n"
-    "PROPOSAL VALIDATION (HARD — NEVER PROPOSE INVALID VALUES)\n\n"
-    "Before emitting a proposal, you MUST internally validate that the value is:\n"
-    "- Substantive (not confirmation text, not empty, not trivial)\n"
-    "- Within reasonable length (under 2000 characters)\n"
-    "- Relevant to the specified field\n\n"
-    "If the value would be invalid, do NOT propose. Instead:\n"
-    "- Ask one clarification question\n"
-    "- Explain what is missing or invalid\n\n"
-    "PROPOSAL FORMAT (MANDATORY)\n\n"
-    "ONLY when the user provides a clear, usable answer for the currently allowed field, "
-    "end your reply with EXACTLY this structure:\n\n"
-    "Proposed updates:\n"
-    "- field: <one valid field key>\n"
-    "  value: <concise extracted text, 1-2 lines, no analysis>\n"
-    "  confidence: <high | medium | low>\n\n"
-    "Confirmation question:\n"
-    "Should I save these updates?\n\n"
-    "Rules:\n"
-    "- Exactly ONE field.\n"
-    "- No explanations after the proposal block.\n"
-    "- In Proposed updates, 'field:', 'value:', and 'confidence:' must each be on their own line. "
-    "Never put field/value/confidence on the same line.\n"
-    "- The confirmation question must be the FINAL line.\n\n"
-    "PROPOSAL INVARIANTS (MANDATORY — NEVER VIOLATE)\n\n"
-    "1) If you emit a 'Proposed updates:' block, the message MUST contain ONLY "
-    "the proposal block and the confirmation question. No other text before or after. "
-    "No questions, explanations, or acknowledgements.\n\n"
-    "2) You must NEVER ask a question and emit a 'Proposed updates:' block in the same message. "
-    "Asking a question and proposing are mutually exclusive actions. "
-    "If you asked a question, wait for the user's answer. "
-    "If you propose an update, do not ask any question except the confirmation question.\n\n"
-    "3) Every proposal MUST follow the exact format shown above. Deviations are forbidden.\n\n"
-    "4) If you previously attempted a proposal and it was rejected or failed to parse, "
-    "you MUST restate the proposal using the exact format above and nothing else.\n\n"
-    "VALID FIELD KEYS\n"
-    "business_problem\n"
-    "decision_to_support\n"
-    "market_geography\n"
-    "product_concept\n"
-    "target_audience\n"
-    "definition_useful_insight\n\n"
-    "STYLE CONSTRAINTS\n"
-    "- Max 100 words per response.\n"
-    "- No markdown.\n"
-    "- No emojis.\n"
-    "- No system claims.\n"
-    "- No speculative language.\n\n"
-    "COMPLETION RULE\n"
-    "If the study is complete and valid, clearly state that it is ready "
-    "and instruct the user to proceed via the UI.\n\n"
-    "REMEMBER\n"
-    "You propose.\n"
-    "The system saves.\n"
-    "If the UI does not change, you do not advance."
-)
-
-
-def build_mark_system_message(study_dict, persona_count, study_id=None):
-    anchor_keys = [
-        ("business_problem", "Business Problem"),
-        ("decision_to_support", "Decision to Support"),
-        ("market_geography", "Market / Geography"),
-        ("product_concept", "Product / Concept"),
-        ("target_audience", "Target Audience"),
-        ("definition_useful_insight", "Definition of Useful Insight"),
-    ]
-    snapshot_lines = [f"Study Title: {study_dict.get('title', 'Untitled')}"]
-    snapshot_lines.append(f"Study Type: {study_dict.get('study_type') or 'Not yet selected'}")
-    for key, label in anchor_keys:
-        val = get_v1a_value(study_dict, key)
-        snapshot_lines.append(f"{label}: {val or '[not yet provided]'}")
-    snapshot_lines.append(f"Personas attached: {persona_count}")
-    oc_block, oc_keys = _extract_optional_context(study_dict)
-    if oc_block:
-        snapshot_lines.append("")
-        snapshot_lines.append(oc_block)
-    study_snapshot = "\n".join(snapshot_lines)
-    sid = study_id or study_dict.get("id", "?")
-    print(
-        f"OPTIONAL_CONTEXT_INJECT_MARK study={sid} "
-        f"included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}",
-        flush=True,
-    )
-    return MARK_SYSTEM_PROMPT + "\n\nCurrent study state:\n" + study_snapshot
-
-
-# ============================================================
-# PROPOSAL POLICY (V1A Prompt 3) — single source of truth
-# ============================================================
-
-_FIELD_QUESTION_KEYWORDS = {
-    "business_problem": ["business problem", "problem are you trying", "challenge"],
-    "decision_to_support": ["decision", "inform", "support"],
-    "market_geography": ["market / geography", "market", "geography", "region", "country", "city"],
-    "product_concept": ["product / concept", "product", "service", "concept", "offering"],
-    "target_audience": ["target audience", "who is the audience", "customer segment"],
-    "definition_useful_insight": ["useful insight", "definition", "what would a useful insight"],
-}
-
-_UNCERTAINTY_WORDS = ["not sure", "i don't know", "maybe", "tbd", "depends", "unsure"]
-_MULTI_TOPIC_MARKERS = [" and ", " also ", " plus ", " as well as ", ";", " / ", " then "]
-
-_MODEL_CONFIDENCE_MAP = {"high": 0.90, "medium": 0.70, "low": 0.40}
-_CONFIDENCE_THRESHOLD = 0.70
-
-
-def policy_parse_last_mark_proposal(chat_messages):
-    if not chat_messages:
-        return None
-    last = chat_messages[-1]
-    if last.get("sender") != "mark":
-        return None
-    text = last.get("message_text", "")
-    if "Proposed updates:" not in text:
-        return None
-    lines = text.split("\n")
-    field = None
-    value_lines = []
-    model_confidence = None
-    capturing_value = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("- field:") or stripped.startswith("field:"):
-            remainder = stripped.split("field:", 1)[1].strip()
-            if "value:" in remainder:
-                field_part, rest = remainder.split("value:", 1)
-                field = field_part.strip()
-                rest = rest.strip()
-                if "confidence:" in rest:
-                    val_part, conf_part = rest.rsplit("confidence:", 1)
-                    value_lines = [val_part.strip()] if val_part.strip() else []
-                    conf_val = conf_part.strip().lower()
-                    if conf_val in _MODEL_CONFIDENCE_MAP:
-                        model_confidence = conf_val
-                else:
-                    value_lines = [rest] if rest else []
-                capturing_value = True
-            else:
-                field = remainder.strip()
-                capturing_value = False
-                value_lines = []
-        elif field and (stripped.startswith("value:") or stripped.startswith("- value:")):
-            val_part = stripped.split("value:", 1)[1].strip()
-            if "confidence:" in val_part:
-                v, c = val_part.rsplit("confidence:", 1)
-                if v.strip():
-                    value_lines.append(v.strip())
-                conf_val = c.strip().lower()
-                if conf_val in _MODEL_CONFIDENCE_MAP:
-                    model_confidence = conf_val
-            else:
-                if val_part:
-                    value_lines.append(val_part)
-            capturing_value = True
-        elif stripped.startswith("confidence:") or stripped.startswith("- confidence:"):
-            conf_val = stripped.split("confidence:", 1)[1].strip().lower()
-            if conf_val in _MODEL_CONFIDENCE_MAP:
-                model_confidence = conf_val
-            capturing_value = False
-        elif capturing_value:
-            if stripped.lower().startswith("confirmation question") or "Should I save" in stripped or stripped == "":
-                capturing_value = False
-            else:
-                value_lines.append(stripped)
-    if not field or field not in _VALID_V1A_FIELDS:
-        return None
-    value = " ".join(value_lines).strip()
-    if not value:
-        return None
-    return {
-        "field": field,
-        "value": value,
-        "model_confidence": model_confidence,
-        "server_confidence": None,
-        "final_confidence": None,
-        "allow_confirm": None,
-        "block_reason": None,
-    }
-
-
-def policy_score_proposal(chat_messages, proposal, study_dict, study_id=None):
-    field = proposal["field"]
-    value = proposal["value"]
-    score = 0.40
-    mark_msgs_before = []
-    found_last_user = False
-    for m in reversed(chat_messages[:-1]):
-        if m.get("sender") == "user" and not found_last_user:
-            found_last_user = True
-            continue
-        if m.get("sender") == "mark" and found_last_user:
-            mark_msgs_before.append(m.get("message_text", ""))
-            break
-    if mark_msgs_before:
-        prev_mark = mark_msgs_before[0].lower()
-        keywords = _FIELD_QUESTION_KEYWORDS.get(field, [])
-        if any(kw in prev_mark for kw in keywords):
-            score += 0.35
-    vlen = len(value)
-    if 3 <= vlen <= 180:
-        score += 0.15
-    if (value.count("\n") + 1) <= 2:
-        score += 0.05
-    val_lower = value.lower()
-    if field != "business_problem":
-        if any(uw in val_lower for uw in _UNCERTAINTY_WORDS):
-            score -= 0.40
-    if any(mt in val_lower for mt in _MULTI_TOPIC_MARKERS):
-        score -= 0.20
-    server_score = max(0.0, min(1.0, score))
-    mc_num = _MODEL_CONFIDENCE_MAP.get(proposal.get("model_confidence"))
-    if mc_num is not None:
-        final_conf = min(server_score, mc_num)
-    else:
-        final_conf = server_score
-    proposal["server_confidence"] = round(server_score, 2)
-    proposal["final_confidence"] = round(final_conf, 2)
-    proposal["allow_confirm"] = final_conf >= _CONFIDENCE_THRESHOLD
-    if not proposal["allow_confirm"]:
-        if field != "business_problem" and any(uw in val_lower for uw in _UNCERTAINTY_WORDS):
-            proposal["block_reason"] = "ambiguous_value"
-        elif mc_num is not None and mc_num < _CONFIDENCE_THRESHOLD:
-            proposal["block_reason"] = "low_confidence"
-        else:
-            proposal["block_reason"] = "low_confidence"
-    sid = study_id or (study_dict.get("id") if isinstance(study_dict, dict) else None) or "?"
-    print(
-        f"PROPOSAL_CONFIDENCE study={sid} field={field} "
-        f"server={server_score:.2f} model={proposal.get('model_confidence') or 'none'} "
-        f"final={final_conf:.2f} allow={'true' if proposal['allow_confirm'] else 'false'}",
-        flush=True,
-    )
-    return proposal
-
-
-def policy_should_show_confirm(proposal):
-    if proposal is None:
-        return False
-    return bool(proposal.get("allow_confirm"))
-
-
-_CONFIRMATION_PREFIXES = ("yes", "ok", "save", "confirmed", "confirm", "sure", "go ahead", "do it", "yep", "yeah")
-
-def policy_validate_for_save(field, value):
-    if not field or not value:
-        return False, "Missing required fields."
-    if len(value) > 2000:
-        return False, "Proposed value is too long; please clarify in chat."
-    if field not in _VALID_V1A_FIELDS:
-        return False, "Invalid field."
-    if value.lower().strip().startswith(_CONFIRMATION_PREFIXES) and len(value) < 40:
-        return False, "Confirmation text cannot be saved as study content."
-    return True, None
-
-
-def policy_apply_save(conn, study_id, field, value):
-    set_v1a_value(conn, study_id, field, value)
-    save_label = V1A_LABELS.get(field, field.replace("_", " ").title())
-    conn.execute(
-        "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
-        (study_id, f"Saved: {save_label}."),
-    )
-    return save_label
-
-
-def parse_mark_proposal_or_none(chat_messages):
-    if not chat_messages:
-        return None
-    for msg in reversed(chat_messages):
-        if msg.get("sender") != "mark":
-            continue
-        text = msg.get("message_text", "")
-        if "Proposed updates:" not in text:
-            continue
-        before_proposal = text.split("Proposed updates:", 1)[0]
-        if "?" in before_proposal:
-            continue
-        parsed = policy_parse_last_mark_proposal([msg])
-        if parsed:
-            return parsed
-    return None
-
-
-# Legacy aliases (used by worker fallback)
-_parse_proposed_update = policy_parse_last_mark_proposal
-compute_server_confidence = lambda msgs, pu, sd: policy_score_proposal(msgs, dict(pu), sd)["server_confidence"]
-_model_confidence_to_num = lambda mc: _MODEL_CONFIDENCE_MAP.get(mc)
-
-# ============================================================
-# END PROPOSAL POLICY
-# ============================================================
-
 
 BUDGET_CEILINGS = {
     "synthetic_survey": 100_000,
@@ -1781,9 +1338,6 @@ def index():
     view_study_output = None
     chat_messages = []
     chat_save_buttons = []
-    proposed_update = None
-    last_mark_has_proposal_text = False
-    has_pending_mark = False
     mark_recommendation = ""
     mark_recommendation_label = ""
     mark_recommendation_reason = ""
@@ -2022,12 +1576,6 @@ def index():
                     if p["persona_instance_id"] not in attached_ids
                 ]
 
-                conn.execute(
-                    "DELETE FROM chat_messages "
-                    "WHERE sender='mark' AND message_text='\u23f3 Mark is thinking...' "
-                    "AND timestamp_utc < datetime('now','-5 minutes')"
-                )
-
                 chat_messages = [
                     dict(r)
                     for r in conn.execute(
@@ -2036,21 +1584,8 @@ def index():
                     ).fetchall()
                 ]
 
+                chat_save_buttons = get_save_buttons(configure_study)
                 chat_save_buttons = []
-                proposed_update = parse_mark_proposal_or_none(chat_messages)
-                if proposed_update and configure_study:
-                    proposed_update = policy_score_proposal(
-                        chat_messages, proposed_update, dict(configure_study)
-                    )
-                last_mark_has_proposal_text = False
-                if not proposed_update and chat_messages:
-                    last_msg = chat_messages[-1]
-                    if last_msg.get("sender") == "mark" and "Proposed updates:" in last_msg.get("message_text", ""):
-                        last_mark_has_proposal_text = True
-                has_pending_mark = any(
-                    m.get("sender") == "mark" and m.get("message_text", "").startswith("\u23f3 Mark is thinking")
-                    for m in chat_messages
-                )
 
                 if configure_study.get("status") == "draft" and configure_study.get("study_type"):
                     try:
@@ -2293,9 +1828,6 @@ def index():
         mark_recommendation_reason=mark_recommendation_reason,
         chat_messages=chat_messages,
         chat_save_buttons=chat_save_buttons,
-        proposed_update=proposed_update,
-        last_mark_has_proposal_text=last_mark_has_proposal_text,
-        has_pending_mark=has_pending_mark,
         studies_page=studies_page,
         studies_q=studies_q,
         studies_total_pages=studies_total_pages,
@@ -4718,18 +4250,6 @@ def save_chat_field(study_id):
         return render_error("Study not found or not in draft status.")
 
     field = (request.form.get("field") or "").strip()
-
-    all_msgs = [
-        dict(r)
-        for r in conn.execute(
-            "SELECT * FROM chat_messages WHERE study_id = ? ORDER BY id ASC",
-            (study_id,),
-        ).fetchall()
-    ]
-    if parse_mark_proposal_or_none(all_msgs):
-        conn.close()
-        return render_error("Cannot use chat save when a proposal exists. Use the Confirm & Save button instead.")
-
     last_user_msg = conn.execute(
         "SELECT message_text FROM chat_messages WHERE study_id = ? AND sender = 'user' ORDER BY id DESC LIMIT 1",
         (study_id,),
@@ -4790,52 +4310,6 @@ def save_chat_field(study_id):
     return redirect(f"/?token={token}&configure={study_id}")
 
 
-@app.route("/confirm-proposed-updates", methods=["POST"])
-def confirm_proposed_updates():
-    token = get_token()
-    user, _ = get_session_data(token)
-    if not user or user["state"] != "active":
-        return render_error("Session expired. Please log in again.")
-    study_id = request.form.get("study_id", type=int)
-    field = request.form.get("field", "").strip()
-    value = request.form.get("value", "").strip()
-    if not study_id:
-        return render_error("Missing required fields.")
-    ok, err = policy_validate_for_save(field, value)
-    if not ok:
-        return render_error(err)
-    conn = get_db()
-    try:
-        study = conn.execute(
-            "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
-            (study_id, user["id"]),
-        ).fetchone()
-        if not study:
-            conn.close()
-            return render_error("Study not found or not a draft.")
-        policy_apply_save(conn, study_id, field, value)
-        conn.commit()
-        db_col = V1A_FIELD_MAP.get(field, field)
-        persisted = conn.execute(
-            f"SELECT {db_col} FROM studies WHERE id = ?",
-            (study_id,),
-        ).fetchone()
-        assert (
-            persisted
-            and persisted[0]
-            and persisted[0].strip()
-        ), f"FATAL: Save failed for field '{field}' (value not persisted)"
-    except Exception as e:
-        print(f"CONFIRM_PROPOSED_ERROR study={study_id}: {e}", flush=True)
-        raise
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
-    return redirect(f"/?token={token}&configure={study_id}")
-
-
 @app.route("/chat-status/<int:study_id>")
 def chat_status(study_id):
     token = get_token()
@@ -4863,31 +4337,6 @@ def chat_status(study_id):
     return jsonify({"ready": pending == 0, "pending": pending, "messages": messages})
 
 
-@app.route("/clear-chat-pending/<int:study_id>", methods=["POST"])
-def clear_chat_pending(study_id):
-    token = get_token()
-    user, _ = get_session_data(token)
-    if not user or user["state"] != "active":
-        return redirect(f"/?error=auth")
-    conn = get_db()
-    study = conn.execute(
-        "SELECT * FROM studies WHERE id = ? AND user_id = ?",
-        (study_id, user["id"]),
-    ).fetchone()
-    if not study:
-        conn.close()
-        return redirect(f"/?token={token}&error=study_not_found")
-    deleted = conn.execute(
-        "DELETE FROM chat_messages WHERE study_id = ? AND sender='mark' "
-        "AND message_text IN ('\u23f3 Mark is thinking...', '\u23f3 Mark is thinking...')",
-        (study_id,),
-    ).rowcount
-    conn.commit()
-    conn.close()
-    print(f"CLEAR_CHAT_PENDING study={study_id} deleted={deleted}", flush=True)
-    return redirect(f"/?token={token}&configure={study_id}")
-
-
 @app.route("/send-chat/<int:study_id>", methods=["POST", "GET"])
 def send_chat(study_id):
     import subprocess
@@ -4901,32 +4350,7 @@ def send_chat(study_id):
     if not user or user["state"] != "active":
         return render_error("Unauthorized.")
 
-    try:
-        return _send_chat_inner(study_id, token, user)
-    except Exception as e:
-        print(f"SEND_CHAT_CRASH study={study_id}: {e}", flush=True)
-        try:
-            conn_err = get_db()
-            conn_err.execute(
-                "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
-                (study_id, "Mark couldn't complete that request right now. Please try again."),
-            )
-            conn_err.commit()
-            conn_err.close()
-        except Exception:
-            pass
-        return redirect(f"/?token={token}&configure={study_id}")
-
-
-def _send_chat_inner(study_id, token, user):
-    import subprocess
-
     conn = get_db()
-    conn.execute(
-        "DELETE FROM chat_messages "
-        "WHERE sender='mark' AND message_text='\u23f3 Mark is thinking...' "
-        "AND timestamp_utc < datetime('now','-5 minutes')"
-    )
     study = conn.execute(
         "SELECT * FROM studies WHERE id = ? AND user_id = ?",
         (study_id, user["id"]),
@@ -4937,19 +4361,6 @@ def _send_chat_inner(study_id, token, user):
 
     message_text = (request.form.get("message_text") or "").strip()
     if not message_text:
-        conn.close()
-        return redirect(f"/?token={token}&configure={study_id}")
-
-    pending_count = conn.execute(
-        "SELECT COUNT(*) as cnt FROM chat_messages WHERE study_id = ? AND sender = 'mark' AND message_text = ?",
-        (study_id, "\u23f3 Mark is thinking..."),
-    ).fetchone()["cnt"]
-    if pending_count > 0:
-        conn.execute(
-            "INSERT INTO chat_messages (study_id, sender, message_text) VALUES (?, 'mark', ?)",
-            (study_id, "Mark is still working on the previous message. Please wait a moment and refresh."),
-        )
-        conn.commit()
         conn.close()
         return redirect(f"/?token={token}&configure={study_id}")
 
@@ -4982,7 +4393,81 @@ def _send_chat_inner(study_id, token, user):
             pass
         return redirect(f"/?token={token}&configure={study_id}")
 
-    system_prompt = build_mark_system_message(study_dict, persona_count, study_id=study_id)
+    anchor_keys = [
+        ("business_problem", "Business Problem"),
+        ("decision_to_support", "Decision to Support"),
+        ("market_geography", "Market / Geography"),
+        ("product_concept", "Product / Concept"),
+        ("target_audience", "Target Audience"),
+        ("definition_useful_insight", "Definition of Useful Insight"),
+    ]
+    snapshot_lines = [f"Study Title: {study_dict.get('title', 'Untitled')}"]
+    snapshot_lines.append(f"Study Type: {study_dict.get('study_type') or 'Not yet selected'}")
+    for key, label in anchor_keys:
+        val = get_v1a_value(study_dict, key)
+        snapshot_lines.append(f"{label}: {val or '[not yet provided]'}")
+    snapshot_lines.append(f"Personas attached: {persona_count}")
+    oc_block, oc_keys = _extract_optional_context(study_dict)
+    if oc_block:
+        snapshot_lines.append("")
+        snapshot_lines.append(oc_block)
+    study_snapshot = "\n".join(snapshot_lines)
+    print(f"OPTIONAL_CONTEXT_INJECT_MARK study={study_id} included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
+
+    system_prompt = (
+        "You are Mark, the Market Intelligence Copilot for Project Brainstorm.\n\n"
+        "Project Brainstorm is an AI-native market research platform that helps users frame business problems "
+        "and run disciplined, governed market research simulations (Synthetic Survey, Synthetic IDI, Synthetic Focus Group) "
+        "to support real business decisions.\n\n"
+        "Project Brainstorm is NOT:\n"
+        "- a general-purpose chatbot\n"
+        "- an academic research tutor\n"
+        "- a prediction or forecasting engine\n"
+        "- a brainstorming partner for unrelated topics\n\n"
+        "Your role is to ORCHESTRATE research setup. You lead the process. The user provides inputs. "
+        "You decide what is required next.\n\n"
+        "Authority & behavior rules:\n"
+        "1) Be professional, direct, and succinct.\n"
+        "2) Do NOT explain generic research theory.\n"
+        "3) Ask exactly ONE targeted next question per turn.\n"
+        "4) Always move the study toward execution.\n"
+        "5) If the conversation loops or is vague: summarize in one sentence and propose the next action.\n"
+        "6) Do not invent details or speculate.\n\n"
+        "Response constraints:\n"
+        "- Replies must be 100 words or fewer.\n"
+        "- One question only.\n"
+        "- Do NOT include any 'Suggested saves' section or footer in your reply.\n"
+        "- End after your single question.\n\n"
+        "PHASE GATE (MANDATORY):\n"
+        "If Study Type is 'Not yet selected':\n"
+        "  a) If Business Problem is '[not yet provided]': ask ONLY for Business Problem.\n"
+        "  b) Else if Decision to Support is '[not yet provided]': ask ONLY for Decision to Support.\n"
+        "  c) Else (both BP and Decision are present): recommend ONE study type "
+        "(Synthetic Survey vs Synthetic IDI vs Synthetic Focus Group) based on the business problem, "
+        "then ask the user to confirm by selecting a study type using the buttons on this page. "
+        "Do NOT proceed to any other questions.\n"
+        "  d) You MUST NOT ask about Market/Geography, Product/Concept, Target Audience, "
+        "or Definition of Useful Insight until Study Type is selected.\n\n"
+        "Current study state:\n"
+        + study_snapshot
+        + "\n\n"
+        "V1A required anchors for IDI / Focus Group:\n"
+        "- Business Problem\n"
+        "- Decision to Support\n"
+        "- Market / Geography\n"
+        "- Product / Concept\n"
+        "- Target Audience\n"
+        "- Definition (example) of Useful Insight\n\n"
+        "Important:\n"
+        "- Do NOT ask the user to fill 'Study Fit' as a field; YOU explain fit when recommending a study type.\n"
+        "- Do NOT treat 'Known vs Unknown' as required; if it appears, frame it as a hypothesis only.\n\n"
+        "Task rules:\n"
+        "1) Briefly acknowledge the user's latest message.\n"
+        "2) Identify the single most important missing/unclear item.\n"
+        "3) Ask ONE precise question to resolve it.\n\n"
+        "Completion rule:\n"
+        "If the study appears complete and valid, confirm readiness and instruct the user to proceed to QA/execution."
+    )
 
     chat_history = conn.execute(
         "SELECT sender, message_text FROM chat_messages WHERE study_id = ? ORDER BY id",
@@ -5000,12 +4485,7 @@ def _send_chat_inner(study_id, token, user):
 
     fallback = get_coaching_nudge(study_dict, persona_count)
 
-    has_creds = (
-        os.environ.get("AI_INTEGRATIONS_OPENROUTER_BASE_URL")
-        and os.environ.get("AI_INTEGRATIONS_OPENROUTER_API_KEY")
-    )
-
-    if mark_model_id and has_creds:
+    if mark_model_id:
         import tempfile
         prompt_data = {
             "system_prompt": system_prompt,
@@ -5048,8 +4528,6 @@ def _send_chat_inner(study_id, token, user):
             conn2.commit()
             conn2.close()
     else:
-        if not has_creds:
-            print(f"SEND_CHAT_NO_CREDS study={study_id}: skipping worker spawn", flush=True)
         conn2 = get_db()
         conn2.execute(
             "UPDATE chat_messages SET message_text = ? WHERE id = ?",
@@ -6339,7 +5817,6 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         mark_recommendation_reason="",
         chat_messages=[],
         chat_save_buttons=[],
-        proposed_update=None,
         studies_page=1,
         studies_q="",
         studies_total_pages=1,
