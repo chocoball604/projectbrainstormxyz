@@ -22,9 +22,12 @@ import hashlib
 import io
 import json
 import os
+import signal
 import sys
 import secrets
 import sqlite3
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from flask import (
@@ -135,6 +138,50 @@ BLOG_STATIC_DIR = os.path.join(
 os.makedirs(BLOG_STATIC_DIR, exist_ok=True)
 
 
+LLM_HARD_TIMEOUT_SECONDS = 75
+
+
+class LLMHardTimeout(Exception):
+    pass
+
+
+@contextmanager
+def hard_timeout(seconds):
+    def _raise(signum, frame):
+        raise LLMHardTimeout(f"LLM hard timeout after {seconds}s")
+    old_handler = signal.signal(signal.SIGALRM, _raise)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+
+def _record_llm_incident(model_id, purpose, error_type, error_msg):
+    try:
+        conn = get_db()
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        run_id = secrets.token_hex(8)
+        run_type = f"incident_{purpose}" if purpose else "incident_llm_call"
+        details = {
+            "model_id": model_id,
+            "error_type": error_type,
+            "error_message": str(error_msg)[:500],
+        }
+        conn.execute(
+            "INSERT INTO model_health_checks "
+            "(run_id, run_type, started_at, finished_at, integration_mode, summary_status, details_json) "
+            "VALUES (?, ?, ?, ?, 'live_calls_enabled', 'fail', ?)",
+            (run_id, run_type, now_str, now_str, json.dumps(details)),
+        )
+        conn.commit()
+        conn.close()
+        print(f"LLM_INCIDENT model={model_id} type={error_type} run_id={run_id}", flush=True)
+    except Exception as e:
+        print(f"LLM_INCIDENT_RECORD_ERROR: {e}", flush=True)
+
+
 def call_llm(model_id, messages, purpose=""):
     """Single wrapper for all LLM calls via Replit AI Integrations (OpenRouter)."""
     import openai as _openai
@@ -146,15 +193,21 @@ def call_llm(model_id, messages, purpose=""):
 
     client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=60)
     try:
-        resp = client.chat.completions.create(
-            model=model_id,
-            messages=messages,
-            max_tokens=8192,
-        )
-        return resp.choices[0].message.content or ""
+        with hard_timeout(LLM_HARD_TIMEOUT_SECONDS):
+            resp = client.chat.completions.create(
+                model=model_id,
+                messages=messages,
+                max_tokens=8192,
+            )
+            return resp.choices[0].message.content or ""
+    except LLMHardTimeout as e:
+        _record_llm_incident(model_id, purpose, "hard_timeout", e)
+        raise
     except _openai.APITimeoutError as e:
+        _record_llm_incident(model_id, purpose, "api_timeout", e)
         raise RuntimeError(f"LLM timeout for {model_id}: {str(e)[:200]}")
     except _openai.APIError as e:
+        _record_llm_incident(model_id, purpose, "api_error", e)
         raise RuntimeError(f"LLM error for {model_id}: {str(e)[:200]}")
 
 
@@ -248,23 +301,33 @@ def run_model_health_check(run_type="manual"):
                     per_model[mid] = {
                         "status": "fail",
                         "error": "Model not in active allowed list",
+                        "latency_s": None,
                     }
                     continue
                 try:
+                    t0 = time.time()
                     result = call_llm(
                         mid,
                         [{"role": "user", "content": "Reply with the single word OK"}],
                         purpose="health_check",
                     )
-                    if "ok" in (result or "").lower():
-                        per_model[mid] = {"status": "pass", "error": None}
+                    latency = round(time.time() - t0, 2)
+                    if latency > 10:
+                        per_model[mid] = {
+                            "status": "fail",
+                            "error": f"High latency: {latency}s",
+                            "latency_s": latency,
+                        }
+                    elif "ok" in (result or "").lower():
+                        per_model[mid] = {"status": "pass", "error": None, "latency_s": latency}
                     else:
                         per_model[mid] = {
                             "status": "fail",
                             "error": f"Unexpected response: {(result or '')[:300]}",
+                            "latency_s": latency,
                         }
                 except Exception as e:
-                    per_model[mid] = {"status": "fail", "error": str(e)[:300]}
+                    per_model[mid] = {"status": "fail", "error": str(e)[:300], "latency_s": None}
 
             if not config_valid:
                 summary_status = "fail"
@@ -274,6 +337,14 @@ def run_model_health_check(run_type="manual"):
                 summary_status = "pass"
 
         conn = get_db()
+
+        pending = conn.execute(
+            "SELECT COUNT(*) FROM chat_messages "
+            "WHERE sender='mark' AND message_text='\u23f3 Mark is thinking...'"
+        ).fetchone()[0]
+        if pending > 0:
+            summary_status = "fail"
+
         for mid, info in per_model.items():
             conn.execute(
                 "INSERT INTO model_health_status (model_id, status, last_tested_at, last_error) "
@@ -290,12 +361,21 @@ def run_model_health_check(run_type="manual"):
                 ),
             )
 
+        for model_id, info in per_model.items():
+            if info["status"] == "fail":
+                conn.execute(
+                    "UPDATE allowed_models SET status='disabled' WHERE model_id = ?",
+                    (model_id,),
+                )
+
         finished_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         details = {
             "config_errors": config_errors,
             "per_model": per_model,
             "models_checked": list(all_model_ids),
         }
+        if pending > 0:
+            details["stuck_mark_messages"] = pending
 
         conn.execute(
             "INSERT INTO model_health_checks "
@@ -4696,6 +4776,11 @@ def _send_chat_inner(study_id, token, user):
     import subprocess
 
     conn = get_db()
+    conn.execute(
+        "DELETE FROM chat_messages "
+        "WHERE sender='mark' AND message_text='\u23f3 Mark is thinking...' "
+        "AND timestamp_utc < datetime('now','-5 minutes')"
+    )
     study = conn.execute(
         "SELECT * FROM studies WHERE id = ? AND user_id = ?",
         (study_id, user["id"]),

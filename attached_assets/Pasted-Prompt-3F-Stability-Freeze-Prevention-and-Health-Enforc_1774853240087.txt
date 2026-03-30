@@ -1,0 +1,195 @@
+Prompt 3F - Stability, Freeze Prevention, and Health Enforcement
+
+TASK
+Stabilize Project Brainstorm’s LLM integration by eliminating chat freezes,
+making failures observable, and enforcing automatic safety controls.
+
+This task has FOUR REQUIRED PARTS and MUST be implemented IN ORDER.
+Do not skip steps. Do not combine steps. Do not partially implement.
+
+============================================================
+PART 1 — HARD TIMEOUT + INCIDENT LOGGING FOR call_llm() (CRITICAL)
+============================================================
+
+GOAL
+Ensure that no LLM call can hang indefinitely and that all failures
+(timeouts, API errors, unexpected behavior) are recorded as incidents
+that appear in Weekly QA reports.
+
+WHY
+Current freezes occur because hung LLM calls leave
+“⏳ Mark is thinking...” messages in the database with no recovery
+and no incident logging.
+
+IMPLEMENTATION REQUIREMENTS
+
+1) Add a HARD wall clock timeout that cannot be bypassed by the SDK.
+2) Log every timeout or API failure as a model_health_checks incident.
+3) Preserve existing behavior for successful calls.
+
+IMPLEMENTATION DETAILS
+
+A) Define a hard timeout context manager (Unix-safe):
+
+    class LLMHardTimeout(Exception):
+        pass
+
+    @contextmanager
+    def hard_timeout(seconds):
+        def _raise(signum, frame):
+            raise LLMHardTimeout(f"LLM hard timeout after {seconds}s")
+        signal.signal(signal.SIGALRM, _raise)
+        signal.alarm(seconds)
+        try:
+            yield
+        finally:
+            signal.alarm(0)
+
+B) Wrap the LLM call in call_llm() with BOTH:
+   - the existing OpenAI client timeout
+   - the new hard_timeout context (hard ceiling = 75 seconds)
+
+C) On ANY of the following:
+   - LLMHardTimeout
+   - OpenAI APITimeoutError
+   - OpenAI APIError
+
+   DO ALL OF THE FOLLOWING:
+   - Insert a row into model_health_checks
+   - Set run_type to "incident_<purpose>" (fallback: "incident_llm_call")
+   - Include model_id, error_type, and truncated error message in details_json
+   - Re raise the exception (do NOT swallow it)
+
+D) Do NOT downgrade these to warnings.
+   These are real incidents.
+
+SUCCESS CRITERIA
+- Hung LLM calls are impossible
+- Failures appear in Weekly QA reports
+- No silent freezes remain
+
+============================================================
+PART 2 — ONE LINE AUTO CLEANUP FOR STUCK “Mark is thinking…” STATES
+============================================================
+
+GOAL
+Prevent permanent UI deadlock if a crash occurs mid response.
+
+IMPLEMENTATION REQUIREMENTS
+
+1) Add EXACTLY ONE SQL statement
+2) Do NOT change existing chat logic
+3) Do NOT add retries or loops
+
+IMPLEMENTATION LOCATION
+
+At the VERY START of _send_chat_inner():
+
+INSERT THIS LINE:
+
+    conn.execute(
+        "DELETE FROM chat_messages "
+        "WHERE sender='mark' AND message_text='⏳ Mark is thinking...' "
+        "AND timestamp_utc < datetime('now','-5 minutes')"
+    )
+
+SUCCESS CRITERIA
+- No chat can remain stuck longer than 5 minutes
+- UI always recovers automatically
+- No user action required
+
+============================================================
+PART 3 — MODEL POOL SAFETY RULE (AUTO DISABLE INVALID MODELS)
+============================================================
+
+GOAL
+Ensure invalid or failing models cannot continue to destabilize the system.
+
+IMPLEMENTATION REQUIREMENTS
+
+1) Modify run_model_health_check()
+2) Automatically disable models that FAIL health checks
+3) Do NOT delete rows — only mark status='disabled'
+
+IMPLEMENTATION DETAILS
+
+After computing per_model results:
+
+    for model_id, info in per_model.items():
+        if info["status"] == "fail":
+            conn.execute(
+                "UPDATE allowed_models SET status='disabled' WHERE model_id = ?",
+                (model_id,)
+            )
+
+OPTIONAL (preferred but not required):
+- Only disable after 2 consecutive failures
+
+SUCCESS CRITERIA
+- Invalid models are automatically removed from circulation
+- Persona model pool cannot contain broken models
+- Fewer retries, fewer timeouts
+
+============================================================
+PART 4 — HEALTH CHECK UPGRADE TO PREDICT FREEZES
+============================================================
+
+GOAL
+Make health checks reflect user visible risk, not just model existence.
+
+IMPLEMENTATION REQUIREMENTS
+
+Upgrade run_model_health_check() to include:
+
+A) LATENCY MEASUREMENT
+- Measure elapsed seconds for each model probe
+- Store latency in details_json
+
+B) LATENCY FAILURE RULE
+- If latency > 10 seconds, mark model as FAIL
+- Error message: "High latency: <Xs>"
+
+C) STUCK CHAT DETECTION
+- Count rows with:
+  sender='mark' AND message_text='⏳ Mark is thinking...'
+- If count > 0:
+  - Force summary_status = "fail"
+  - Add stuck_mark_messages count to details_json
+
+IMPLEMENTATION DETAILS
+
+Example snippet:
+
+    pending = conn.execute(
+        "SELECT COUNT(*) FROM chat_messages "
+        "WHERE sender='mark' AND message_text='⏳ Mark is thinking...'"
+    ).fetchone()[0]
+
+    if pending > 0:
+        summary_status = "fail"
+        details["stuck_mark_messages"] = pending
+
+SUCCESS CRITERIA
+- Health check FAILS before users report freezes
+- Weekly QA reports reflect real UX risk
+- “No reliability incidents” can no longer be misleading
+
+============================================================
+NON NEGOTIABLE RULES
+============================================================
+
+- Do NOT change Mark’s system prompt behavior
+- Do NOT suppress exceptions
+- Do NOT add retries inside call_llm()
+- Do NOT introduce async or background workers
+- Fail loud, fail fast, log everything
+
+============================================================
+DELIVERABLE
+============================================================
+
+Commit all four parts together.
+The system must be freeze resistant, self healing, and observable.
+
+If any part is unclear, follow the instructions exactly as written —
+do NOT simplify or omit safeguards.
