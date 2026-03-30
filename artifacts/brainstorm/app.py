@@ -639,14 +639,29 @@ def _parse_proposed_update(chat_messages):
     text = last.get("message_text", "")
     if "Should I save these updates?" not in text:
         return None
-    import re
-    m = re.search(r"- field:\s*(\S+)\s*\n\s*value:\s*(.+?)(?:\n\n|\n*Confirmation question:)", text, re.DOTALL)
-    if not m:
+    lines = text.split("\n")
+    field = None
+    value_lines = []
+    capturing_value = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("- field:"):
+            field = stripped.split("- field:", 1)[1].strip()
+            capturing_value = False
+            value_lines = []
+        elif field and (stripped.startswith("value:") or stripped.startswith("- value:")):
+            val_part = stripped.split("value:", 1)[1].strip()
+            if val_part:
+                value_lines.append(val_part)
+            capturing_value = True
+        elif capturing_value:
+            if stripped.lower().startswith("confirmation question") or "Should I save" in stripped or stripped == "":
+                capturing_value = False
+            else:
+                value_lines.append(stripped)
+    if not field or field not in _VALID_V1A_FIELDS:
         return None
-    field = m.group(1).strip()
-    value = m.group(2).strip()
-    if field not in _VALID_V1A_FIELDS:
-        return None
+    value = " ".join(value_lines).strip()
     if not value:
         return None
     return {"field": field, "value": value}
@@ -4500,9 +4515,8 @@ def send_chat(study_id):
         "6) Do not invent details or speculate.\n\n"
         "Response constraints:\n"
         "- Replies must be 100 words or fewer.\n"
-        "- One question only.\n"
         "- Do NOT include any 'Suggested saves' section or footer in your reply.\n"
-        "- End after your single question.\n\n"
+        "- When the user provides a usable answer for a V1A anchor, you MUST end with the Proposed updates block + the confirmation question. The confirmation question is your only question.\n\n"
         "PHASE GATE (MANDATORY):\n"
         "If Study Type is 'Not yet selected':\n"
         "  a) If Business Problem is '[not yet provided]': ask ONLY for Business Problem.\n"

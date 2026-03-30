@@ -130,6 +130,62 @@ def update_placeholder(placeholder_id, message_text):
                     pass
     return False
 
+V1A_FIELD_MAP = {
+    "market_geography": "study_fit",
+    "product_concept": "known_vs_unknown",
+}
+V1A_ANCHOR_ORDER = [
+    ("business_problem", "Business Problem"),
+    ("decision_to_support", "Decision to Support"),
+    ("market_geography", "Market / Geography"),
+    ("product_concept", "Product / Concept"),
+    ("target_audience", "Target Audience"),
+    ("definition_useful_insight", "Definition of Useful Insight"),
+]
+
+def _maybe_append_fallback_proposal(mark_reply, study_id, user_message):
+    if not user_message or len(user_message.strip()) > 200:
+        return mark_reply
+    try:
+        conn = get_db()
+        try:
+            row = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+            if not row:
+                return mark_reply
+            study = dict(row)
+            next_field = None
+            next_label = None
+            for key, label in V1A_ANCHOR_ORDER:
+                db_key = V1A_FIELD_MAP.get(key, key)
+                val = (study.get(db_key) or "").strip()
+                if not val:
+                    next_field = key
+                    next_label = label
+                    break
+            if not next_field:
+                return mark_reply
+            reply_lower = mark_reply.lower()
+            label_lower = next_label.lower()
+            field_words = next_field.replace("_", " ")
+            if label_lower not in reply_lower and field_words not in reply_lower:
+                return mark_reply
+            value = user_message.strip()
+            proposal = (
+                f"\n\nProposed updates:\n"
+                f"- field: {next_field}\n"
+                f"  value: {value}\n\n"
+                f"Confirmation question:\n"
+                f"Should I save these updates?"
+            )
+            print(f"WORKER_FALLBACK_PROPOSAL study={study_id} field={next_field}", flush=True)
+            return mark_reply + proposal
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"WORKER_FALLBACK_ERROR study={study_id}: {e}", flush=True)
+        return mark_reply
+
+
 def main():
     if len(sys.argv) < 5:
         print("Usage: mark_reply_worker.py <study_id> <placeholder_id> <model_id> <message> [fallback] [prompt_file]", flush=True)
@@ -178,6 +234,8 @@ def main():
         if not mark_reply:
             mark_reply = fallback_text
             print(f"WORKER: using fallback", flush=True)
+        if mark_reply and "Proposed updates:" not in mark_reply:
+            mark_reply = _maybe_append_fallback_proposal(mark_reply, study_id, message_text)
         if update_placeholder(placeholder_id, mark_reply):
             print(f"WORKER_DONE study={study_id} placeholder={placeholder_id}", flush=True)
         else:
