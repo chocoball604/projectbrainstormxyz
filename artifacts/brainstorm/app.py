@@ -5403,35 +5403,41 @@ def save_optional_context_field(study_id):
         return render_error("Invalid optional context field.")
 
     conn = get_db()
-    study = conn.execute(
-        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
-        (study_id, user["id"]),
-    ).fetchone()
-    if not study:
-        conn.close()
+    try:
+        study = conn.execute(
+            "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+            (study_id, user["id"]),
+        ).fetchone()
+        if not study:
+            conn.close()
+            if _is_ajax(request):
+                return jsonify({"ok": False, "error": "Draft study not found."}), 404
+            return render_error("Draft study not found.")
+
+        existing_brief = {}
+        if study["survey_brief"]:
+            try:
+                existing_brief = json.loads(study["survey_brief"])
+            except (json.JSONDecodeError, TypeError):
+                existing_brief = {}
+
+        oc = existing_brief.get("optional_context", {})
+        if not isinstance(oc, dict):
+            oc = {}
+        oc[field_key] = field_value
+        existing_brief["optional_context"] = oc
+
+        conn.execute(
+            "UPDATE studies SET survey_brief = ? WHERE id = ?",
+            (json.dumps(existing_brief), study_id),
+        )
+        conn.commit()
+    except Exception as e:
         if _is_ajax(request):
-            return jsonify({"ok": False, "error": "Draft study not found."}), 404
-        return render_error("Draft study not found.")
-
-    existing_brief = {}
-    if study["survey_brief"]:
-        try:
-            existing_brief = json.loads(study["survey_brief"])
-        except (json.JSONDecodeError, TypeError):
-            existing_brief = {}
-
-    oc = existing_brief.get("optional_context", {})
-    if not isinstance(oc, dict):
-        oc = {}
-    oc[field_key] = field_value
-    existing_brief["optional_context"] = oc
-
-    conn.execute(
-        "UPDATE studies SET survey_brief = ? WHERE id = ?",
-        (json.dumps(existing_brief), study_id),
-    )
-    conn.commit()
-    conn.close()
+            return jsonify({"ok": False, "error": f"Save failed: {e}"}), 500
+        return render_error(f"Save failed: {e}")
+    finally:
+        conn.close()
 
     if _is_ajax(request):
         return jsonify({

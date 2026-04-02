@@ -1417,6 +1417,7 @@
             function ocRenderSaved(slot, fieldKey, label, val, actionUrl) {
                 slot.innerHTML = '<div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;">'
                     + '<strong style="color:#27ae60;">\u2713 ' + escHtml(label) + ':</strong> ' + escHtml(val)
+                    + ' <span style="color:#27ae60;font-size:12px;margin-left:6px;">Saved</span>'
                     + ' <a href="#" class="oc-edit-link" style="margin-left:8px;font-size:12px;color:#5C7E8F;">Edit</a></div>';
                 slot.querySelector('.oc-edit-link').addEventListener('click', function(ev) {
                     ev.preventDefault();
