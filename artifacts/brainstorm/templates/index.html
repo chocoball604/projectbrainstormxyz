@@ -1466,12 +1466,31 @@
                             var row = form.closest('tr');
                             if (row) row.remove();
                             var sel = document.querySelector('#attach-form select[name="persona_instance_id"]');
+                            var attachArea = document.getElementById('attach-persona-area');
                             if (sel) {
                                 var name = row ? row.querySelector('td').textContent : pid;
                                 var opt = document.createElement('option');
                                 opt.value = pid;
                                 opt.textContent = name + ' (' + pid + ')';
                                 sel.appendChild(opt);
+                            } else if (attachArea) {
+                                var name = row ? row.querySelector('td').textContent : pid;
+                                attachArea.innerHTML = '<form id="attach-form" action="/attach-persona/' + studyId + '" method="POST" style="display:flex;gap:8px;align-items:flex-end;">'
+                                    + '<input type="hidden" name="token" value="' + token + '">'
+                                    + '<div style="flex:1;">'
+                                    + '<label style="font-size:13px;font-weight:500;color:#555;display:block;margin-bottom:4px;">Select persona to attach</label>'
+                                    + '<select name="persona_instance_id" required style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;">'
+                                    + '<option value="">\u2014 Choose \u2014</option>'
+                                    + '<option value="' + pid + '">' + name.replace(/</g,'&lt;') + ' (' + pid + ')</option>'
+                                    + '</select></div>'
+                                    + '<button type="submit" class="btn btn-success btn-small" style="white-space:nowrap;">Attach</button></form>';
+                                var newAttachForm = document.getElementById('attach-form');
+                                if (newAttachForm) {
+                                    newAttachForm.addEventListener('submit', function(e) {
+                                        e.preventDefault();
+                                        location.reload();
+                                    });
+                                }
                             }
                             var tbody = document.getElementById('persona-tbody');
                             if (tbody && tbody.children.length === 0) {
