@@ -4401,17 +4401,37 @@ def send_chat(study_id):
         ("target_audience", "Target Audience"),
         ("definition_useful_insight", "Definition of Useful Insight"),
     ]
-    snapshot_lines = [f"Study Title: {study_dict.get('title', 'Untitled')}"]
-    snapshot_lines.append(f"Study Type: {study_dict.get('study_type') or 'Not yet selected'}")
+    field_statuses = {}
     for key, label in anchor_keys:
         val = get_v1a_value(study_dict, key)
-        snapshot_lines.append(f"{label}: {val or '[not yet provided]'}")
+        field_statuses[key] = "saved" if val else "empty"
+
+    study_type_val = study_dict.get("study_type") or ""
+    bp_status = field_statuses["business_problem"]
+    ds_status = field_statuses["decision_to_support"]
+    all_saved = all(s == "saved" for s in field_statuses.values())
+
+    if bp_status == "empty" or ds_status == "empty":
+        study_phase = "discovery"
+    elif all_saved:
+        study_phase = "ready_for_QA"
+    else:
+        study_phase = "brief"
+
+    snapshot_lines = [f"Study Title: {study_dict.get('title', 'Untitled')}"]
+    snapshot_lines.append(f"Study Type: {study_type_val or 'Not yet selected'}")
+    snapshot_lines.append(f"Study Phase: {study_phase}")
+    snapshot_lines.append("Research Brief field status (read-only):")
+    for key, label in anchor_keys:
+        snapshot_lines.append(f"  {label}: [{field_statuses[key]}]")
     snapshot_lines.append(f"Personas attached: {persona_count}")
     oc_block, oc_keys = _extract_optional_context(study_dict)
     if oc_block:
         snapshot_lines.append("")
         snapshot_lines.append(oc_block)
     study_snapshot = "\n".join(snapshot_lines)
+    status_summary = ",".join(f"{k}={v}" for k, v in field_statuses.items())
+    print(f"MARK_FIELD_STATUS study={study_id} phase={study_phase} {status_summary}", flush=True)
     print(f"OPTIONAL_CONTEXT_INJECT_MARK study={study_id} included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
 
     system_prompt = (
@@ -4438,11 +4458,23 @@ def send_chat(study_id):
         "- One question only.\n"
         "- Do NOT include any 'Suggested saves' section or footer in your reply.\n"
         "- End after your single question.\n\n"
+        "Field awareness rules (MANDATORY):\n"
+        "You receive field STATUS only (empty / saved), NOT field values.\n"
+        "- You MAY reference which fields are missing and explain why they matter.\n"
+        "- You MAY explain why a specific field is needed next.\n"
+        "- You MAY encourage completion in clear, professional language.\n"
+        "- You MAY maintain urgency when nearing completion.\n"
+        "- You MUST NOT propose updates or draft text for a field.\n"
+        "- You MUST NOT summarize chat content 'for saving'.\n"
+        "- You MUST NOT ask the user to save, click save, or mention save buttons.\n"
+        "- You MUST NOT mention UI persistence mechanics or buttons.\n"
+        "- You MUST NOT infer field completion from chat content alone.\n"
+        "- A field is complete ONLY when its status shows [saved].\n\n"
         "PHASE GATE (MANDATORY):\n"
         "If Study Type is 'Not yet selected':\n"
-        "  a) If Business Problem is '[not yet provided]': ask ONLY for Business Problem.\n"
-        "  b) Else if Decision to Support is '[not yet provided]': ask ONLY for Decision to Support.\n"
-        "  c) Else (both BP and Decision are present): recommend ONE study type "
+        "  a) If Business Problem is [empty]: ask ONLY for Business Problem.\n"
+        "  b) Else if Decision to Support is [empty]: ask ONLY for Decision to Support.\n"
+        "  c) Else (both BP and Decision are [saved]): recommend ONE study type "
         "(Synthetic Survey vs Synthetic IDI vs Synthetic Focus Group) based on the business problem, "
         "then ask the user to confirm by selecting a study type using the buttons on this page. "
         "Do NOT proceed to any other questions.\n"
@@ -4463,10 +4495,11 @@ def send_chat(study_id):
         "- Do NOT treat 'Known vs Unknown' as required; if it appears, frame it as a hypothesis only.\n\n"
         "Task rules:\n"
         "1) Briefly acknowledge the user's latest message.\n"
-        "2) Identify the single most important missing/unclear item.\n"
+        "2) Identify the single most important missing/unclear item based on field status.\n"
         "3) Ask ONE precise question to resolve it.\n\n"
         "Completion rule:\n"
-        "If the study appears complete and valid, confirm readiness and instruct the user to proceed to QA/execution."
+        "When ALL required fields show [saved], say: "
+        "'The Research Brief is complete. You can proceed to QA.'"
     )
 
     chat_history = conn.execute(
