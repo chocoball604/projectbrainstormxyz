@@ -4755,6 +4755,15 @@ def run_study(study_id):
                 generated = lisa_generate_personas(study_snapshot, auto_n, persona_gen_model)
                 conn = get_db()
                 new_persona_ids = []
+                def _pstr(val):
+                    if val is None:
+                        return ""
+                    if isinstance(val, dict):
+                        return json.dumps(val)
+                    if isinstance(val, list):
+                        return json.dumps(val)
+                    return str(val)
+
                 for p_data in generated:
                     p_instance_id = f"P-{secrets.token_hex(4).upper()}"
                     p_persona_id = f"PID-{secrets.token_hex(4).upper()}"
@@ -4770,15 +4779,15 @@ def run_study(study_id):
                             user["id"],
                             p_persona_id,
                             p_instance_id,
-                            p_data.get("name", "Auto-Persona"),
-                            p_data.get("persona_summary", ""),
-                            p_data.get("demographic_frame", ""),
-                            p_data.get("psychographic_profile", ""),
-                            p_data.get("contextual_constraints", ""),
-                            p_data.get("behavioural_tendencies", ""),
+                            _pstr(p_data.get("name", "Auto-Persona")),
+                            _pstr(p_data.get("persona_summary", "")),
+                            _pstr(p_data.get("demographic_frame", "")),
+                            _pstr(p_data.get("psychographic_profile", "")),
+                            _pstr(p_data.get("contextual_constraints", "")),
+                            _pstr(p_data.get("behavioural_tendencies", "")),
                             provenance,
-                            p_data.get("grounding_sources", ""),
-                            p_data.get("confidence_and_limits", ""),
+                            _pstr(p_data.get("grounding_sources", "")),
+                            _pstr(p_data.get("confidence_and_limits", "")),
                         ),
                     )
                     conn.execute(
