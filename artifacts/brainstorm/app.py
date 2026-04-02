@@ -470,6 +470,29 @@ def is_gpt_family(model_id: str) -> bool:
     )
 
 
+def _get_healthy_pool_models(conn):
+    pool_rows = conn.execute(
+        "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
+    ).fetchall()
+    non_gpt = [r["model_id"] for r in pool_rows if not is_gpt_family(r["model_id"])]
+
+    if not non_gpt:
+        return [], [], "no_eligible"
+
+    health_rows = conn.execute(
+        "SELECT model_id, status FROM model_health_status"
+    ).fetchall()
+    fail_set = {r["model_id"] for r in health_rows if r["status"] == "fail"}
+
+    healthy = [m for m in non_gpt if m not in fail_set]
+    excluded_fail = [m for m in non_gpt if m in fail_set]
+
+    if not healthy and excluded_fail:
+        return [], excluded_fail, "all_fail"
+
+    return healthy, excluded_fail, "ok"
+
+
 def _extract_optional_context(study_dict):
     oc = {}
     sb_raw = study_dict.get("survey_brief") or ""
@@ -4680,19 +4703,37 @@ def run_study(study_id):
             auto_n = min_required - persona_count
             try:
                 import random as _rng
-                pool_rows = conn.execute(
-                    "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
-                ).fetchall()
-                eligible_models = [
-                    r["model_id"] for r in pool_rows if not is_gpt_family(r["model_id"])
-                ]
-                if not eligible_models:
+                healthy_models, excluded_fail, pool_status = _get_healthy_pool_models(conn)
+                if pool_status == "no_eligible":
                     conn.close()
                     return render_error(
                         "No eligible persona generation models in pool (GPT-family excluded). "
                         "An admin must add non-GPT models to the persona model pool."
                     )
-                persona_gen_model = _rng.choice(eligible_models)
+                if pool_status == "all_fail":
+                    conn.close()
+                    return render_error(
+                        "All eligible persona models failed their last health check: "
+                        + ", ".join(excluded_fail) + ". "
+                        "An admin must run a health check or fix the model pool before running a study."
+                    )
+                if excluded_fail:
+                    fail_warning = "Models excluded from persona pool (health check FAIL): " + ", ".join(excluded_fail)
+                    print(f"PERSONA_POOL_FAIL_EXCLUSION study={study_id} excluded={excluded_fail}", flush=True)
+                    existing_notes = study.get("qa_notes") or ""
+                    try:
+                        notes_list = json.loads(existing_notes) if existing_notes else []
+                    except (json.JSONDecodeError, TypeError):
+                        notes_list = []
+                    if not isinstance(notes_list, list):
+                        notes_list = []
+                    notes_list.append(fail_warning)
+                    conn.execute(
+                        "UPDATE studies SET qa_notes = ? WHERE id = ?",
+                        (json.dumps(notes_list), study_id),
+                    )
+                    conn.commit()
+                persona_gen_model = _rng.choice(healthy_models)
                 print(f"PERSONA_POOL_MODEL_SELECTED={persona_gen_model} study={study_id}", flush=True)
                 study_snapshot = dict(study)
                 conn.close()
@@ -5543,19 +5584,23 @@ def create_persona():
     import random as _random
 
     conn = get_db()
-    pool_models = [
-        r["model_id"]
-        for r in conn.execute(
-            "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
-        ).fetchall()
-        if not is_gpt_family(r["model_id"])
-    ]
-    if not pool_models:
+    healthy_models, excluded_fail, pool_status = _get_healthy_pool_models(conn)
+    if pool_status == "no_eligible":
         conn.close()
         return render_error(
             "Cannot create persona: no eligible models in pool (GPT-family excluded). An admin must add non-GPT models to the persona model pool.",
             show_new_persona=True,
         )
+    if pool_status == "all_fail":
+        conn.close()
+        return render_error(
+            "Cannot create persona: all eligible models failed their last health check ("
+            + ", ".join(excluded_fail) + "). "
+            "An admin must run a health check or fix the model pool.",
+            show_new_persona=True,
+        )
+    if excluded_fail:
+        print(f"PERSONA_CREATE_FAIL_EXCLUSION excluded={excluded_fail}", flush=True)
 
     dossier = {}
     for field_key, field_label in PERSONA_DOSSIER_FIELDS:
@@ -5568,7 +5613,7 @@ def create_persona():
             )
         dossier[field_key] = val
 
-    selected_model = _random.choice(pool_models)
+    selected_model = _random.choice(healthy_models)
     print(f"PERSONA_MODEL_SELECTED={selected_model}")
     provenance = f"{dossier['ai_model_provenance']} [model={selected_model}, selection_method=random from pool]"
 

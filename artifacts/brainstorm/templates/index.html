@@ -2679,6 +2679,23 @@
             <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No health checks run yet.</p>
             {% endif %}
 
+            {% set fail_pool_models = [] %}
+            {% for hs in health_status_list %}
+                {% if hs.status == 'fail' %}
+                    {% set _ = fail_pool_models.append(hs.model_id) %}
+                {% endif %}
+            {% endfor %}
+            {% if fail_pool_models %}
+            <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:12px 16px;margin-bottom:16px;">
+                <strong style="color:#856404;">⚠ Warning:</strong>
+                <span style="color:#856404;">
+                    {{ fail_pool_models|length }} model(s) have FAIL status:
+                    {% for fm in fail_pool_models %}<code>{{ fm }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+                    These models will be excluded from persona generation. Please investigate or remove them from the pool.
+                </span>
+            </div>
+            {% endif %}
+
             {% if health_status_list %}
             <table style="margin-bottom: 20px; font-size: 13px;">
                 <thead>
