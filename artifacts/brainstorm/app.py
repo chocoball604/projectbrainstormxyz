@@ -3661,13 +3661,13 @@ def run_ben_qa(study_dict):
             }
         personas = normalize_personas_used(study_dict.get("personas_used"))
         pc = len(personas)
-        if study_type == "synthetic_idi" and (pc < 1 or pc > 3):
+        if study_type == "synthetic_idi" and pc > 1:
             print(
                 f"QA_DEBUG qual study={study_id_debug} missing_anchors=[] persona_count={pc} decision=FAIL"
             )
             return {
                 "decision": "FAIL",
-                "notes": f"QA failed: IDI requires 1–3 personas, found {pc}.",
+                "notes": f"QA failed: IDI requires exactly 1 persona, found {pc}.",
                 "confidence_labels": fail_zero,
             }
         if study_type == "synthetic_focus_group" and (pc < 4 or pc > 6):
@@ -3840,14 +3840,14 @@ def ben_precheck(study, persona_count, persona_dossiers=None):
             if not val:
                 failures.append(f"{label} is missing.")
         if st == "synthetic_idi":
-            if persona_count < 1 or persona_count > 3:
+            if persona_count > 1:
                 failures.append(
-                    f"IDI requires 1–3 personas (currently {persona_count})."
+                    f"IDI requires exactly 1 persona (currently {persona_count})."
                 )
         else:
-            if persona_count < 4 or persona_count > 6:
+            if persona_count > 6:
                 failures.append(
-                    f"Focus Group requires 4–6 personas (currently {persona_count})."
+                    f"Focus Group allows max 6 personas (currently {persona_count})."
                 )
 
         target_audience = get_v1a_value(study, "target_audience")
@@ -3899,8 +3899,8 @@ def auto_ben_precheck(conn, study, user_id):
             persona_dossiers.append(dict(p_row))
 
     if st in ("synthetic_idi", "synthetic_focus_group"):
-        if persona_count == 0:
-            min_p = 1 if st == "synthetic_idi" else 4
+        min_p = 1 if st == "synthetic_idi" else 4
+        if persona_count < min_p:
             persona_count = min_p
 
     failures = ben_precheck(study_dict, persona_count, persona_dossiers)
@@ -4224,11 +4224,11 @@ def get_coaching_nudge(study, persona_count):
             if not val:
                 return f"Next missing item: {label}. {prompt} (Fill it in the Research Brief section above.)"
         if st == "synthetic_idi":
-            if persona_count < 1 or persona_count > 3:
-                return f"You have {persona_count} persona(s) attached. IDI requires 1–3 personas. Attach or remove personas above."
+            if persona_count > 1:
+                return f"You have {persona_count} persona(s) attached. IDI requires exactly 1 persona. Remove extras above."
         else:
-            if persona_count < 4 or persona_count > 6:
-                return f"You have {persona_count} persona(s) attached. Focus Groups require 4–6 personas. Attach or remove personas above."
+            if persona_count > 6:
+                return f"You have {persona_count} persona(s) attached. Focus Groups allow max 6 personas. Remove extras above."
         return "Everything looks complete! You can click 'Ready for QA Review' in the side panel when you're ready."
 
     return "Thanks for your message! I've noted your input — we'll use this as we shape the study together."
@@ -4426,7 +4426,15 @@ def send_chat(study_id):
     snapshot_lines.append("Research Brief field status (read-only):")
     for key, label in anchor_keys:
         snapshot_lines.append(f"  {label}: [{field_statuses[key]}]")
+    if study_type_val == "synthetic_idi":
+        personas_required = 1
+    elif study_type_val == "synthetic_focus_group":
+        personas_required = 4
+    else:
+        personas_required = 0
     snapshot_lines.append(f"Personas attached: {persona_count}")
+    if personas_required > 0:
+        snapshot_lines.append(f"Personas required: {personas_required} (Lisa fills gaps automatically)")
     oc_block, oc_keys = _extract_optional_context(study_dict)
     if oc_block:
         snapshot_lines.append("")
@@ -4638,8 +4646,9 @@ def run_study(study_id):
                 f"Cannot run: the following Research Brief anchors are missing: {', '.join(anchor_missing)}"
             )
 
-        if persona_count == 0:
-            auto_n = 1 if study_type == "synthetic_idi" else 4
+        min_required = 1 if study_type == "synthetic_idi" else 4
+        if persona_count < min_required:
+            auto_n = min_required - persona_count
             try:
                 mc = {
                     r["key"]: r["value"]
@@ -4691,12 +4700,13 @@ def run_study(study_id):
                     )
                     new_persona_ids.append(p_instance_id)
 
+                all_persona_ids = list(personas_used) + new_persona_ids
                 conn.execute(
                     "UPDATE studies SET personas_used = ? WHERE id = ?",
-                    (json.dumps(new_persona_ids), study_id),
+                    (json.dumps(all_persona_ids), study_id),
                 )
                 conn.commit()
-                personas_used = new_persona_ids
+                personas_used = all_persona_ids
                 persona_count = len(personas_used)
                 study = conn.execute(
                     "SELECT * FROM studies WHERE id = ?", (study_id,)
@@ -4712,12 +4722,9 @@ def run_study(study_id):
                 )
 
         if study_type == "synthetic_idi":
-            if persona_count < 1:
+            if persona_count > 1:
                 conn.close()
-                return render_error("IDI requires at least 1 persona.")
-            if persona_count > 3:
-                conn.close()
-                return render_error("IDI allows max 3 personas.")
+                return render_error("IDI requires exactly 1 persona. Remove extras before running.")
         elif study_type == "synthetic_focus_group":
             if persona_count < 4:
                 conn.close()

@@ -474,11 +474,11 @@
         {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
             {% set all_anchors_panel = has_bp_panel and has_ds_panel and has_mg_panel and has_pc_panel and has_ta_panel and has_dui_panel %}
             {% if configure_study.study_type == 'synthetic_idi' %}
-                {% set personas_valid_panel = persona_count_panel >= 1 and persona_count_panel <= 3 %}
+                {% set personas_valid_panel = persona_count_panel >= 0 and persona_count_panel <= 1 %}
             {% else %}
-                {% set personas_valid_panel = persona_count_panel >= 4 and persona_count_panel <= 6 %}
+                {% set personas_valid_panel = persona_count_panel >= 0 and persona_count_panel <= 6 %}
             {% endif %}
-            {% set checklist_complete = all_anchors_panel and personas_valid_panel %}
+            {% set checklist_complete = all_anchors_panel %}
         {% else %}
             {% set checklist_complete = false %}
         {% endif %}
@@ -770,11 +770,11 @@
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Personas</h3>
             {% if configure_study.study_type == 'synthetic_idi' %}
             <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                IDI requires 1–3 personas. Currently attached: <strong>{{ configure_study_personas|length }}</strong>
+                IDI requires exactly 1 persona. Currently attached: <strong>{{ configure_study_personas|length }}</strong>. Lisa will create the persona if none is selected for reuse.
             </p>
             {% else %}
             <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                Focus Group requires 4–6 personas. Currently attached: <strong>{{ configure_study_personas|length }}</strong>
+                Focus Group requires 4–6 personas. Currently attached: <strong>{{ configure_study_personas|length }}</strong>. Lisa will create any additional personas needed to reach the minimum.
             </p>
             {% endif %}
 
@@ -825,12 +825,12 @@
             {% elif personas_list %}
             <p style="color: #999; font-size: 13px;">All personas are already attached.</p>
             {% else %}
-            <p style="color: #999; font-size: 13px;">Create personas first to attach them to studies.</p>
+            <p style="color: #999; font-size: 13px;">No personas available for reuse. Lisa will create personas when the study runs.</p>
             {% endif %}
 
             {% set persona_count = configure_study_personas|length %}
             {% if configure_study.study_type == 'synthetic_idi' %}
-                {% set personas_valid = persona_count >= 1 and persona_count <= 3 %}
+                {% set personas_valid = persona_count >= 0 and persona_count <= 1 %}
             {% else %}
                 {% set personas_valid = persona_count >= 4 and persona_count <= 6 %}
             {% endif %}
@@ -1151,7 +1151,7 @@
                     </li>
                     <li style="padding: 8px 0 4px; border-top: 1px solid #eee; margin-top: 4px;
                         color: {{ '#27ae60' if personas_valid_panel else '#e74c3c' }};">
-                        {{ '&#10003;' if personas_valid_panel else '&#10007;' }} Personas ({{ persona_count_panel }}/{% if configure_study.study_type == 'synthetic_idi' %}1–3{% else %}4–6{% endif %})
+                        {{ '&#10003;' if personas_valid_panel else '&#10007;' }} Personas ({{ persona_count_panel }}/{% if configure_study.study_type == 'synthetic_idi' %}0–1{% else %}0–6{% endif %}, Lisa fills gaps)
                     </li>
                 </ul>
 
@@ -1383,7 +1383,7 @@
                     <strong>Study Type Limits:</strong>
                     <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
                         <li><strong>Survey:</strong> max 12 questions, max 400 respondents, no persona dossiers</li>
-                        <li><strong>IDI:</strong> 1–3 personas required</li>
+                        <li><strong>IDI:</strong> exactly 1 persona (Lisa creates if not reused)</li>
                         <li><strong>Focus Group:</strong> 4–6 personas required</li>
                     </ul>
                 </div>
@@ -1540,9 +1540,9 @@
             </p>
             <p style="font-size: 13px; color: #999; margin-bottom: 20px;">
                 {% if new_research_type == 'synthetic_idi' %}
-                IDI requires 1–3 attached personas. Complete the 6 required anchors below, then attach personas after saving.
+                IDI uses exactly 1 persona. Lisa will create the persona automatically, or you can attach an existing persona for reuse.
                 {% else %}
-                Focus Group requires 4–6 attached personas. Complete the 6 required anchors below, then attach personas after saving.
+                Focus Group uses 4–6 personas. Lisa will create personas automatically, or you can attach existing personas for reuse.
                 {% endif %}
             </p>
             <form action="/create-study" method="POST">
@@ -1585,8 +1585,10 @@
         <div class="card">
             <div class="card-header">
                 <h2>My Personas</h2>
-                <a href="/?token={{ token }}&new_persona=1" class="btn btn-primary">New Persona</a>
             </div>
+            <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
+                Personas are created by Lisa during study execution. You can browse, search, and reuse existing personas here.
+            </p>
 
             <form method="GET" action="/" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
                 <input type="hidden" name="token" value="{{ token }}">
@@ -1616,7 +1618,6 @@
                         <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ p.persona_instance_id }}</code></td>
                         <td>
                             <a href="/?token={{ token }}&view_persona={{ p.persona_instance_id }}" class="btn btn-primary btn-small">View</a>
-                            <a href="/?token={{ token }}&new_persona=1&clone_from={{ p.persona_instance_id }}" class="btn btn-success btn-small">Clone</a>
                             <form action="/delete-persona/{{ p.persona_instance_id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this persona?');">
                                 <input type="hidden" name="token" value="{{ token }}">
                                 <button type="submit" class="btn btn-danger btn-small">Delete</button>
@@ -1643,7 +1644,7 @@
                 {% if personas_q %}
                 No personas matching "{{ personas_q }}". <a href="/?token={{ token }}">Clear search</a>
                 {% else %}
-                No personas yet. Click "New Persona" to create one.
+                No personas yet. Personas are created by Lisa when you run a study.
                 {% endif %}
             </div>
             {% endif %}
@@ -1795,67 +1796,12 @@
             </div>
 
             <div class="info-msg" style="margin-top: 16px;">
-                This persona is immutable (read-only). To make changes, clone it as a new persona.
+                This persona is immutable (read-only). You can reuse it in future studies by attaching it during study setup.
             </div>
         </div>
         {% endif %}
 
-        {% if show_new_persona %}
-        <div class="card" id="new-persona-section">
-            <h2>{% if clone_source %}Clone Persona as New{% else %}Create New Persona{% endif %}</h2>
-            <p style="font-size: 14px; color: #777; margin-bottom: 20px;">
-                Fill in all 8 dossier sections below. All fields are required. Saving creates a new immutable persona.
-            </p>
-            <form action="/create-persona" method="POST">
-                <input type="hidden" name="token" value="{{ token }}">
-                {% if clone_source %}
-                <div class="info-msg" style="margin-bottom: 16px;">
-                    Cloning from <code>{{ clone_source.persona_instance_id }}</code> ({{ clone_source.name }}). This will create a brand new persona with its own ID.
-                </div>
-                {% endif %}
-                <div class="form-group">
-                    <label for="persona-name">Persona Name</label>
-                    <input type="text" id="persona-name" name="name" required value="{{ clone_source.name if clone_source else '' }}">
-                </div>
-                <div class="form-group">
-                    <label for="p-summary">1. Persona Summary</label>
-                    <textarea id="p-summary" name="persona_summary" rows="3" required>{{ clone_source.persona_summary if clone_source else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label for="p-demo">2. Demographic Frame (coarse attributes only)</label>
-                    <textarea id="p-demo" name="demographic_frame" rows="3" required>{{ clone_source.demographic_frame if clone_source else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label for="p-psycho">3. Psychographic Profile</label>
-                    <textarea id="p-psycho" name="psychographic_profile" rows="3" required>{{ clone_source.psychographic_profile if clone_source else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label for="p-context">4. Contextual Constraints</label>
-                    <textarea id="p-context" name="contextual_constraints" rows="3" required>{{ clone_source.contextual_constraints if clone_source else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label for="p-behav">5. Behavioural Tendencies</label>
-                    <textarea id="p-behav" name="behavioural_tendencies" rows="3" required>{{ clone_source.behavioural_tendencies if clone_source else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label for="p-ai">6. AI Model Provenance (provider family + model id + selection method)</label>
-                    <textarea id="p-ai" name="ai_model_provenance" rows="3" required>{{ clone_source.ai_model_provenance if clone_source else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label for="p-ground">7. Grounding Sources (list)</label>
-                    <textarea id="p-ground" name="grounding_sources" rows="3" required>{{ clone_source.grounding_sources if clone_source else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label for="p-conf">8. Confidence and Limits</label>
-                    <textarea id="p-conf" name="confidence_and_limits" rows="3" required>{{ clone_source.confidence_and_limits if clone_source else '' }}</textarea>
-                </div>
-                <div style="display: flex; gap: 12px; margin-top: 8px;">
-                    <button type="submit" class="btn btn-primary">Save Persona</button>
-                    <a href="/?token={{ token }}" class="btn btn-secondary">Cancel</a>
-                </div>
-            </form>
-        </div>
-        {% endif %}
+        
     </div>
     {% endif %}
 
