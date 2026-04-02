@@ -1418,7 +1418,46 @@
                 }
 
                 var outputText = data.final_report || data.study_output || '';
-                if (outputText) {
+                if (outputText && data.study_type === 'synthetic_survey') {
+                    try {
+                        var surveyJson = JSON.parse(data.study_output || '{}');
+                        html += '<div style="margin-bottom:16px;">';
+                        if (surveyJson.study_title) {
+                            html += '<h4 style="font-size:15px;color:#1a1a2e;margin-bottom:8px;">' + escHtml(surveyJson.study_title) + '</h4>';
+                        }
+                        if (surveyJson.methodology) {
+                            html += '<div style="background:#f0f4ff;padding:10px 14px;border-radius:6px;margin-bottom:12px;font-size:13px;">';
+                            html += '<strong>Methodology:</strong> ' + escHtml(String(surveyJson.methodology.respondent_count || '')) + ' respondents';
+                            if (surveyJson.methodology.target_audience) html += ' &mdash; ' + escHtml(surveyJson.methodology.target_audience);
+                            html += '</div>';
+                        }
+                        if (surveyJson.questions && surveyJson.questions.length) {
+                            surveyJson.questions.forEach(function(q, i) {
+                                html += '<div style="background:#fafafa;border:1px solid #e9ecef;border-radius:6px;padding:12px;margin-bottom:8px;font-size:13px;">';
+                                html += '<strong>Q' + (i + 1) + ':</strong> ' + escHtml(q.q || '') + '<br>';
+                                if (q.results) {
+                                    Object.keys(q.results).forEach(function(k) {
+                                        html += '<span style="display:inline-block;margin:4px 8px 0 0;background:#e8f4fd;padding:2px 8px;border-radius:4px;">' + escHtml(k) + ': <strong>' + escHtml(String(q.results[k])) + '</strong></span>';
+                                    });
+                                }
+                                html += '</div>';
+                            });
+                        }
+                        if (surveyJson.top_findings && surveyJson.top_findings.length) {
+                            html += '<div style="margin-top:12px;"><strong style="font-size:14px;">Top Findings:</strong><ul style="margin:4px 0 0 20px;font-size:13px;line-height:1.8;">';
+                            surveyJson.top_findings.forEach(function(f) { html += '<li>' + escHtml(f) + '</li>'; });
+                            html += '</ul></div>';
+                        }
+                        if (surveyJson.risks_unknowns && surveyJson.risks_unknowns.length) {
+                            html += '<div style="margin-top:12px;"><strong style="font-size:14px;">Risks &amp; Unknowns:</strong><ul style="margin:4px 0 0 20px;font-size:13px;line-height:1.8;">';
+                            surveyJson.risks_unknowns.forEach(function(r) { html += '<li>' + escHtml(r) + '</li>'; });
+                            html += '</ul></div>';
+                        }
+                        html += '</div>';
+                    } catch (e) {
+                        html += '<pre style="background:#fafafa;border:1px solid #e9ecef;border-radius:6px;padding:14px;font-size:13px;white-space:pre-wrap;line-height:1.7;font-family:inherit;max-height:600px;overflow-y:auto;">' + escHtml(outputText) + '</pre>';
+                    }
+                } else if (outputText) {
                     html += '<pre style="background:#fafafa;border:1px solid #e9ecef;border-radius:6px;padding:14px;font-size:13px;white-space:pre-wrap;line-height:1.7;font-family:inherit;max-height:600px;overflow-y:auto;">' + escHtml(outputText) + '</pre>';
                 }
 

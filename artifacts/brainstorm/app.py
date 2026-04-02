@@ -4839,20 +4839,27 @@ def run_study(study_id):
         if p_row:
             persona_names.append(p_row["name"])
 
-    try:
-        return _run_study_execute(conn, study, study_type, personas_used, persona_names, study_id, user, token, ajax)
-    except Exception as exc:
-        print(f"RUN_STUDY_UNHANDLED study={study_id} error={exc}", flush=True)
-        try:
-            conn.close()
-        except Exception:
-            pass
-        if ajax:
-            return jsonify({"ok": False, "error": f"Unexpected execution error: {exc}"}), 500
-        return render_error(f"Unexpected execution error: {exc}")
+    return _run_study_execute(conn, study, study_type, personas_used, persona_names, study_id, user, token, ajax)
 
 
 def _run_study_execute(conn, study, study_type, personas_used, persona_names, study_id, user, token, ajax):
+    _active_conn = [conn]
+    try:
+        return _run_study_core(_active_conn, study, study_type, personas_used, persona_names, study_id, user, token, ajax)
+    except Exception as exc:
+        print(f"RUN_STUDY_UNHANDLED study={study_id} error={exc}", flush=True)
+        if ajax:
+            return jsonify({"ok": False, "error": f"Unexpected execution error: {exc}"}), 500
+        return render_error(f"Unexpected execution error: {exc}")
+    finally:
+        try:
+            _active_conn[0].close()
+        except Exception:
+            pass
+
+
+def _run_study_core(_active_conn, study, study_type, personas_used, persona_names, study_id, user, token, ajax):
+    conn = _active_conn[0]
     output = None
     if study_type == "synthetic_survey":
         try:
@@ -4929,6 +4936,7 @@ def _run_study_execute(conn, study, study_type, personas_used, persona_names, st
                 purpose="lisa_survey_execution",
             )
             conn = get_db()
+            _active_conn[0] = conn
 
             cleaned = raw_llm.strip()
             if cleaned.startswith("```"):
@@ -4947,6 +4955,7 @@ def _run_study_execute(conn, study, study_type, personas_used, persona_names, st
                 conn.execute("SELECT 1")
             except Exception:
                 conn = get_db()
+                _active_conn[0] = conn
 
     elif study_type in ("synthetic_idi", "synthetic_focus_group"):
         try:
@@ -5061,6 +5070,7 @@ def _run_study_execute(conn, study, study_type, personas_used, persona_names, st
                 purpose="lisa_qual_execution",
             )
             conn = get_db()
+            _active_conn[0] = conn
 
             if raw_llm and raw_llm.strip():
                 output = raw_llm.strip()
@@ -5076,6 +5086,7 @@ def _run_study_execute(conn, study, study_type, personas_used, persona_names, st
                 conn.execute("SELECT 1")
             except Exception:
                 conn = get_db()
+                _active_conn[0] = conn
 
     if output is None:
         output = generate_placeholder_output(study_type, dict(study), persona_names)
@@ -5170,7 +5181,6 @@ def _run_study_execute(conn, study, study_type, personas_used, persona_names, st
     )
 
     conn.commit()
-    conn.close()
 
     if ajax:
         result = {
