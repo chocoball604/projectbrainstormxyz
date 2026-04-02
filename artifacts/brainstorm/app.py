@@ -2851,14 +2851,20 @@ def save_discovery(study_id):
     token = get_token()
     user, _ = get_session_data(token)
     if not user or user["state"] != "active":
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "You must be an active user."}), 403
         return render_error("You must be an active user.")
 
     field = request.form.get("field", "").strip()
     value = (request.form.get("value") or "").strip()
 
     if field not in ("business_problem", "decision_to_support"):
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Invalid discovery field."}), 400
         return render_error("Invalid discovery field.")
     if not value:
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Value cannot be empty."}), 400
         return render_error("Value cannot be empty.")
 
     conn = get_db()
@@ -2868,10 +2874,33 @@ def save_discovery(study_id):
     ).fetchone()
     if not study:
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Study not found or not in draft status."}), 404
         return render_error("Study not found or not in draft status.")
 
     conn.execute(f"UPDATE studies SET {field} = ? WHERE id = ?", (value, study_id))
     conn.commit()
+
+    if _is_ajax(request):
+        study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+        study_dict = dict(study)
+        auto_ben_precheck(conn, study_dict, user["id"])
+        personas_used = normalize_personas_used(study_dict.get("personas_used"))
+        precheck = _build_precheck_state(study_dict, len(personas_used))
+        qa_status = study_dict.get("qa_status", "")
+        qa_failures = []
+        if qa_status == "precheck_failed" and study_dict.get("qa_notes"):
+            try:
+                qa_failures = json.loads(study_dict["qa_notes"])
+            except (json.JSONDecodeError, TypeError):
+                qa_failures = []
+        conn.close()
+        return jsonify({
+            "ok": True, "field": field, "value": value,
+            "precheck": precheck,
+            "qa_status": qa_status, "qa_failures": qa_failures,
+        })
+
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
 
@@ -5285,10 +5314,22 @@ def save_single_anchor(study_id):
     if _is_ajax(request):
         study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
         study_dict = dict(study)
+        auto_ben_precheck(conn, study_dict, user["id"])
         personas_used = normalize_personas_used(study_dict.get("personas_used"))
         precheck = _build_precheck_state(study_dict, len(personas_used))
+        qa_status = study_dict.get("qa_status", "")
+        qa_failures = []
+        if qa_status == "precheck_failed" and study_dict.get("qa_notes"):
+            try:
+                qa_failures = json.loads(study_dict["qa_notes"])
+            except (json.JSONDecodeError, TypeError):
+                qa_failures = []
         conn.close()
-        return jsonify({"ok": True, "anchor_key": anchor_key, "anchor_value": anchor_value, "precheck": precheck})
+        return jsonify({
+            "ok": True, "anchor_key": anchor_key, "anchor_value": anchor_value,
+            "precheck": precheck,
+            "qa_status": qa_status, "qa_failures": qa_failures,
+        })
 
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
@@ -5399,12 +5440,22 @@ def attach_persona(study_id):
         if p_row:
             persona_name = p_row["name"]
         study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
-        precheck = _build_precheck_state(dict(study), len(current))
+        study_dict = dict(study)
+        auto_ben_precheck(conn, study_dict, user["id"])
+        precheck = _build_precheck_state(study_dict, len(current))
+        qa_status = study_dict.get("qa_status", "")
+        qa_failures = []
+        if qa_status == "precheck_failed" and study_dict.get("qa_notes"):
+            try:
+                qa_failures = json.loads(study_dict["qa_notes"])
+            except (json.JSONDecodeError, TypeError):
+                qa_failures = []
         conn.close()
         return jsonify({
             "ok": True, "action": "attached",
             "persona_id": instance_id, "persona_name": persona_name,
             "persona_count": len(current), "precheck": precheck,
+            "qa_status": qa_status, "qa_failures": qa_failures,
         })
 
     conn.close()
@@ -5439,12 +5490,22 @@ def detach_persona(study_id):
 
     if _is_ajax(request):
         study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
-        precheck = _build_precheck_state(dict(study), len(current))
+        study_dict = dict(study)
+        auto_ben_precheck(conn, study_dict, user["id"])
+        precheck = _build_precheck_state(study_dict, len(current))
+        qa_status = study_dict.get("qa_status", "")
+        qa_failures = []
+        if qa_status == "precheck_failed" and study_dict.get("qa_notes"):
+            try:
+                qa_failures = json.loads(study_dict["qa_notes"])
+            except (json.JSONDecodeError, TypeError):
+                qa_failures = []
         conn.close()
         return jsonify({
             "ok": True, "action": "detached",
             "persona_id": instance_id,
             "persona_count": len(current), "precheck": precheck,
+            "qa_status": qa_status, "qa_failures": qa_failures,
         })
 
     conn.close()

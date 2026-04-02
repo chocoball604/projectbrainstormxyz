@@ -503,7 +503,7 @@
                     Answer two quick questions so Mark can recommend the best study type.
                 </p>
 
-                <div style="margin-bottom: 16px;">
+                <div id="discovery-slot-business_problem" style="margin-bottom: 16px;">
                     <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">
                         1. Business Problem
                         {% if bp_saved %}<span style="color: #27ae60; font-size: 12px; margin-left: 6px;">Saved</span>{% endif %}
@@ -513,7 +513,7 @@
                         {{ configure_study.business_problem }}
                     </div>
                     {% else %}
-                    <form action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;">
+                    <form class="discovery-form" action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;" data-field="business_problem">
                         <input type="hidden" name="token" value="{{ token }}">
                         <input type="hidden" name="field" value="business_problem">
                         <input type="text" name="value" required placeholder="Describe the business problem in one sentence" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
@@ -522,7 +522,7 @@
                     {% endif %}
                 </div>
 
-                <div style="margin-bottom: 4px;">
+                <div id="discovery-slot-decision_to_support" style="margin-bottom: 4px;">
                     <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">
                         2. Decision to Support
                         {% if ds_saved %}<span style="color: #27ae60; font-size: 12px; margin-left: 6px;">Saved</span>{% endif %}
@@ -532,7 +532,7 @@
                         {{ configure_study.decision_to_support }}
                     </div>
                     {% else %}
-                    <form action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;">
+                    <form class="discovery-form" action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;" data-field="decision_to_support">
                         <input type="hidden" name="token" value="{{ token }}">
                         <input type="hidden" name="field" value="decision_to_support">
                         <input type="text" name="value" required placeholder="What decision will this research support?" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
@@ -1228,6 +1228,7 @@
                 <p style="font-size: 13px; color: #999;">Select a study type to see the checklist.</p>
                 {% endif %}
 
+                <div id="precheck-status-box">
                 {% if configure_study.qa_status == 'precheck_passed' %}
                 <div style="margin-top: 16px; padding: 10px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; text-align: center;">
                     <span style="font-size: 13px; color: #155724; font-weight: 600;">Precheck: Ready to run</span>
@@ -1242,6 +1243,7 @@
                     <span style="font-size: 12px; color: #999;">Set a study type to see precheck status.</span>
                 </div>
                 {% endif %}
+                </div>
             </div>
         </div>
 
@@ -1256,6 +1258,11 @@
                 'product_concept': '4. Product / Concept',
                 'target_audience': '5. Target Audience',
                 'definition_useful_insight': '6. Definition of Useful Insight'
+            };
+
+            var discoveryLabels = {
+                'business_problem': '1. Business Problem',
+                'decision_to_support': '2. Decision to Support'
             };
 
             function updatePrecheckPanel(pc) {
@@ -1291,6 +1298,65 @@
                 }
             }
 
+            function updatePrecheckStatusBox(data) {
+                var box = document.getElementById('precheck-status-box');
+                if (!box) return;
+                if (data.qa_status === 'precheck_passed') {
+                    box.innerHTML = '<div style="margin-top:16px;padding:10px;background:#d4edda;border:1px solid #c3e6cb;border-radius:6px;text-align:center;">'
+                        + '<span style="font-size:13px;color:#155724;font-weight:600;">Precheck: Ready to run</span></div>';
+                } else if (data.qa_status === 'precheck_failed') {
+                    var n = (data.qa_failures || []).length;
+                    var s = n !== 1 ? 's' : '';
+                    box.innerHTML = '<div style="margin-top:16px;padding:10px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;">'
+                        + '<span style="font-size:13px;color:#856404;font-weight:600;">Precheck: ' + n + ' item' + s + ' remaining</span>'
+                        + '<p style="font-size:11px;color:#999;margin:4px 0 0;">Precheck updates automatically as you fill in the brief.</p></div>';
+                }
+            }
+
+            function handleAjaxResponse(data) {
+                if (data.precheck) updatePrecheckPanel(data.precheck);
+                if (data.qa_status) updatePrecheckStatusBox(data);
+            }
+
+            document.querySelectorAll('.discovery-form').forEach(function(form) {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    var fd = new FormData(form);
+                    var field = fd.get('field');
+                    var val = fd.get('value');
+                    var btn = form.querySelector('button[type="submit"]');
+                    btn.disabled = true;
+                    btn.textContent = 'Saving...';
+                    fetch(form.action, {
+                        method: 'POST', body: fd,
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.ok) {
+                            var slot = document.getElementById('discovery-slot-' + field);
+                            if (slot) {
+                                var label = discoveryLabels[field] || field;
+                                slot.innerHTML = '<label style="font-weight:600;font-size:14px;display:block;margin-bottom:4px;">'
+                                    + label + ' <span style="color:#27ae60;font-size:12px;margin-left:6px;">Saved</span></label>'
+                                    + '<div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px 12px;font-size:14px;color:#333;">'
+                                    + val.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>';
+                            }
+                            handleAjaxResponse(data);
+                        } else {
+                            alert(data.error || 'Save failed');
+                            btn.disabled = false;
+                            btn.textContent = 'Save';
+                        }
+                    })
+                    .catch(function() {
+                        btn.disabled = false;
+                        btn.textContent = 'Save';
+                        form.submit();
+                    });
+                });
+            });
+
             document.querySelectorAll('.anchor-form').forEach(function(form) {
                 form.addEventListener('submit', function(e) {
                     e.preventDefault();
@@ -1314,14 +1380,7 @@
                                     + val.replace(/</g,'&lt;').replace(/>/g,'&gt;')
                                     + '</div>';
                             }
-                            if (data.precheck) updatePrecheckPanel(data.precheck);
-                            if (data.precheck && data.precheck.all_anchors) {
-                                var wrapper = slot ? slot.parentElement : null;
-                                if (wrapper && wrapper.querySelector('.anchor-form') === null) {
-                                    var briefHtml = '<div style="background:#e8f5e9;border-radius:6px;padding:16px;margin-bottom:16px;font-size:13px;">'
-                                        + '<p style="margin:0;font-weight:600;color:#27ae60;">Research Brief Complete (all 6 anchors filled)</p></div>';
-                                }
-                            }
+                            handleAjaxResponse(data);
                         } else {
                             alert(data.error || 'Save failed');
                             btn.disabled = false;
@@ -1374,7 +1433,7 @@
                             bindDetach(tr.querySelector('.detach-form'));
                             selectedOpt.remove();
                             sel.selectedIndex = 0;
-                            if (data.precheck) updatePrecheckPanel(data.precheck);
+                            handleAjaxResponse(data);
                         } else {
                             alert(data.error || 'Attach failed');
                         }
@@ -1419,7 +1478,7 @@
                                 var tableArea = document.getElementById('persona-table-area');
                                 tableArea.innerHTML = '<p id="no-personas-msg" style="color:#999;font-size:13px;margin-bottom:16px;">No personas attached yet.</p>';
                             }
-                            if (data.precheck) updatePrecheckPanel(data.precheck);
+                            handleAjaxResponse(data);
                         } else {
                             alert(data.error || 'Remove failed');
                             btn.disabled = false;
