@@ -1,0 +1,95 @@
+REPLIT CODING AGENT — BUGFIX PROMPT (V1A)
+Focus: (A) AJAX partial refresh coverage + (B) Auto persona generation + (C) Persona model pool policy + provenance
+
+Context / Source of truth
+- Use PRD_Mark-PBXYZ_V1A_V4.12 (4.1) as the source of truth:
+  - Global invariant: Chat suggests. Fields decide. Users save.
+  - Persona generation policy: personas must be generated via random selection from an admin-enabled pool of models; GPT-family models must never be used for persona generation. 
+- Current app is a single-page Flask+SQLite (see current app.py baseline). The configure study page has:
+  - discovery fields (Business Problem, Decision to Support)
+  - remaining anchors
+  - precheck panel
+  - attached personas panel
+  - Mark chat panel
+- Per-anchor save for remaining anchors is already done. Precheck visual (glyphs + auto-fillable vs complete) is also already done.
+
+HARD CONSTRAINTS (NON-NEGOTIABLE)
+1) DO NOT change SQLite schema:
+   - no CREATE TABLE / ALTER TABLE / DROP TABLE
+   - no new columns, no migrations, no init_db edits
+2) DO NOT modify brainstorm_v1_replit_singlepage_pack/ or brainstorm.db
+3) Never hold a DB connection open during any LLM call; commit+close before calling; reopen only for writes
+4) Minimal edits only; no refactors outside scope
+5) Keep non-JS fallback if possible (POST+redirect), but the default path should be AJAX/no reload
+
+========================================
+Problem 1 — AJAX partial refresh is inconsistent
+Observed bug
+- Remaining anchors save without full page refresh (good).
+- But Business Problem and Decision to Support still trigger a full page refresh when saved.
+- Mark chat panel also refreshes/loses continuity when these discovery fields are saved (because the page reloads).
+Goal
+- Make the default UX consistent: ALL save actions on the study configure page should update without a full page reload, including:
+  - Business Problem save
+  - Decision to Support save
+  - (already-done) remaining anchor saves
+  - persona attach/detach
+- During any save, the page should not reload, and Mark chat should remain intact and continue functioning normally.
+- After save, update only the affected UI regions:
+  - the saved field row
+  - precheck panel + items remaining
+  - any dependent panels (e.g., required anchors section)
+  - do NOT reset Mark chat
+
+Acceptance criteria
+- Saving Business Problem does not reload the page; the saved state appears immediately.
+- Saving Decision to Support does not reload the page; the saved state appears immediately.
+- Mark chat remains visible and does not reset during those saves.
+- Precheck panel updates immediately during those saves.
+
+========================================
+Problem 2 — “Lisa will create persona if none selected” is no longer true in practice
+Observed bug
+- UI says: “IDI requires exactly 1 persona… Lisa will create the persona if none is selected for reuse.”
+- But user is effectively forced into attaching a persona; there’s no longer a working path where the user attaches none and Lisa creates one at execution.
+Goal
+- Restore V1A behavior:
+  - For IDI/FG: if the user attaches 0 personas, Lisa should create the required personas at execution time (IDI=1, FG=4..6).
+  - User should be able to proceed without manually attaching a persona (reuse is optional).
+- Ensure precheck semantics are coherent:
+  - If persona count is 0 for IDI/FG, it should not be “complete”, but should be “auto-fillable” and non-blocking if policy allows.
+  - Execution must actually trigger persona creation when count is insufficient.
+
+Acceptance criteria
+- IDI draft with 0 attached personas can proceed to execution (after required anchors are saved), and persona(s) are auto-generated.
+- FG draft with fewer than minimum personas can proceed, and missing personas are auto-generated to reach minimum.
+- The attached persona panel and persona counts reflect the newly generated personas after execution begins/completes.
+
+========================================
+Problem 3 — Persona generation model policy + provenance is still wrong
+Observed bug
+- Persona detail still shows a persona generation model that is actually Lisa’s configured model (e.g., openai/gpt-5.4-nano), and that model is NOT in the persona pool.
+- This violates the PRD rule: persona generation must use a random choice from the admin-enabled pool, excluding GPT-family.
+Goal
+- Ensure persona generation uses a model selected randomly from persona_model_pool where status=active.
+- Exclude GPT-family models from persona generation selection (hard rule).
+- Store and display the actual model used to generate EACH persona (persona artifact provenance), not Lisa’s orchestrator model.
+- If the pool has no eligible non-GPT active models, fail gracefully with an admin-actionable error message.
+
+Acceptance criteria
+- After auto persona generation, the persona’s provenance displays the pool-selected model (and selection method), and does not show Lisa’s model as the persona model.
+- GPT-family models never appear as persona generation models, even if configured for Mark/Lisa/Ben.
+- The selected model must be an active pool member at the time of generation.
+
+========================================
+What to deliver (MANDATORY)
+At the end of your response, include exactly:
+(a) Files changed
+(b) What changed
+(c) How to test (step-by-step)
+
+Your test steps must include:
+1) Save Business Problem without page reload; verify precheck updates and chat remains intact
+2) Save Decision to Support without page reload; verify precheck updates and chat remains intact
+3) Run IDI with 0 personas attached; verify personas are auto-generated
+4) Verify persona provenance shows the pool-selected model (non-GPT) and matches active pool membership
