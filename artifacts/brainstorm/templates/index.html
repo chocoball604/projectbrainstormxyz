@@ -1265,6 +1265,11 @@
                 'decision_to_support': '2. Decision to Support'
             };
 
+            function escHtml(s) {
+                if (!s) return '';
+                return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+            }
+
             function updatePrecheckPanel(pc) {
                 var fields = [
                     {key: 'has_bp', label: 'Business Problem'},
@@ -1338,9 +1343,9 @@
                             if (slot) {
                                 var label = discoveryLabels[field] || field;
                                 slot.innerHTML = '<label style="font-weight:600;font-size:14px;display:block;margin-bottom:4px;">'
-                                    + label + ' <span style="color:#27ae60;font-size:12px;margin-left:6px;">Saved</span></label>'
+                                    + escHtml(label) + ' <span style="color:#27ae60;font-size:12px;margin-left:6px;">Saved</span></label>'
                                     + '<div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px 12px;font-size:14px;color:#333;">'
-                                    + val.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>';
+                                    + escHtml(val) + '</div>';
                             }
                             handleAjaxResponse(data);
                         } else {
@@ -1376,8 +1381,8 @@
                             var slot = document.getElementById('anchor-slot-' + key);
                             if (slot) {
                                 slot.innerHTML = '<div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:13px;">'
-                                    + '<strong style="color:#27ae60;">\u2713 ' + (anchorLabels[key] || key) + ':</strong> '
-                                    + val.replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                                    + '<strong style="color:#27ae60;">\u2713 ' + escHtml(anchorLabels[key] || key) + ':</strong> '
+                                    + escHtml(val)
                                     + '</div>';
                             }
                             handleAjaxResponse(data);
@@ -1421,13 +1426,13 @@
                             }
                             var tr = document.createElement('tr');
                             tr.setAttribute('data-persona-id', data.persona_id);
-                            tr.innerHTML = '<td>' + (data.persona_name || data.persona_id).replace(/</g,'&lt;') + '</td>'
-                                + '<td><code style="font-size:12px;background:#f0f0f0;padding:2px 6px;border-radius:3px;">' + data.persona_id + '</code></td>'
+                            tr.innerHTML = '<td>' + escHtml(data.persona_name || data.persona_id) + '</td>'
+                                + '<td><code style="font-size:12px;background:#f0f0f0;padding:2px 6px;border-radius:3px;">' + escHtml(data.persona_id) + '</code></td>'
                                 + '<td><form class="detach-form" action="/detach-persona/' + studyId + '" method="POST" style="display:inline;">'
-                                + '<input type="hidden" name="token" value="' + token + '">'
-                                + '<input type="hidden" name="persona_instance_id" value="' + data.persona_id + '">'
+                                + '<input type="hidden" name="token" value="' + escHtml(token) + '">'
+                                + '<input type="hidden" name="persona_instance_id" value="' + escHtml(data.persona_id) + '">'
                                 + '<button type="submit" class="btn btn-danger btn-small">Remove</button></form>'
-                                + ' <a href="/?token=' + token + '&view_persona=' + data.persona_id + '" class="btn btn-primary btn-small">View</a></td>';
+                                + ' <a href="/?token=' + encodeURIComponent(token) + '&view_persona=' + encodeURIComponent(data.persona_id) + '" class="btn btn-primary btn-small">View</a></td>';
                             tbody.appendChild(tr);
                             bindDetach(tr.querySelector('.detach-form'));
                             selectedOpt.remove();
@@ -1478,12 +1483,12 @@
                             } else if (attachArea) {
                                 var name = row ? row.querySelector('td').textContent : pid;
                                 attachArea.innerHTML = '<form id="attach-form" action="/attach-persona/' + studyId + '" method="POST" style="display:flex;gap:8px;align-items:flex-end;">'
-                                    + '<input type="hidden" name="token" value="' + token + '">'
+                                    + '<input type="hidden" name="token" value="' + escHtml(token) + '">'
                                     + '<div style="flex:1;">'
                                     + '<label style="font-size:13px;font-weight:500;color:#555;display:block;margin-bottom:4px;">Select persona to attach</label>'
                                     + '<select name="persona_instance_id" required style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff;">'
                                     + '<option value="">\u2014 Choose \u2014</option>'
-                                    + '<option value="' + pid + '">' + name.replace(/</g,'&lt;') + ' (' + pid + ')</option>'
+                                    + '<option value="' + escHtml(pid) + '">' + escHtml(name) + ' (' + escHtml(pid) + ')</option>'
                                     + '</select></div>'
                                     + '<button type="submit" class="btn btn-success btn-small" style="white-space:nowrap;">Attach</button></form>';
                                 var newAttachForm = document.getElementById('attach-form');
