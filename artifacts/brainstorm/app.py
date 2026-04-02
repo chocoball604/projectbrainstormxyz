@@ -5377,44 +5377,70 @@ def save_single_anchor(study_id):
     return redirect(url_for("index", token=token, configure=study_id))
 
 
-@app.route("/save-optional-context/<int:study_id>", methods=["POST"])
-def save_optional_context(study_id):
+OPTIONAL_CONTEXT_FIELDS = {
+    "competitive_context": "Competitive context",
+    "cultural_sensitivities": "Cultural sensitivities",
+    "adoption_barriers": "Adoption barriers",
+    "risk_tolerance": "Risk tolerance",
+}
+
+
+@app.route("/save-optional-context-field/<int:study_id>", methods=["POST"])
+def save_optional_context_field(study_id):
     token = get_token()
     user, _ = get_session_data(token)
     if not user or user["state"] != "active":
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "You must be an active user."}), 403
         return render_error("You must be an active user.")
 
+    field_key = (request.form.get("field_key") or "").strip()
+    field_value = (request.form.get("field_value") or "").strip()
+
+    if field_key not in OPTIONAL_CONTEXT_FIELDS:
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Invalid field key."}), 400
+        return render_error("Invalid optional context field.")
+
     conn = get_db()
-    try:
-        study = conn.execute(
-            "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
-            (study_id, user["id"]),
-        ).fetchone()
-        if not study:
-            conn.close()
-            return render_error("Draft study not found.")
-
-        existing_brief = {}
-        if study["survey_brief"]:
-            try:
-                existing_brief = json.loads(study["survey_brief"])
-            except (json.JSONDecodeError, TypeError):
-                existing_brief = {}
-
-        existing_brief["optional_context"] = {
-            "competitive_context": (request.form.get("competitive_context") or "").strip(),
-            "cultural_sensitivities": (request.form.get("cultural_sensitivities") or "").strip(),
-            "adoption_barriers": (request.form.get("adoption_barriers") or "").strip(),
-            "risk_tolerance": (request.form.get("risk_tolerance") or "").strip(),
-        }
-
-        conn.execute(
-            "UPDATE studies SET survey_brief = ? WHERE id = ?",
-            (json.dumps(existing_brief), study_id),
-        )
-        conn.commit()
-    finally:
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Draft study not found."}), 404
+        return render_error("Draft study not found.")
+
+    existing_brief = {}
+    if study["survey_brief"]:
+        try:
+            existing_brief = json.loads(study["survey_brief"])
+        except (json.JSONDecodeError, TypeError):
+            existing_brief = {}
+
+    oc = existing_brief.get("optional_context", {})
+    if not isinstance(oc, dict):
+        oc = {}
+    oc[field_key] = field_value
+    existing_brief["optional_context"] = oc
+
+    conn.execute(
+        "UPDATE studies SET survey_brief = ? WHERE id = ?",
+        (json.dumps(existing_brief), study_id),
+    )
+    conn.commit()
+    conn.close()
+
+    if _is_ajax(request):
+        return jsonify({
+            "ok": True,
+            "field_key": field_key,
+            "field_value": field_value,
+            "field_label": OPTIONAL_CONTEXT_FIELDS[field_key],
+        })
+
     return redirect(url_for("index", token=token, configure=study_id))
 
 

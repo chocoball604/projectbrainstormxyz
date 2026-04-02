@@ -670,26 +670,33 @@
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Optional context <span style="font-weight: 400; font-size: 12px; color: #999;">(optional — does not affect Precheck)</span></h3>
             <p style="font-size: 12px; color: #999; margin-bottom: 12px;">Optional context to enrich Mark/Lisa's work. These fields never block execution and do not change Precheck.</p>
-            <form action="/save-optional-context/{{ configure_study.id }}" method="POST">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div class="form-group">
-                    <label>Competitive context <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                    <textarea name="competitive_context" rows="2" placeholder="Key competitors, market positioning, competitive dynamics...">{{ oc_survey.get('competitive_context', '') if oc_survey else '' }}</textarea>
+            {% set oc_fields = [
+                ('competitive_context', 'Competitive context', 'Key competitors, market positioning, competitive dynamics...'),
+                ('cultural_sensitivities', 'Cultural sensitivities', 'Cultural factors, local norms, sensitivities to consider...'),
+                ('adoption_barriers', 'Adoption barriers', 'Known barriers to adoption, switching costs, resistance factors...'),
+                ('risk_tolerance', 'Risk tolerance', 'Risk appetite of the target audience or business context...')
+            ] %}
+            {% for fk, fl, fp in oc_fields %}
+            {% set fv = oc_survey.get(fk, '') if oc_survey else '' %}
+            <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
+                {% if fv and fv|trim|length > 0 %}
+                <div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;">
+                    <strong style="color:#27ae60;">&#10003; {{ fl }}:</strong> {{ fv }}
+                    <a href="#" class="oc-edit-link" data-field="{{ fk }}" data-label="{{ fl }}" data-placeholder="{{ fp }}" data-value="{{ fv }}" data-action="/save-optional-context-field/{{ configure_study.id }}" style="margin-left:8px;font-size:12px;color:#5C7E8F;">Edit</a>
                 </div>
-                <div class="form-group">
-                    <label>Cultural sensitivities <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                    <textarea name="cultural_sensitivities" rows="2" placeholder="Cultural factors, local norms, sensitivities to consider...">{{ oc_survey.get('cultural_sensitivities', '') if oc_survey else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label>Adoption barriers <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                    <textarea name="adoption_barriers" rows="2" placeholder="Known barriers to adoption, switching costs, resistance factors...">{{ oc_survey.get('adoption_barriers', '') if oc_survey else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label>Risk tolerance <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                    <textarea name="risk_tolerance" rows="2" placeholder="Risk appetite of the target audience or business context...">{{ oc_survey.get('risk_tolerance', '') if oc_survey else '' }}</textarea>
-                </div>
-                <button type="submit" class="btn btn-primary" style="background: #5C7E8F;">Save Optional Context</button>
-            </form>
+                {% else %}
+                <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="field_key" value="{{ fk }}">
+                    <div class="form-group" style="margin-bottom:4px;">
+                        <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                        <textarea name="field_value" rows="2" placeholder="{{ fp }}"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">Save</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
 
             {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
 
@@ -797,26 +804,33 @@
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Optional context <span style="font-weight: 400; font-size: 12px; color: #999;">(optional — does not affect Precheck)</span></h3>
             <p style="font-size: 12px; color: #999; margin-bottom: 12px;">Optional context to enrich Mark/Lisa's work. These fields never block execution and do not change Precheck.</p>
-            <form action="/save-optional-context/{{ configure_study.id }}" method="POST">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div class="form-group">
-                    <label>Competitive context <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                    <textarea name="competitive_context" rows="2" placeholder="Key competitors, market positioning, competitive dynamics...">{{ oc.get('competitive_context', '') if oc else '' }}</textarea>
+            {% set oc_fields_idi = [
+                ('competitive_context', 'Competitive context', 'Key competitors, market positioning, competitive dynamics...'),
+                ('cultural_sensitivities', 'Cultural sensitivities', 'Cultural factors, local norms, sensitivities to consider...'),
+                ('adoption_barriers', 'Adoption barriers', 'Known barriers to adoption, switching costs, resistance factors...'),
+                ('risk_tolerance', 'Risk tolerance', 'Risk appetite of the target audience or business context...')
+            ] %}
+            {% for fk, fl, fp in oc_fields_idi %}
+            {% set fv = oc.get(fk, '') if oc else '' %}
+            <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
+                {% if fv and fv|trim|length > 0 %}
+                <div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;">
+                    <strong style="color:#27ae60;">&#10003; {{ fl }}:</strong> {{ fv }}
+                    <a href="#" class="oc-edit-link" data-field="{{ fk }}" data-label="{{ fl }}" data-placeholder="{{ fp }}" data-value="{{ fv }}" data-action="/save-optional-context-field/{{ configure_study.id }}" style="margin-left:8px;font-size:12px;color:#5C7E8F;">Edit</a>
                 </div>
-                <div class="form-group">
-                    <label>Cultural sensitivities <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                    <textarea name="cultural_sensitivities" rows="2" placeholder="Cultural factors, local norms, sensitivities to consider...">{{ oc.get('cultural_sensitivities', '') if oc else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label>Adoption barriers <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                    <textarea name="adoption_barriers" rows="2" placeholder="Known barriers to adoption, switching costs, resistance factors...">{{ oc.get('adoption_barriers', '') if oc else '' }}</textarea>
-                </div>
-                <div class="form-group">
-                    <label>Risk tolerance <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                    <textarea name="risk_tolerance" rows="2" placeholder="Risk appetite of the target audience or business context...">{{ oc.get('risk_tolerance', '') if oc else '' }}</textarea>
-                </div>
-                <button type="submit" class="btn btn-primary" style="background: #5C7E8F;">Save Optional Context</button>
-            </form>
+                {% else %}
+                <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="field_key" value="{{ fk }}">
+                    <div class="form-group" style="margin-bottom:4px;">
+                        <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                        <textarea name="field_value" rows="2" placeholder="{{ fp }}"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">Save</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
 
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Personas</h3>
             {% if configure_study.study_type == 'synthetic_idi' %}
@@ -1397,6 +1411,76 @@
                         btn.textContent = 'Save';
                         form.submit();
                     });
+                });
+            });
+
+            function ocRenderSaved(slot, fieldKey, label, val, actionUrl) {
+                slot.innerHTML = '<div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;">'
+                    + '<strong style="color:#27ae60;">\u2713 ' + escHtml(label) + ':</strong> ' + escHtml(val)
+                    + ' <a href="#" class="oc-edit-link" style="margin-left:8px;font-size:12px;color:#5C7E8F;">Edit</a></div>';
+                slot.querySelector('.oc-edit-link').addEventListener('click', function(ev) {
+                    ev.preventDefault();
+                    ocRenderForm(slot, fieldKey, label, val, actionUrl);
+                });
+            }
+
+            function ocRenderForm(slot, fieldKey, label, currentVal, actionUrl) {
+                slot.innerHTML = '<form class="oc-field-form" action="' + escHtml(actionUrl) + '" method="POST">'
+                    + '<input type="hidden" name="token" value="' + escHtml(token) + '">'
+                    + '<input type="hidden" name="field_key" value="' + escHtml(fieldKey) + '">'
+                    + '<div class="form-group" style="margin-bottom:4px;">'
+                    + '<label>' + escHtml(label) + ' <span style="font-weight:400;color:#999;">(optional)</span></label>'
+                    + '<textarea name="field_value" rows="2">' + escHtml(currentVal) + '</textarea></div>'
+                    + '<button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">Save</button></form>';
+                bindOcForm(slot.querySelector('.oc-field-form'));
+            }
+
+            function bindOcForm(form) {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    var fd = new FormData(form);
+                    var fieldKey = fd.get('field_key');
+                    var val = fd.get('field_value');
+                    var btn = form.querySelector('button[type="submit"]');
+                    btn.disabled = true;
+                    btn.textContent = 'Saving...';
+                    fetch(form.action, {
+                        method: 'POST', body: fd,
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.ok) {
+                            var slot = document.getElementById('oc-slot-' + fieldKey);
+                            if (slot) {
+                                ocRenderSaved(slot, fieldKey, data.field_label || fieldKey, data.field_value || val, form.action);
+                            }
+                        } else {
+                            alert(data.error || 'Save failed');
+                            btn.disabled = false;
+                            btn.textContent = 'Save';
+                        }
+                    })
+                    .catch(function() {
+                        btn.disabled = false;
+                        btn.textContent = 'Save';
+                        form.submit();
+                    });
+                });
+            }
+            document.querySelectorAll('.oc-field-form').forEach(bindOcForm);
+
+            document.querySelectorAll('.oc-edit-link').forEach(function(link) {
+                link.addEventListener('click', function(ev) {
+                    ev.preventDefault();
+                    var fieldKey = link.getAttribute('data-field');
+                    var label = link.getAttribute('data-label');
+                    var currentVal = link.getAttribute('data-value') || '';
+                    var actionUrl = link.getAttribute('data-action') || '';
+                    var slot = document.getElementById('oc-slot-' + fieldKey);
+                    if (slot && actionUrl) {
+                        ocRenderForm(slot, fieldKey, label, currentVal, actionUrl);
+                    }
                 });
             });
 
