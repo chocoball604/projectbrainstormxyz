@@ -4839,6 +4839,20 @@ def run_study(study_id):
         if p_row:
             persona_names.append(p_row["name"])
 
+    try:
+        return _run_study_execute(conn, study, study_type, personas_used, persona_names, study_id, user, token, ajax)
+    except Exception as exc:
+        print(f"RUN_STUDY_UNHANDLED study={study_id} error={exc}", flush=True)
+        try:
+            conn.close()
+        except Exception:
+            pass
+        if ajax:
+            return jsonify({"ok": False, "error": f"Unexpected execution error: {exc}"}), 500
+        return render_error(f"Unexpected execution error: {exc}")
+
+
+def _run_study_execute(conn, study, study_type, personas_used, persona_names, study_id, user, token, ajax):
     output = None
     if study_type == "synthetic_survey":
         try:
