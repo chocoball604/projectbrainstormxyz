@@ -190,6 +190,9 @@
             padding: 20px 0;
             text-align: center;
         }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -987,13 +990,14 @@
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
 
+            <div id="run-study-section" data-study-id="{{ configure_study.id }}">
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Run Study</h3>
             {% if configure_study.qa_status == 'precheck_passed' %}
                 <p style="font-size: 13px; color: #27ae60; margin-bottom: 4px; font-weight: 600;">
                     Precheck: Ready to run
                 </p>
                 <p style="font-size: 12px; color: #888; margin: 0 0 12px;">Precheck updates automatically as you fill in the brief.</p>
-                <form action="/run-study/{{ configure_study.id }}" method="POST">
+                <form action="/run-study/{{ configure_study.id }}" method="POST" id="run-study-form">
                     <input type="hidden" name="token" value="{{ token }}">
                     <button type="submit" class="btn btn-success" onclick="return confirm('Run this study?');">Run Study</button>
                 </form>
@@ -1015,6 +1019,7 @@
                     Set a study type to see precheck status.
                 </p>
             {% endif %}
+            </div>
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Chat with Mark</h3>
@@ -1317,19 +1322,124 @@
                 }
             }
 
+            var _executionRunning = false;
+            var _previousQaStatus = '{{ configure_study.qa_status or "" }}';
+
             function updatePrecheckStatusBox(data) {
                 var box = document.getElementById('precheck-status-box');
                 if (!box) return;
                 if (data.qa_status === 'precheck_passed') {
                     box.innerHTML = '<div style="margin-top:16px;padding:10px;background:#d4edda;border:1px solid #c3e6cb;border-radius:6px;text-align:center;">'
                         + '<span style="font-size:13px;color:#155724;font-weight:600;">Precheck: Ready to run</span></div>';
+                    if (_previousQaStatus !== 'precheck_passed' && !_executionRunning) {
+                        _previousQaStatus = 'precheck_passed';
+                        autoRunStudy();
+                    }
+                    _previousQaStatus = 'precheck_passed';
                 } else if (data.qa_status === 'precheck_failed') {
+                    _previousQaStatus = 'precheck_failed';
                     var n = (data.qa_failures || []).length;
                     var s = n !== 1 ? 's' : '';
                     box.innerHTML = '<div style="margin-top:16px;padding:10px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;">'
                         + '<span style="font-size:13px;color:#856404;font-weight:600;">Precheck: ' + n + ' item' + s + ' remaining</span>'
                         + '<p style="font-size:11px;color:#999;margin:4px 0 0;">Precheck updates automatically as you fill in the brief.</p></div>';
                 }
+            }
+
+            function autoRunStudy() {
+                if (_executionRunning) return;
+                _executionRunning = true;
+                var section = document.getElementById('run-study-section');
+                if (!section) { _executionRunning = false; return; }
+                var sid = section.getAttribute('data-study-id');
+                if (!sid) { _executionRunning = false; return; }
+
+                section.innerHTML = '<h3 style="font-size:16px;color:#1a1a2e;margin-bottom:12px;">Run Study</h3>'
+                    + '<div style="background:#e8f4fd;border:1px solid #b8daff;border-radius:8px;padding:24px;text-align:center;">'
+                    + '<div style="display:inline-block;width:28px;height:28px;border:3px solid #5C7E8F;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px;"></div>'
+                    + '<p style="font-size:14px;color:#004085;font-weight:600;margin:0 0 4px;">Executing study\u2026</p>'
+                    + '<p style="font-size:12px;color:#666;margin:0;">Lisa is generating your research output. This may take a minute.</p>'
+                    + '</div>';
+
+                var fd = new FormData();
+                fd.append('token', token);
+                fetch('/run-study/' + sid, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: fd
+                })
+                .then(function(resp) { return resp.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        renderStudyOutput(section, data);
+                    } else {
+                        renderExecError(section, sid, data.error || 'Execution failed.');
+                    }
+                })
+                .catch(function(err) {
+                    renderExecError(section, sid, 'Network error: ' + err.message);
+                });
+            }
+
+            function renderStudyOutput(section, data) {
+                var html = '<h3 style="font-size:16px;color:#1a1a2e;margin-bottom:12px;">Study Output</h3>';
+
+                var statusBadge = data.final_status === 'completed' ? 'badge-completed' : 'badge-qa_blocked';
+                var statusLabel = data.final_status === 'completed' ? 'completed' : data.final_status;
+                html += '<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+                html += '<span class="badge ' + statusBadge + '">' + escHtml(statusLabel) + '</span>';
+                html += '<span style="font-size:13px;color:#777;">Type: ' + escHtml(data.study_type || '') + '</span>';
+                var qd = (data.qa_decision || '').toLowerCase();
+                if (qd === 'pass') html += '<span class="badge badge-qa-pass">QA: Pass</span>';
+                else if (qd === 'fail') html += '<span class="badge badge-qa-fail">QA: Needs review</span>';
+                else if (qd === 'downgrade') html += '<span class="badge badge-qa-downgrade">QA: Downgrade</span>';
+                html += '</div>';
+
+                if (data.confidence_labels) {
+                    var cl = data.confidence_labels;
+                    html += '<div style="background:#e8f4fd;border:1px solid #b8daff;border-radius:6px;padding:12px;margin-bottom:16px;font-size:13px;color:#004085;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">';
+                    html += '<strong>Confidence Labels:</strong>';
+                    html += '<span style="background:#d4edda;color:#155724;padding:3px 10px;border-radius:4px;font-weight:600;">Strong: ' + escHtml(String(cl.Strong || 0)) + '</span>';
+                    html += '<span style="background:#fff3cd;color:#856404;padding:3px 10px;border-radius:4px;font-weight:600;">Indicative: ' + escHtml(String(cl.Indicative || 0)) + '</span>';
+                    html += '<span style="background:#f8d7da;color:#721c24;padding:3px 10px;border-radius:4px;font-weight:600;">Exploratory: ' + escHtml(String(cl.Exploratory || 0)) + '</span>';
+                    html += '</div>';
+                }
+
+                if (data.final_status === 'qa_blocked') {
+                    html += '<div style="background:#f8d7da;border:1px solid #f5c6cb;border-radius:6px;padding:16px;margin-bottom:16px;font-size:14px;color:#721c24;">';
+                    html += '<strong>QA BLOCKED</strong><br>This study\'s output has been blocked by the QA gate (Ben).<br>';
+                    html += '<strong>Reason:</strong> ' + escHtml(data.qa_notes || 'No notes provided.');
+                    html += '</div>';
+                }
+
+                var outputText = data.final_report || data.study_output || '';
+                if (outputText) {
+                    html += '<pre style="background:#fafafa;border:1px solid #e9ecef;border-radius:6px;padding:14px;font-size:13px;white-space:pre-wrap;line-height:1.7;font-family:inherit;max-height:600px;overflow-y:auto;">' + escHtml(outputText) + '</pre>';
+                }
+
+                html += '<div style="margin-top:16px;display:flex;gap:12px;">';
+                html += '<a href="/?token=' + encodeURIComponent(token) + '&view_output=' + data.study_id + '" class="btn btn-primary">View Full Output</a>';
+                html += '<a href="/?token=' + encodeURIComponent(token) + '" class="btn btn-secondary">Back to Dashboard</a>';
+                html += '</div>';
+
+                html += '<div style="background:#f8f9fa;border:1px solid #e0e0e0;border-radius:6px;padding:14px;margin-top:16px;font-size:12px;color:#888;line-height:1.6;">';
+                html += '<strong>Disclaimer</strong><br>';
+                html += 'This output was generated by an experimental AI\u2011powered simulation system. All personas, behaviours, and insights are synthetic and do not represent real individuals or guaranteed real\u2011world outcomes.';
+                html += '</div>';
+
+                section.innerHTML = html;
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            function renderExecError(section, sid, errorMsg) {
+                _executionRunning = false;
+                section.innerHTML = '<h3 style="font-size:16px;color:#1a1a2e;margin-bottom:12px;">Run Study</h3>'
+                    + '<div style="background:#f8d7da;border:1px solid #f5c6cb;border-radius:8px;padding:16px;margin-bottom:12px;">'
+                    + '<p style="font-size:14px;color:#721c24;font-weight:600;margin:0 0 8px;">Execution failed</p>'
+                    + '<p style="font-size:13px;color:#721c24;margin:0;">' + escHtml(errorMsg) + '</p>'
+                    + '</div>'
+                    + '<button onclick="autoRunStudy()" class="btn btn-success" style="margin-right:8px;">Retry</button>'
+                    + '<a href="/?token=' + encodeURIComponent(token) + '&configure=' + sid + '" class="btn btn-secondary">Reload page</a>';
             }
 
             function handleAjaxResponse(data) {

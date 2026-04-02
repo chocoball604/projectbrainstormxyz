@@ -4638,7 +4638,10 @@ def send_chat(study_id):
 def run_study(study_id):
     token = get_token()
     user, _ = get_session_data(token)
+    ajax = _is_ajax(request)
     if not user or user["state"] != "active":
+        if ajax:
+            return jsonify({"ok": False, "error": "You must be an active user."}), 403
         return render_error("You must be an active user.")
 
     conn = get_db()
@@ -4648,10 +4651,14 @@ def run_study(study_id):
     ).fetchone()
     if not study:
         conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": "Draft study not found or already executed."}), 404
         return render_error("Draft study not found or already executed.")
 
     if study["qa_status"] != "precheck_passed":
         conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": "Precheck has not passed yet."}), 400
         return render_error(
             "You must pass Ben's QA precheck before running the study. Click 'Ready for QA Review' first."
         )
@@ -4659,6 +4666,8 @@ def run_study(study_id):
     study_type = study["study_type"]
     if not study_type:
         conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": "You must select a study type before running the study."}), 400
         return render_error("You must select a study type before running the study.")
 
     personas_used = normalize_personas_used(study["personas_used"])
@@ -4669,13 +4678,19 @@ def run_study(study_id):
         q_count = study["question_count"] or 8
         if r_count < 1 or r_count > 400:
             conn.close()
+            if ajax:
+                return jsonify({"ok": False, "error": "Survey respondent count must be between 1 and 400."}), 400
             return render_error("Survey respondent count must be between 1 and 400.")
         if q_count < 1 or q_count > 12:
             conn.close()
+            if ajax:
+                return jsonify({"ok": False, "error": "Survey question count must be between 1 and 12."}), 400
             return render_error("Survey question count must be between 1 and 12.")
         sq = json.loads(study["survey_questions"] or "[]")
         if len(sq) != q_count:
             conn.close()
+            if ajax:
+                return jsonify({"ok": False, "error": f"Survey must have exactly {q_count} questions (currently {len(sq)})."}), 400
             return render_error(
                 f"Survey must have exactly {q_count} questions (currently {len(sq)}). Save your questions first."
             )
@@ -4694,9 +4709,10 @@ def run_study(study_id):
                 anchor_missing.append(label)
         if anchor_missing:
             conn.close()
-            return render_error(
-                f"Cannot run: the following Research Brief anchors are missing: {', '.join(anchor_missing)}"
-            )
+            msg = f"Cannot run: the following Research Brief anchors are missing: {', '.join(anchor_missing)}"
+            if ajax:
+                return jsonify({"ok": False, "error": msg}), 400
+            return render_error(msg)
 
         min_required = 1 if study_type == "synthetic_idi" else 4
         if persona_count < min_required:
@@ -4706,17 +4722,16 @@ def run_study(study_id):
                 healthy_models, excluded_fail, pool_status = _get_healthy_pool_models(conn)
                 if pool_status == "no_eligible":
                     conn.close()
-                    return render_error(
-                        "No eligible persona generation models in pool (GPT-family excluded). "
-                        "An admin must add non-GPT models to the persona model pool."
-                    )
+                    msg_ne = "No eligible persona generation models in pool (GPT-family excluded). An admin must add non-GPT models to the persona model pool."
+                    if ajax:
+                        return jsonify({"ok": False, "error": msg_ne}), 500
+                    return render_error(msg_ne)
                 if pool_status == "all_fail":
                     conn.close()
-                    return render_error(
-                        "All eligible persona models failed their last health check: "
-                        + ", ".join(excluded_fail) + ". "
-                        "An admin must run a health check or fix the model pool before running a study."
-                    )
+                    msg_af = "All eligible persona models failed their last health check: " + ", ".join(excluded_fail) + ". An admin must run a health check or fix the model pool before running a study."
+                    if ajax:
+                        return jsonify({"ok": False, "error": msg_af}), 500
+                    return render_error(msg_af)
                 if excluded_fail:
                     fail_warning = "Models excluded from persona pool (health check FAIL): " + ", ".join(excluded_fail)
                     print(f"PERSONA_POOL_FAIL_EXCLUSION study={study_id} excluded={excluded_fail}", flush=True)
@@ -4793,20 +4808,27 @@ def run_study(study_id):
             except Exception as e:
                 conn.close()
                 print(f"AUTO_PERSONAS_FAILED study={study_id} reason={e}")
-                return render_error(
-                    f"Auto-persona generation failed: {e}. Please attach personas manually or contact admin."
-                )
+                msg_ap = f"Auto-persona generation failed: {e}. Please attach personas manually or contact admin."
+                if ajax:
+                    return jsonify({"ok": False, "error": msg_ap}), 500
+                return render_error(msg_ap)
 
         if study_type == "synthetic_idi":
             if persona_count > 1:
                 conn.close()
+                if ajax:
+                    return jsonify({"ok": False, "error": "IDI requires exactly 1 persona. Remove extras before running."}), 400
                 return render_error("IDI requires exactly 1 persona. Remove extras before running.")
         elif study_type == "synthetic_focus_group":
             if persona_count < 4:
                 conn.close()
+                if ajax:
+                    return jsonify({"ok": False, "error": "Focus Group requires at least 4 personas."}), 400
                 return render_error("Focus Group requires at least 4 personas.")
             if persona_count > 6:
                 conn.close()
+                if ajax:
+                    return jsonify({"ok": False, "error": "Focus Group allows max 6 personas."}), 400
                 return render_error("Focus Group allows max 6 personas.")
 
     persona_names = []
@@ -5135,6 +5157,24 @@ def run_study(study_id):
 
     conn.commit()
     conn.close()
+
+    if ajax:
+        result = {
+            "ok": True,
+            "study_id": study_id,
+            "study_type": study_type,
+            "final_status": final_status,
+            "qa_decision": qa_decision,
+            "qa_notes": qa_notes,
+            "study_output": output,
+            "final_report": final_report,
+        }
+        try:
+            result["confidence_labels"] = json.loads(confidence_summary)
+        except (json.JSONDecodeError, TypeError):
+            result["confidence_labels"] = None
+        return jsonify(result)
+
     return redirect(url_for("index", token=token, view_output=study_id))
 
 
