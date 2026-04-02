@@ -4413,6 +4413,8 @@ def send_chat(study_id):
 
     if bp_status == "empty" or ds_status == "empty":
         study_phase = "discovery"
+    elif not study_type_val:
+        study_phase = "discovery"
     elif all_saved:
         study_phase = "ready_for_QA"
     else:
@@ -4476,7 +4478,7 @@ def send_chat(study_id):
         "  b) Else if Decision to Support is [empty]: ask ONLY for Decision to Support.\n"
         "  c) Else (both BP and Decision are [saved]): recommend ONE study type "
         "(Synthetic Survey vs Synthetic IDI vs Synthetic Focus Group) based on the business problem, "
-        "then ask the user to confirm by selecting a study type using the buttons on this page. "
+        "then ask the user to confirm their preferred study type. "
         "Do NOT proceed to any other questions.\n"
         "  d) You MUST NOT ask about Market/Geography, Product/Concept, Target Audience, "
         "or Definition of Useful Insight until Study Type is selected.\n\n"
