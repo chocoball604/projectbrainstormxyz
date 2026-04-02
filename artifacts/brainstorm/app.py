@@ -5234,7 +5234,8 @@ def save_remaining_anchors(study_id):
 
 
 def _is_ajax(req):
-    return req.headers.get("X-Requested-With") == "XMLHttpRequest"
+    return (req.headers.get("X-Requested-With") == "XMLHttpRequest"
+            or "application/json" in (req.headers.get("Accept") or ""))
 
 
 def _build_precheck_state(study_dict, persona_count):
