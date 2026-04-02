@@ -2679,9 +2679,15 @@
             <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No health checks run yet.</p>
             {% endif %}
 
+            {% set active_pool_ids = [] %}
+            {% for pm in persona_pool_list %}
+                {% if pm.status == 'active' %}
+                    {% set _ = active_pool_ids.append(pm.model_id) %}
+                {% endif %}
+            {% endfor %}
             {% set fail_pool_models = [] %}
             {% for hs in health_status_list %}
-                {% if hs.status == 'fail' %}
+                {% if hs.status == 'fail' and hs.model_id in active_pool_ids %}
                     {% set _ = fail_pool_models.append(hs.model_id) %}
                 {% endif %}
             {% endfor %}
