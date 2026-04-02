@@ -1368,7 +1368,12 @@
                     headers: { 'X-Requested-With': 'XMLHttpRequest' },
                     body: fd
                 })
-                .then(function(resp) { return resp.json(); })
+                .then(function(resp) {
+                    if (!resp.ok) {
+                        return resp.json().catch(function() { return { ok: false, error: 'Server error (HTTP ' + resp.status + ')' }; });
+                    }
+                    return resp.json();
+                })
                 .then(function(data) {
                     if (data.ok) {
                         renderStudyOutput(section, data);
@@ -1438,8 +1443,12 @@
                     + '<p style="font-size:14px;color:#721c24;font-weight:600;margin:0 0 8px;">Execution failed</p>'
                     + '<p style="font-size:13px;color:#721c24;margin:0;">' + escHtml(errorMsg) + '</p>'
                     + '</div>'
-                    + '<button onclick="autoRunStudy()" class="btn btn-success" style="margin-right:8px;">Retry</button>'
+                    + '<button id="exec-retry-btn" class="btn btn-success" style="margin-right:8px;">Retry</button>'
                     + '<a href="/?token=' + encodeURIComponent(token) + '&configure=' + sid + '" class="btn btn-secondary">Reload page</a>';
+                var retryBtn = document.getElementById('exec-retry-btn');
+                if (retryBtn) {
+                    retryBtn.addEventListener('click', function() { autoRunStudy(); });
+                }
             }
 
             function handleAjaxResponse(data) {
