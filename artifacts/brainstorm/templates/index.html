@@ -699,36 +699,8 @@
             {% set has_dui = configure_study.definition_useful_insight and configure_study.definition_useful_insight|trim|length > 0 %}
             {% set all_anchors_complete = has_mg and has_pc and has_ta and has_dui %}
 
-            {% if not all_anchors_complete %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-            <div style="background: #fff3cd; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ffc107;">
-                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Required to run this study</h3>
-                <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
-                    Business Problem and Decision to Support were collected during discovery. Please complete the remaining anchors below.
-                </p>
-                <form action="/save-remaining-anchors/{{ configure_study.id }}" method="POST">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <div class="form-group">
-                        <label>3. Market / Geography</label>
-                        <textarea name="market_geography" rows="2" required placeholder="What market or geography does this study focus on?">{{ configure_study.study_fit or '' }}</textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>4. Product / Concept</label>
-                        <textarea name="product_concept" rows="2" required placeholder="What product, service, or concept is being researched?">{{ configure_study.known_vs_unknown or '' }}</textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>5. Target Audience</label>
-                        <textarea name="target_audience" rows="2" required placeholder="Who is the target audience for this research?">{{ configure_study.target_audience or '' }}</textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>6. Definition of Useful Insight</label>
-                        <textarea name="definition_useful_insight" rows="2" required placeholder="What would a useful insight look like for this study?">{{ configure_study.definition_useful_insight or '' }}</textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Save Remaining Anchors</button>
-                </form>
-            </div>
-            {% else %}
-            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            {% if all_anchors_complete %}
             <div style="background: #e8f5e9; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
                 <p style="margin: 0; font-weight: 600; color: #27ae60;">Research Brief Complete (all 6 anchors filled)</p>
                 <ul style="margin: 8px 0 0 20px; line-height: 1.6;">
@@ -739,6 +711,77 @@
                     <li><strong>Target Audience:</strong> {{ configure_study.target_audience }}</li>
                     <li><strong>Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}</li>
                 </ul>
+            </div>
+            {% else %}
+            <div style="background: #fff3cd; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ffc107;">
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Required to run this study</h3>
+                <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
+                    Business Problem and Decision to Support were collected during discovery. Save each remaining anchor individually below.
+                </p>
+
+                {% if has_mg %}
+                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
+                    <strong style="color: #27ae60;">✓ 3. Market / Geography:</strong> {{ configure_study.study_fit }}
+                </div>
+                {% else %}
+                <form action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="anchor_key" value="market_geography">
+                    <div class="form-group" style="margin-bottom: 6px;">
+                        <label>3. Market / Geography</label>
+                        <textarea name="anchor_value" rows="2" required placeholder="What market or geography does this study focus on?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Save Market / Geography</button>
+                </form>
+                {% endif %}
+
+                {% if has_pc %}
+                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
+                    <strong style="color: #27ae60;">✓ 4. Product / Concept:</strong> {{ configure_study.known_vs_unknown }}
+                </div>
+                {% else %}
+                <form action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="anchor_key" value="product_concept">
+                    <div class="form-group" style="margin-bottom: 6px;">
+                        <label>4. Product / Concept</label>
+                        <textarea name="anchor_value" rows="2" required placeholder="What product, service, or concept is being researched?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Save Product / Concept</button>
+                </form>
+                {% endif %}
+
+                {% if has_ta %}
+                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
+                    <strong style="color: #27ae60;">✓ 5. Target Audience:</strong> {{ configure_study.target_audience }}
+                </div>
+                {% else %}
+                <form action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="anchor_key" value="target_audience">
+                    <div class="form-group" style="margin-bottom: 6px;">
+                        <label>5. Target Audience</label>
+                        <textarea name="anchor_value" rows="2" required placeholder="Who is the target audience for this research?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Save Target Audience</button>
+                </form>
+                {% endif %}
+
+                {% if has_dui %}
+                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
+                    <strong style="color: #27ae60;">✓ 6. Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}
+                </div>
+                {% else %}
+                <form action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="anchor_key" value="definition_useful_insight">
+                    <div class="form-group" style="margin-bottom: 6px;">
+                        <label>6. Definition of Useful Insight</label>
+                        <textarea name="anchor_value" rows="2" required placeholder="What would a useful insight look like for this study?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Save Definition of Useful Insight</button>
+                </form>
+                {% endif %}
             </div>
             {% endif %}
 
@@ -1119,39 +1162,53 @@
                 {% if configure_study.study_type == 'synthetic_survey' %}
                 <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px;">
                     <li style="padding: 4px 0; color: {{ '#27ae60' if rc_panel >= 1 else '#e74c3c' }};">
-                        {{ '&#10003;' if rc_panel >= 1 else '&#10007;' }} Respondent count set{% if rc_panel >= 1 %} ({{ rc_panel }}){% endif %}
+                        {{ '✓' if rc_panel >= 1 else '✗' }} Respondent count set{% if rc_panel >= 1 %} ({{ rc_panel }}){% endif %}
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if q_count_panel >= 1 else '#e74c3c' }};">
-                        {{ '&#10003;' if q_count_panel >= 1 else '&#10007;' }} Question count set{% if q_count_panel >= 1 %} ({{ q_count_panel }}){% endif %}
+                        {{ '✓' if q_count_panel >= 1 else '✗' }} Question count set{% if q_count_panel >= 1 %} ({{ q_count_panel }}){% endif %}
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if sq_list_panel|length == q_count_panel and q_count_panel >= 1 else '#e74c3c' }};">
-                        {{ '&#10003;' if sq_list_panel|length == q_count_panel and q_count_panel >= 1 else '&#10007;' }} Survey questions ({{ sq_list_panel|length }}/{{ q_count_panel }})
+                        {{ '✓' if sq_list_panel|length == q_count_panel and q_count_panel >= 1 else '✗' }} Survey questions ({{ sq_list_panel|length }}/{{ q_count_panel }})
+                    </li>
+                    <li style="padding: 8px 0 4px; border-top: 1px solid #eee; margin-top: 4px; color: #999;">
+                        — Personas: Not applicable (survey)
                     </li>
                 </ul>
 
                 {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
+                {% if configure_study.study_type == 'synthetic_idi' %}
+                    {% set personas_min = 1 %}
+                {% else %}
+                    {% set personas_min = 4 %}
+                {% endif %}
+                {% set personas_complete = persona_count_panel >= personas_min %}
+                {% set personas_gap = personas_min - persona_count_panel %}
                 <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px;">
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_bp_panel else '#e74c3c' }};">
-                        {{ '&#10003;' if has_bp_panel else '&#10007;' }} Business Problem
+                        {{ '✓' if has_bp_panel else '✗' }} Business Problem
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_ds_panel else '#e74c3c' }};">
-                        {{ '&#10003;' if has_ds_panel else '&#10007;' }} Decision to Support
+                        {{ '✓' if has_ds_panel else '✗' }} Decision to Support
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_mg_panel else '#e74c3c' }};">
-                        {{ '&#10003;' if has_mg_panel else '&#10007;' }} Market / Geography
+                        {{ '✓' if has_mg_panel else '✗' }} Market / Geography
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_pc_panel else '#e74c3c' }};">
-                        {{ '&#10003;' if has_pc_panel else '&#10007;' }} Product / Concept
+                        {{ '✓' if has_pc_panel else '✗' }} Product / Concept
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_ta_panel else '#e74c3c' }};">
-                        {{ '&#10003;' if has_ta_panel else '&#10007;' }} Target Audience
+                        {{ '✓' if has_ta_panel else '✗' }} Target Audience
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_dui_panel else '#e74c3c' }};">
-                        {{ '&#10003;' if has_dui_panel else '&#10007;' }} Definition of Useful Insight
+                        {{ '✓' if has_dui_panel else '✗' }} Definition of Useful Insight
                     </li>
                     <li style="padding: 8px 0 4px; border-top: 1px solid #eee; margin-top: 4px;
-                        color: {{ '#27ae60' if personas_valid_panel else '#e74c3c' }};">
-                        {{ '&#10003;' if personas_valid_panel else '&#10007;' }} Personas ({{ persona_count_panel }}/{% if configure_study.study_type == 'synthetic_idi' %}0–1{% else %}0–6{% endif %}, Lisa fills gaps)
+                        color: {{ '#27ae60' if personas_complete else '#e67e22' }};">
+                        {% if personas_complete %}
+                        ✓ Personas ({{ persona_count_panel }}/{{ personas_min }})
+                        {% else %}
+                        ⚠ Personas ({{ persona_count_panel }}/{{ personas_min }} — {% if persona_count_panel == 0 %}will be auto-generated at run{% else %}Lisa will generate {{ personas_gap }} more at run{% endif %})
+                        {% endif %}
                     </li>
                 </ul>
 
@@ -1782,8 +1839,14 @@
                     <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona.behavioural_tendencies }}</p>
                 </div>
                 <div style="margin-bottom: 16px;">
-                    <strong style="color: #1a1a2e;">6. AI Model Provenance</strong>
-                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona.ai_model_provenance }}</p>
+                    <strong style="color: #1a1a2e;">6. Persona Generation Model</strong>
+                    {% set prov_raw = view_persona.ai_model_provenance or '' %}
+                    {% if 'persona_model=' in prov_raw %}
+                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ prov_raw.split('persona_model=')[1].split(';')[0] }}</p>
+                    <p style="margin-top: 2px; color: #999; font-size: 12px; white-space: pre-wrap;">Full provenance: {{ prov_raw }}</p>
+                    {% else %}
+                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ prov_raw }}</p>
+                    {% endif %}
                 </div>
                 <div style="margin-bottom: 16px;">
                     <strong style="color: #1a1a2e;">7. Grounding Sources</strong>

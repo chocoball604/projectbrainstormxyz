@@ -4667,7 +4667,7 @@ def run_study(study_id):
                 for p_data in generated:
                     p_instance_id = f"P-{secrets.token_hex(4).upper()}"
                     p_persona_id = f"PID-{secrets.token_hex(4).upper()}"
-                    provenance = f"lisa:{lisa_mid}; selection_method=auto"
+                    provenance = f"persona_model={lisa_mid}; selection_method=auto; orchestrated_by=Lisa"
                     conn.execute(
                         """INSERT INTO personas
                            (user_id, persona_id, version, persona_instance_id, name,
@@ -5169,24 +5169,72 @@ def save_remaining_anchors(study_id):
     ta = (request.form.get("target_audience") or "").strip()
     dui = (request.form.get("definition_useful_insight") or "").strip()
 
-    missing = []
-    if not mg:
-        missing.append("Market / Geography")
-    if not pc:
-        missing.append("Product / Concept")
-    if not ta:
-        missing.append("Target Audience")
-    if not dui:
-        missing.append("Definition of Useful Insight")
+    updates = []
+    params = []
+    if mg:
+        updates.append("study_fit = ?")
+        params.append(mg)
+    if pc:
+        updates.append("known_vs_unknown = ?")
+        params.append(pc)
+    if ta:
+        updates.append("target_audience = ?")
+        params.append(ta)
+    if dui:
+        updates.append("definition_useful_insight = ?")
+        params.append(dui)
 
-    if missing:
+    if not updates:
         conn.close()
-        return render_error("Please complete the remaining required items.")
+        return render_error("Please fill in at least one anchor to save.")
 
+    params.append(study_id)
     conn.execute(
-        """UPDATE studies SET study_fit = ?, known_vs_unknown = ?,
-           target_audience = ?, definition_useful_insight = ? WHERE id = ?""",
-        (mg, pc, ta, dui, study_id),
+        f"UPDATE studies SET {', '.join(updates)} WHERE id = ?",
+        tuple(params),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
+@app.route("/save-single-anchor/<int:study_id>", methods=["POST"])
+def save_single_anchor(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return render_error("Draft study not found.")
+
+    anchor_key = (request.form.get("anchor_key") or "").strip()
+    anchor_value = (request.form.get("anchor_value") or "").strip()
+
+    allowed_keys = {
+        "market_geography": "study_fit",
+        "product_concept": "known_vs_unknown",
+        "target_audience": "target_audience",
+        "definition_useful_insight": "definition_useful_insight",
+    }
+
+    if anchor_key not in allowed_keys:
+        conn.close()
+        return render_error("Invalid anchor key.")
+    if not anchor_value:
+        conn.close()
+        return render_error("Anchor value cannot be empty.")
+
+    db_col = allowed_keys[anchor_key]
+    conn.execute(
+        f"UPDATE studies SET {db_col} = ? WHERE id = ?",
+        (anchor_value, study_id),
     )
     conn.commit()
     conn.close()
