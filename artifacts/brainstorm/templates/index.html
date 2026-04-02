@@ -545,6 +545,7 @@
                 </div>
             </div>
 
+            <div id="mark-recommendation-slot">
             {% if bp_saved and ds_saved %}
             <div style="background: #e8f5e9; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #c8e6c9;">
                 <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 8px;">Mark's Recommendation</h3>
@@ -582,6 +583,7 @@
                 </div>
             </div>
             {% endif %}
+            </div>
 
             {% endif %}
 
@@ -1518,6 +1520,34 @@
                                     + escHtml(label) + ' <span style="color:#27ae60;font-size:12px;margin-left:6px;">Saved</span></label>'
                                     + '<div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px 12px;font-size:14px;color:#333;">'
                                     + escHtml(val) + '</div>';
+                            }
+                            if (data.mark_recommendation) {
+                                var rec = data.mark_recommendation;
+                                var recSlot = document.getElementById('mark-recommendation-slot');
+                                if (recSlot) {
+                                    var types = [
+                                        {key: 'synthetic_survey', label: 'Use Survey'},
+                                        {key: 'synthetic_idi', label: 'Use IDI'},
+                                        {key: 'synthetic_focus_group', label: 'Use Focus Group'}
+                                    ];
+                                    var btnsHtml = '';
+                                    types.forEach(function(t) {
+                                        var cls = (t.key === rec.type) ? 'btn btn-success' : 'btn btn-secondary';
+                                        var suffix = (t.key === rec.type) ? ' (recommended)' : '';
+                                        btnsHtml += '<form action="/set-mark-recommendation/' + rec.study_id + '" method="POST" style="display:inline;">'
+                                            + '<input type="hidden" name="token" value="' + escHtml(token) + '">'
+                                            + '<input type="hidden" name="study_type" value="' + t.key + '">'
+                                            + '<button type="submit" class="' + cls + '">' + escHtml(t.label + suffix) + '</button>'
+                                            + '</form>';
+                                    });
+                                    recSlot.innerHTML = '<div style="background:#e8f5e9;border-radius:8px;padding:20px;margin-bottom:20px;border:1px solid #c8e6c9;">'
+                                        + '<h3 style="font-size:16px;color:#1a1a2e;margin:0 0 8px;">Mark\'s Recommendation</h3>'
+                                        + '<p style="font-size:13px;color:#555;margin:0 0 16px;">Based on your inputs, Mark recommends: <strong>' + escHtml(rec.label) + '</strong></p>'
+                                        + '<p style="font-size:12px;color:#777;margin:0 0 16px;">' + escHtml(rec.reason) + '</p>'
+                                        + '<p style="font-size:13px;color:#555;margin:0 0 12px;font-weight:600;">Confirm the study type:</p>'
+                                        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">' + btnsHtml + '</div>'
+                                        + '</div>';
+                                }
                             }
                             handleAjaxResponse(data);
                         } else {

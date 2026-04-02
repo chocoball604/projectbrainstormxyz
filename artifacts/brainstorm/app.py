@@ -2917,12 +2917,23 @@ def save_discovery(study_id):
                 qa_failures = json.loads(study_dict["qa_notes"])
             except (json.JSONDecodeError, TypeError):
                 qa_failures = []
-        conn.close()
-        return jsonify({
+        resp = {
             "ok": True, "field": field, "value": value,
             "precheck": precheck,
             "qa_status": qa_status, "qa_failures": qa_failures,
-        })
+        }
+        bp_val = (study_dict.get("business_problem") or "").strip()
+        ds_val = (study_dict.get("decision_to_support") or "").strip()
+        if bp_val and ds_val and not study_dict.get("study_type"):
+            rec_type, rec_label, rec_reason = get_mark_recommendation(bp_val, ds_val)
+            resp["mark_recommendation"] = {
+                "type": rec_type,
+                "label": rec_label,
+                "reason": rec_reason,
+                "study_id": study_id,
+            }
+        conn.close()
+        return jsonify(resp)
 
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
