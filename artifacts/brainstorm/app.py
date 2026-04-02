@@ -4457,7 +4457,7 @@ def send_chat(study_id):
         "6) Do not invent details or speculate.\n\n"
         "Response constraints:\n"
         "- Replies must be 100 words or fewer.\n"
-        "- One question only.\n"
+        "- One question only (unless all fields are [saved], in which case state completion instead).\n"
         "- Do NOT include any 'Suggested saves' section or footer in your reply.\n"
         "- End after your single question.\n\n"
         "Field awareness rules (MANDATORY):\n"
