@@ -4650,24 +4650,30 @@ def run_study(study_id):
         if persona_count < min_required:
             auto_n = min_required - persona_count
             try:
-                mc = {
-                    r["key"]: r["value"]
-                    for r in conn.execute(
-                        "SELECT key, value FROM model_config"
-                    ).fetchall()
-                }
-                lisa_mid = mc.get("lisa_model", "")
-                if not lisa_mid:
-                    raise ValueError("lisa_model not configured in model_config")
+                import random as _rng
+                pool_rows = conn.execute(
+                    "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
+                ).fetchall()
+                eligible_models = [
+                    r["model_id"] for r in pool_rows if not is_gpt_family(r["model_id"])
+                ]
+                if not eligible_models:
+                    conn.close()
+                    return render_error(
+                        "No eligible persona generation models in pool (GPT-family excluded). "
+                        "An admin must add non-GPT models to the persona model pool."
+                    )
+                persona_gen_model = _rng.choice(eligible_models)
+                print(f"PERSONA_POOL_MODEL_SELECTED={persona_gen_model} study={study_id}", flush=True)
                 study_snapshot = dict(study)
                 conn.close()
-                generated = lisa_generate_personas(study_snapshot, auto_n, lisa_mid)
+                generated = lisa_generate_personas(study_snapshot, auto_n, persona_gen_model)
                 conn = get_db()
                 new_persona_ids = []
                 for p_data in generated:
                     p_instance_id = f"P-{secrets.token_hex(4).upper()}"
                     p_persona_id = f"PID-{secrets.token_hex(4).upper()}"
-                    provenance = f"persona_model={lisa_mid}; selection_method=auto; orchestrated_by=Lisa"
+                    provenance = f"persona_model={persona_gen_model}; selection_method=random_pool; orchestrated_by=Lisa"
                     conn.execute(
                         """INSERT INTO personas
                            (user_id, persona_id, version, persona_instance_id, name,
@@ -5198,11 +5204,43 @@ def save_remaining_anchors(study_id):
     return redirect(url_for("index", token=token, configure=study_id))
 
 
+def _is_ajax(req):
+    return req.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
+def _build_precheck_state(study_dict, persona_count):
+    st = study_dict.get("study_type") or ""
+    has_bp = bool((study_dict.get("business_problem") or "").strip())
+    has_ds = bool((study_dict.get("decision_to_support") or "").strip())
+    has_mg = bool((study_dict.get("study_fit") or "").strip())
+    has_pc = bool((study_dict.get("known_vs_unknown") or "").strip())
+    has_ta = bool((study_dict.get("target_audience") or "").strip())
+    has_dui = bool((study_dict.get("definition_useful_insight") or "").strip())
+    if st == "synthetic_idi":
+        p_min = 1
+    elif st == "synthetic_focus_group":
+        p_min = 4
+    else:
+        p_min = 0
+    p_complete = persona_count >= p_min
+    p_gap = max(0, p_min - persona_count)
+    return {
+        "has_bp": has_bp, "has_ds": has_ds, "has_mg": has_mg,
+        "has_pc": has_pc, "has_ta": has_ta, "has_dui": has_dui,
+        "all_anchors": has_bp and has_ds and has_mg and has_pc and has_ta and has_dui,
+        "persona_count": persona_count, "personas_min": p_min,
+        "personas_complete": p_complete, "personas_gap": p_gap,
+        "study_type": st,
+    }
+
+
 @app.route("/save-single-anchor/<int:study_id>", methods=["POST"])
 def save_single_anchor(study_id):
     token = get_token()
     user, _ = get_session_data(token)
     if not user or user["state"] != "active":
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "You must be an active user."}), 403
         return render_error("You must be an active user.")
 
     conn = get_db()
@@ -5212,6 +5250,8 @@ def save_single_anchor(study_id):
     ).fetchone()
     if not study:
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Draft study not found."}), 404
         return render_error("Draft study not found.")
 
     anchor_key = (request.form.get("anchor_key") or "").strip()
@@ -5226,9 +5266,13 @@ def save_single_anchor(study_id):
 
     if anchor_key not in allowed_keys:
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Invalid anchor key."}), 400
         return render_error("Invalid anchor key.")
     if not anchor_value:
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Anchor value cannot be empty."}), 400
         return render_error("Anchor value cannot be empty.")
 
     db_col = allowed_keys[anchor_key]
@@ -5237,6 +5281,15 @@ def save_single_anchor(study_id):
         (anchor_value, study_id),
     )
     conn.commit()
+
+    if _is_ajax(request):
+        study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+        study_dict = dict(study)
+        personas_used = normalize_personas_used(study_dict.get("personas_used"))
+        precheck = _build_precheck_state(study_dict, len(personas_used))
+        conn.close()
+        return jsonify({"ok": True, "anchor_key": anchor_key, "anchor_value": anchor_value, "precheck": precheck})
+
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
 
@@ -5321,11 +5374,13 @@ def attach_persona(study_id):
         conn.close()
         return render_error("Persona is already attached to this study.")
 
-    max_personas = {"synthetic_idi": 3, "synthetic_focus_group": 6}
+    max_personas = {"synthetic_idi": 1, "synthetic_focus_group": 6}
     limit = max_personas.get(study_type)
     if limit and len(current) >= limit:
         conn.close()
         label = "IDI" if study_type == "synthetic_idi" else "Focus Group"
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": f"{label} allows max {limit} personas."}), 400
         return render_error(f"{label} allows max {limit} personas.")
 
     current.append(instance_id)
@@ -5334,6 +5389,24 @@ def attach_persona(study_id):
         (json.dumps(current), study_id),
     )
     conn.commit()
+
+    if _is_ajax(request):
+        persona_name = ""
+        p_row = conn.execute(
+            "SELECT name FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+            (instance_id, user["id"]),
+        ).fetchone()
+        if p_row:
+            persona_name = p_row["name"]
+        study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+        precheck = _build_precheck_state(dict(study), len(current))
+        conn.close()
+        return jsonify({
+            "ok": True, "action": "attached",
+            "persona_id": instance_id, "persona_name": persona_name,
+            "persona_count": len(current), "precheck": precheck,
+        })
+
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
 
@@ -5363,6 +5436,17 @@ def detach_persona(study_id):
         (json.dumps(current), study_id),
     )
     conn.commit()
+
+    if _is_ajax(request):
+        study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+        precheck = _build_precheck_state(dict(study), len(current))
+        conn.close()
+        return jsonify({
+            "ok": True, "action": "detached",
+            "persona_id": instance_id,
+            "persona_count": len(current), "precheck": precheck,
+        })
+
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
 
@@ -5386,11 +5470,12 @@ def create_persona():
         for r in conn.execute(
             "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
         ).fetchall()
+        if not is_gpt_family(r["model_id"])
     ]
     if not pool_models:
         conn.close()
         return render_error(
-            "Cannot create persona: no active models in the persona model pool. An admin must configure at least one pool model.",
+            "Cannot create persona: no eligible models in pool (GPT-family excluded). An admin must add non-GPT models to the persona model pool.",
             show_new_persona=True,
         )
 
