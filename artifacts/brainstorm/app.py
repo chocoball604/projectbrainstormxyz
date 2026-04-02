@@ -4849,7 +4849,7 @@ def _run_study_execute(conn, study, study_type, personas_used, persona_names, st
     except Exception as exc:
         print(f"RUN_STUDY_UNHANDLED study={study_id} error={exc}", flush=True)
         if ajax:
-            return jsonify({"ok": False, "error": f"Unexpected execution error: {exc}"}), 500
+            return jsonify({"ok": False, "error": "An unexpected error occurred during study execution. Please try again or contact admin."}), 500
         return render_error(f"Unexpected execution error: {exc}")
     finally:
         try:
