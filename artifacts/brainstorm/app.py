@@ -5381,6 +5381,8 @@ def attach_persona(study_id):
     token = get_token()
     user, _ = get_session_data(token)
     if not user or user["state"] != "active":
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "You must be an active user."}), 403
         return render_error("You must be an active user.")
 
     conn = get_db()
@@ -5390,16 +5392,22 @@ def attach_persona(study_id):
     ).fetchone()
     if not study:
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Draft study not found."}), 404
         return render_error("Draft study not found.")
 
     study_type = study["study_type"] or ""
     if study_type == "synthetic_survey":
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Surveys do not use inspectable personas."}), 400
         return render_error("Surveys do not use inspectable personas.")
 
     instance_id = (request.form.get("persona_instance_id") or "").strip()
     if not instance_id:
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Persona is required."}), 400
         return render_error("Persona is required.")
 
     persona_row = conn.execute(
@@ -5408,11 +5416,15 @@ def attach_persona(study_id):
     ).fetchone()
     if not persona_row:
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Persona not found."}), 404
         return render_error("Persona not found.")
 
     current = normalize_personas_used(study["personas_used"])
     if instance_id in current:
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Persona is already attached to this study."}), 400
         return render_error("Persona is already attached to this study.")
 
     max_personas = {"synthetic_idi": 1, "synthetic_focus_group": 6}
@@ -5467,6 +5479,8 @@ def detach_persona(study_id):
     token = get_token()
     user, _ = get_session_data(token)
     if not user or user["state"] != "active":
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "You must be an active user."}), 403
         return render_error("You must be an active user.")
 
     conn = get_db()
@@ -5476,6 +5490,8 @@ def detach_persona(study_id):
     ).fetchone()
     if not study:
         conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Draft study not found."}), 404
         return render_error("Draft study not found.")
 
     instance_id = (request.form.get("persona_instance_id") or "").strip()
