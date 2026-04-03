@@ -694,6 +694,16 @@ def _validate_survey_questions(questions):
             if not isinstance(images, dict) or set(images.keys()) != {"A", "B"}:
                 errors.append(f"Q{i} (ab_image): images must contain exactly keys 'A' and 'B'.")
             else:
+                ref_a = (images.get("A") or "").strip()
+                ref_b = (images.get("B") or "").strip()
+                if not ref_a or not ref_b:
+                    errors.append(f"Q{i} (ab_image): both image A and image B references are required.")
+                else:
+                    for label, ref in [("A", ref_a), ("B", ref_b)]:
+                        if "." in ref:
+                            ext = ("." + ref.rsplit(".", 1)[-1]).lower()
+                            if ext not in AB_IMAGE_LIMITS["allowed_extensions"]:
+                                errors.append(f"Q{i} (ab_image): image {label} must be JPG or PNG (got '{ext}').")
                 total_images += 2
         elif qtype == "range":
             r_min = q.get("min")
@@ -5420,6 +5430,11 @@ def save_survey_questions(study_id):
             if ajax:
                 return jsonify({"ok": False, "error": "Invalid JSON for survey questions."}), 400
             return render_error("Invalid JSON for survey questions.")
+        if not isinstance(questions, list):
+            conn.close()
+            if ajax:
+                return jsonify({"ok": False, "error": "Survey questions must be a JSON array."}), 400
+            return render_error("Survey questions must be a JSON array.")
         normalized = []
         for q in questions:
             nq = _normalize_survey_question(q)
