@@ -1167,15 +1167,19 @@
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
 
             <div id="run-study-section" data-study-id="{{ configure_study.id }}">
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Run Study</h3>
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Start Study</h3>
             {% if configure_study.qa_status == 'precheck_passed' %}
-                <p style="font-size: 13px; color: #27ae60; margin-bottom: 4px; font-weight: 600;">
-                    Precheck: Ready to run
-                </p>
-                <p style="font-size: 12px; color: #888; margin: 0 0 12px;">Precheck updates automatically as you fill in the brief.</p>
+                <div style="background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                    <p style="font-size: 13px; color: #2e7d32; margin: 0 0 8px; font-weight: 600;">&#10003; All prechecks passed</p>
+                    <p style="font-size: 12px; color: #555; margin: 0 0 4px;">Before starting, review your persona setup above:</p>
+                    <ul style="font-size: 12px; color: #555; margin: 4px 0 0 16px; line-height: 1.8;">
+                        <li>Attach an existing persona from My Personas for reuse, or</li>
+                        <li>Proceed without attaching — Lisa will generate new personas automatically.</li>
+                    </ul>
+                </div>
                 <form action="/run-study/{{ configure_study.id }}" method="POST" id="run-study-form">
                     <input type="hidden" name="token" value="{{ token }}">
-                    <button type="submit" class="btn btn-success" onclick="return confirm('Run this study?');">Run Study</button>
+                    <button type="submit" class="btn btn-success" style="font-size: 15px; padding: 10px 28px;" onclick="return confirm('Start this study? Lisa will begin generating research output.');">Start Study</button>
                 </form>
             {% elif configure_study.qa_status == 'precheck_failed' %}
                 <p style="color: #e67e22; font-size: 13px; margin-bottom: 4px; font-weight: 600;">
@@ -1441,7 +1445,8 @@
                 <div id="precheck-status-box">
                 {% if configure_study.qa_status == 'precheck_passed' %}
                 <div style="margin-top: 16px; padding: 10px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 6px; text-align: center;">
-                    <span style="font-size: 13px; color: #155724; font-weight: 600;">Precheck: Ready to run</span>
+                    <span style="font-size: 13px; color: #155724; font-weight: 600;">&#10003; Precheck passed — Ready to run</span>
+                    <p style="font-size: 11px; color: #155724; margin: 6px 0 0;">Review your persona attachments below, then click <strong>Start Study</strong> when ready.</p>
                 </div>
                 {% elif configure_study.qa_status == 'precheck_failed' %}
                 <div style="margin-top: 16px; padding: 10px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px;">
@@ -1560,10 +1565,10 @@
                 if (!box) return;
                 if (data.qa_status === 'precheck_passed') {
                     box.innerHTML = '<div style="margin-top:16px;padding:10px;background:#d4edda;border:1px solid #c3e6cb;border-radius:6px;text-align:center;">'
-                        + '<span style="font-size:13px;color:#155724;font-weight:600;">Precheck: Ready to run</span></div>';
-                    if (_previousQaStatus !== 'precheck_passed' && !_executionRunning) {
-                        _previousQaStatus = 'precheck_passed';
-                        autoRunStudy();
+                        + '<span style="font-size:13px;color:#155724;font-weight:600;">&#10003; Precheck passed — Ready to run</span>'
+                        + '<p style="font-size:11px;color:#155724;margin:6px 0 0;">Review your persona attachments below, then click <strong>Start Study</strong> when ready.</p></div>';
+                    if (_previousQaStatus !== 'precheck_passed') {
+                        highlightPersonaArea();
                     }
                     _previousQaStatus = 'precheck_passed';
                 } else if (data.qa_status === 'precheck_failed') {
@@ -1577,18 +1582,38 @@
                 updateRunStudySection(data);
             }
 
+            function highlightPersonaArea() {
+                var attachArea = document.getElementById('attach-persona-area');
+                if (attachArea) {
+                    attachArea.style.border = '2px solid #28a745';
+                    attachArea.style.borderRadius = '8px';
+                    attachArea.style.padding = '12px';
+                    attachArea.style.background = '#f0fff4';
+                    setTimeout(function() {
+                        attachArea.style.transition = 'border-color 2s, background 2s';
+                        attachArea.style.borderColor = '#c3e6cb';
+                        attachArea.style.background = '#f8fff8';
+                    }, 3000);
+                }
+            }
+
             function updateRunStudySection(data) {
                 var section = document.getElementById('run-study-section');
                 if (!section || _executionRunning) return;
                 var sid = section.getAttribute('data-study-id');
                 if (!sid) return;
-                var h = '<h3 style="font-size:16px;color:#1a1a2e;margin-bottom:12px;">Run Study</h3>';
+                var h = '<h3 style="font-size:16px;color:#1a1a2e;margin-bottom:12px;">Start Study</h3>';
                 if (data.qa_status === 'precheck_passed') {
-                    h += '<p style="font-size:13px;color:#27ae60;margin-bottom:4px;font-weight:600;">Precheck: Ready to run</p>'
-                        + '<p style="font-size:12px;color:#888;margin:0 0 12px;">Precheck updates automatically as you fill in the brief.</p>'
+                    h += '<div style="background:#e8f5e9;border:1px solid #c8e6c9;border-radius:8px;padding:16px;margin-bottom:12px;">'
+                        + '<p style="font-size:13px;color:#2e7d32;margin:0 0 8px;font-weight:600;">&#10003; All prechecks passed</p>'
+                        + '<p style="font-size:12px;color:#555;margin:0 0 4px;">Before starting, review your persona setup above:</p>'
+                        + '<ul style="font-size:12px;color:#555;margin:4px 0 0 16px;line-height:1.8;">'
+                        + '<li>Attach an existing persona from My Personas for reuse, or</li>'
+                        + '<li>Proceed without attaching — Lisa will generate new personas automatically.</li>'
+                        + '</ul></div>'
                         + '<form action="/run-study/' + sid + '" method="POST" id="run-study-form">'
                         + '<input type="hidden" name="token" value="' + token + '">'
-                        + '<button type="submit" class="btn btn-success" onclick="return confirm(\'Run this study?\');">Run Study</button>'
+                        + '<button type="submit" class="btn btn-success" style="font-size:15px;padding:10px 28px;" onclick="return confirm(\'Start this study? Lisa will begin generating research output.\');">Start Study</button>'
                         + '</form>';
                 } else if (data.qa_status === 'precheck_failed') {
                     var fails = data.qa_failures || [];
