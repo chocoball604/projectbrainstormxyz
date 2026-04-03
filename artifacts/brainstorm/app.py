@@ -3329,6 +3329,61 @@ ANCHOR_FIELDS = [
 ]
 
 
+def _parse_lisa_memo(raw_text):
+    transcript = ""
+    memo = ""
+    memo_marker = "FIRST-PASS FINDINGS MEMO:"
+    idx = raw_text.find(memo_marker)
+    if idx >= 0:
+        transcript = raw_text[:idx].strip()
+        memo = raw_text[idx + len(memo_marker):].strip()
+    else:
+        transcript = raw_text.strip()
+    if transcript.upper().startswith("TRANSCRIPT:"):
+        transcript = transcript[len("TRANSCRIPT:"):].strip()
+    memo_sections = {}
+    if memo:
+        current_key = None
+        current_lines = []
+        for line in memo.split("\n"):
+            stripped = line.strip().lower()
+            if stripped.startswith("key themes"):
+                if current_key:
+                    memo_sections[current_key] = "\n".join(current_lines).strip()
+                current_key = "key_themes"
+                current_lines = []
+            elif stripped.startswith("strong vs exploratory"):
+                if current_key:
+                    memo_sections[current_key] = "\n".join(current_lines).strip()
+                current_key = "strong_vs_exploratory"
+                current_lines = []
+            elif stripped.startswith("contradictions") or stripped.startswith("contradiction"):
+                if current_key:
+                    memo_sections[current_key] = "\n".join(current_lines).strip()
+                current_key = "contradictions"
+                current_lines = []
+            elif stripped.startswith("candidate insights"):
+                if current_key:
+                    memo_sections[current_key] = "\n".join(current_lines).strip()
+                current_key = "candidate_insights"
+                current_lines = []
+            elif stripped.startswith("supporting excerpts"):
+                if current_key:
+                    memo_sections[current_key] = "\n".join(current_lines).strip()
+                current_key = "supporting_excerpts"
+                current_lines = []
+            elif stripped.startswith("limitations") or stripped.startswith("limitation"):
+                if current_key:
+                    memo_sections[current_key] = "\n".join(current_lines).strip()
+                current_key = "limitations"
+                current_lines = []
+            else:
+                current_lines.append(line)
+        if current_key:
+            memo_sections[current_key] = "\n".join(current_lines).strip()
+    return transcript, memo, memo_sections
+
+
 def build_structured_report(
     study, followups=None, version=None, uploaded_filenames=None
 ):
@@ -3366,6 +3421,20 @@ def build_structured_report(
         )
     sections["executive_summary"] = "\n".join(exec_lines)
 
+    study_type_reason_map = {
+        "synthetic_survey": "A Synthetic Survey was selected to quantitatively measure attitudes, preferences, and behavioural intent across a defined respondent panel. This method is suited for studies requiring structured, comparable data points.",
+        "synthetic_idi": "A Synthetic IDI (In-Depth Interview) was selected to explore individual perspectives in depth. This method surfaces nuanced reasoning, emotional drivers, and personal narratives that structured surveys cannot capture.",
+        "synthetic_focus_group": "A Synthetic Focus Group was selected to capture group dynamics, social influence, and emergent consensus or disagreement. This method reveals how opinions shift when exposed to peer perspectives.",
+    }
+    why_lines = [study_type_reason_map.get(st, f"Study type: {st_label}")]
+    bp = (study.get("business_problem") or "").strip()
+    ds = (study.get("decision_to_support") or "").strip()
+    if bp:
+        why_lines.append(f"Business Problem: {bp}")
+    if ds:
+        why_lines.append(f"Decision to Support: {ds}")
+    sections["why_study_type"] = "\n".join(why_lines)
+
     studied_lines = [f"Study Title: {title}", f"Study Type: {st_label}"]
     if st == "synthetic_survey":
         rc = study.get("respondent_count") or 0
@@ -3395,9 +3464,14 @@ def build_structured_report(
         except (json.JSONDecodeError, TypeError):
             confidence = None
 
+    transcript_text = ""
+    memo_sections_parsed = {}
     findings_lines = []
+    surprised_lines = []
+
     if is_placeholder:
         findings_lines.append("[Placeholder findings — not based on real data]")
+
     if st == "synthetic_survey" and output_raw:
         try:
             clean_json = output_raw.strip()
@@ -3429,6 +3503,8 @@ def build_structured_report(
                     if confidence and confidence.get("Strong", 0) > 0 and qi == 1:
                         conf_label = "Strong"
                     findings_lines.append(f"Finding {qi} [{conf_label}]: {q_text}")
+                    if confidence:
+                        findings_lines.append(f"  Confidence: {conf_label} — based on QA assessment of response consistency and grounding coverage.")
                     if q_type == "ab_image" and qi - 1 < len(sq_meta) and sq_meta[qi - 1]:
                         imgs = (sq_meta[qi - 1] or {}).get("images") or {}
                         if imgs.get("A"):
@@ -3461,7 +3537,7 @@ def build_structured_report(
             findings_lines.append(
                 "Raw output available but could not be parsed into structured findings."
             )
-    else:
+    elif st in ("synthetic_idi", "synthetic_focus_group") and output_raw:
         clean_output = output_raw
         for prefix in ["=== QA REVIEW: PASS ===", "=== QA REVIEW: DOWNGRADE ==="]:
             if clean_output.startswith(prefix):
@@ -3472,29 +3548,92 @@ def build_structured_report(
         if clean_output.startswith("*** SIMULATED"):
             lines_raw = clean_output.split("\n")
             clean_output = "\n".join(l for l in lines_raw if not l.startswith("***"))
-        interview_blocks = (
-            clean_output.split("--- Interview with ")
-            if "--- Interview with " in clean_output
-            else []
-        )
-        if interview_blocks and len(interview_blocks) > 1:
-            for bi, block in enumerate(interview_blocks[1:], 1):
-                conf_label = "Indicative"
-                if confidence and confidence.get("Strong", 0) >= bi:
-                    conf_label = "Strong"
-                speaker = block.split("---")[0].strip()
-                findings_lines.append(
-                    f"Finding {bi} [{conf_label}]: Key themes from {speaker}"
-                )
-                snippet_lines = [
-                    l.strip()
-                    for l in block.split("\n")
-                    if l.strip() and not l.startswith("---")
-                ][:4]
-                for sl in snippet_lines:
-                    findings_lines.append(f"  {sl}")
+
+        transcript_text, memo_raw, memo_sections_parsed = _parse_lisa_memo(clean_output)
+
+        if memo_sections_parsed.get("key_themes"):
+            findings_lines.append("Key Themes (from First-Pass Findings Memo):")
+            for line in memo_sections_parsed["key_themes"].split("\n"):
+                if line.strip():
+                    findings_lines.append(f"  {line.strip()}")
+            findings_lines.append("")
+
+        if memo_sections_parsed.get("strong_vs_exploratory"):
+            findings_lines.append("Signal Strength:")
+            for line in memo_sections_parsed["strong_vs_exploratory"].split("\n"):
+                if line.strip():
+                    conf_tag = ""
+                    low = line.strip().lower()
+                    if "strong" in low:
+                        conf_tag = " [Strong]"
+                    elif "exploratory" in low:
+                        conf_tag = " [Exploratory]"
+                    else:
+                        conf_tag = " [Indicative]"
+                    findings_lines.append(f"  {line.strip()}{conf_tag}")
+            findings_lines.append("")
+
+        if memo_sections_parsed.get("candidate_insights"):
+            findings_lines.append("Candidate Insights Mapped to Brief:")
+            for line in memo_sections_parsed["candidate_insights"].split("\n"):
+                if line.strip():
+                    findings_lines.append(f"  {line.strip()}")
+            findings_lines.append("")
+
+        if memo_sections_parsed.get("supporting_excerpts"):
+            findings_lines.append("Supporting Excerpts:")
+            for line in memo_sections_parsed["supporting_excerpts"].split("\n"):
+                if line.strip():
+                    findings_lines.append(f"  {line.strip()}")
+            findings_lines.append("")
+
+        if not memo_sections_parsed:
+            interview_blocks = (
+                clean_output.split("--- Interview with ")
+                if "--- Interview with " in clean_output
+                else []
+            )
+            if interview_blocks and len(interview_blocks) > 1:
+                for bi, block in enumerate(interview_blocks[1:], 1):
+                    conf_label = "Indicative"
+                    if confidence and confidence.get("Strong", 0) >= bi:
+                        conf_label = "Strong"
+                    speaker = block.split("---")[0].strip()
+                    findings_lines.append(
+                        f"Finding {bi} [{conf_label}]: Key themes from {speaker}"
+                    )
+                    snippet_lines = [
+                        l.strip()
+                        for l in block.split("\n")
+                        if l.strip() and not l.startswith("---")
+                    ][:4]
+                    for sl in snippet_lines:
+                        findings_lines.append(f"  {sl}")
+                    findings_lines.append("")
+            elif clean_output.strip():
+                findings_lines.append(f"Finding 1 [Exploratory]: Study output summary")
+                for line in clean_output.strip().split("\n")[:10]:
+                    if line.strip():
+                        findings_lines.append(f"  {line.strip()}")
                 findings_lines.append("")
-        elif clean_output.strip():
+
+        if memo_sections_parsed.get("contradictions"):
+            surprised_lines.append("Contradictions and Tensions:")
+            for line in memo_sections_parsed["contradictions"].split("\n"):
+                if line.strip():
+                    surprised_lines.append(f"  {line.strip()}")
+    elif output_raw:
+        clean_output = output_raw
+        for prefix in ["=== QA REVIEW: PASS ===", "=== QA REVIEW: DOWNGRADE ==="]:
+            if clean_output.startswith(prefix):
+                parts = clean_output.split("=" * 40, 1)
+                if len(parts) > 1:
+                    clean_output = parts[1].strip()
+                break
+        if clean_output.startswith("*** SIMULATED"):
+            lines_raw = clean_output.split("\n")
+            clean_output = "\n".join(l for l in lines_raw if not l.startswith("***"))
+        if clean_output.strip():
             findings_lines.append(f"Finding 1 [Exploratory]: Study output summary")
             for line in clean_output.strip().split("\n")[:10]:
                 if line.strip():
@@ -3504,6 +3643,10 @@ def build_structured_report(
     if not findings_lines:
         findings_lines.append("No findings available.")
     sections["key_findings"] = "\n".join(findings_lines)
+
+    if not surprised_lines:
+        surprised_lines.append("No unexpected findings identified in this study.")
+    sections["what_surprised_us"] = "\n".join(surprised_lines)
 
     risk_lines = []
     qa_status = study.get("qa_status") or ""
@@ -3527,7 +3670,41 @@ def build_structured_report(
         risk_lines.append(
             "Interview/discussion outputs are AI-generated based on persona profiles and may contain biases inherent in the training data."
         )
+    if memo_sections_parsed.get("limitations"):
+        risk_lines.append("")
+        risk_lines.append("Limitations (from First-Pass Findings Memo):")
+        for line in memo_sections_parsed["limitations"].split("\n"):
+            if line.strip():
+                risk_lines.append(f"  {line.strip()}")
     sections["risks_limits"] = "\n".join(risk_lines)
+
+    grounding_lines = []
+    covered = []
+    not_covered = []
+    for field, label in ANCHOR_FIELDS:
+        val = (study.get(field) or "").strip()
+        if val:
+            covered.append(label)
+        else:
+            not_covered.append(label)
+    if covered:
+        grounding_lines.append(f"Anchors provided ({len(covered)}/{len(ANCHOR_FIELDS)}):")
+        for c in covered:
+            grounding_lines.append(f"  \u2713 {c}")
+    if not_covered:
+        grounding_lines.append(f"Anchors not provided ({len(not_covered)}):")
+        for nc in not_covered:
+            grounding_lines.append(f"  \u2717 {nc}")
+    if len(covered) == len(ANCHOR_FIELDS):
+        grounding_lines.append("")
+        grounding_lines.append("Full grounding coverage achieved. All research brief anchors were defined before execution.")
+    elif len(covered) >= 4:
+        grounding_lines.append("")
+        grounding_lines.append("Partial grounding coverage. Most anchors were defined but some gaps remain which may limit insight quality.")
+    else:
+        grounding_lines.append("")
+        grounding_lines.append("Low grounding coverage. Several anchors were missing, which may significantly limit the quality and actionability of findings.")
+    sections["grounding_coverage"] = "\n".join(grounding_lines)
 
     source_lines = [
         "AI Model: Simulated output (placeholder)",
@@ -3576,6 +3753,11 @@ def build_structured_report(
                 "content": "\n".join(fu_lines),
             }
         )
+
+    if st in ("synthetic_idi", "synthetic_focus_group") and transcript_text:
+        qa_s = study.get("qa_status") or ""
+        if qa_s in ("pass", "downgrade"):
+            sections["transcript_appendix"] = transcript_text
 
     sections["version"] = version
     sections["max_version"] = max_version
@@ -3772,13 +3954,18 @@ def generate_report_pdf(study, sections):
 
     heading_sections = [
         ("1. Executive Summary", sections.get("executive_summary", "")),
-        ("2. What Was Studied", sections.get("what_was_studied", "")),
-        ("3. Key Findings", sections.get("key_findings", "")),
-        ("4. Risks, Limits, and Unknowns", sections.get("risks_limits", "")),
-        ("5. Sources and Citations", sections.get("sources_citations", "")),
+        ("2. Why This Study Type Was Chosen", sections.get("why_study_type", "")),
+        ("3. What Was Studied", sections.get("what_was_studied", "")),
+        ("4. Key Findings", sections.get("key_findings", "")),
+        ("5. What Surprised Us", sections.get("what_surprised_us", "")),
+        ("6. Risks, Limits, and Unknowns", sections.get("risks_limits", "")),
+        ("7. Grounding Coverage Summary", sections.get("grounding_coverage", "")),
+        ("8. Sources and Citations", sections.get("sources_citations", "")),
     ]
 
     for heading, content in heading_sections:
+        if not content:
+            continue
         pdf.set_font("Helvetica", "B", 12)
         pdf.set_fill_color(240, 240, 240)
         pdf.cell(0, 8, heading, new_x="LMARGIN", new_y="NEXT", fill=True)
@@ -3792,7 +3979,7 @@ def generate_report_pdf(study, sections):
     for fus in fu_sections:
         pdf.set_font("Helvetica", "B", 12)
         pdf.set_fill_color(240, 240, 240)
-        heading = f"{5 + fus['round']}. Follow-up Round {fus['round']}"
+        heading = f"{8 + fus['round']}. Follow-up Round {fus['round']}"
         pdf.cell(0, 8, heading, new_x="LMARGIN", new_y="NEXT", fill=True)
         pdf.ln(2)
         _pdf_write_text(
@@ -3840,6 +4027,16 @@ def generate_report_pdf(study, sections):
                         else:
                             pdf.cell(0, 5, "    (file not found on disk)", new_x="LMARGIN", new_y="NEXT")
                 pdf.ln(4)
+
+    if sections.get("transcript_appendix"):
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 10, "Appendix: Transcript", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(4)
+        pdf.set_font("Helvetica", "", 9)
+        _pdf_write_text(
+            pdf, sections["transcript_appendix"], 9, cjk_available=cjk_ok, method="multi_cell", w=0, h=4
+        )
 
     return pdf.output()
 

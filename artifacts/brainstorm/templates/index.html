@@ -2402,29 +2402,50 @@
                     <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.executive_summary }}</pre>
                 </div>
 
+                {% if view_study_output.report_sections.why_study_type %}
                 <div style="margin-bottom: 20px;">
-                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">2. What Was Studied</h4>
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">2. Why This Study Type Was Chosen</h4>
+                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.why_study_type }}</pre>
+                </div>
+                {% endif %}
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">3. What Was Studied</h4>
                     <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.what_was_studied }}</pre>
                 </div>
 
                 <div style="margin-bottom: 20px;">
-                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">3. Key Findings</h4>
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">4. Key Findings</h4>
                     <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.key_findings }}</pre>
                 </div>
 
+                {% if view_study_output.report_sections.what_surprised_us %}
                 <div style="margin-bottom: 20px;">
-                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">4. Risks, Limits, and Unknowns</h4>
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #fff8e1; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #f9a825;">5. What Surprised Us</h4>
+                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.what_surprised_us }}</pre>
+                </div>
+                {% endif %}
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">6. Risks, Limits, and Unknowns</h4>
                     <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.risks_limits }}</pre>
                 </div>
 
+                {% if view_study_output.report_sections.grounding_coverage %}
                 <div style="margin-bottom: 20px;">
-                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">5. Sources and Citations</h4>
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #e8f5e9; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #4caf50;">7. Grounding Coverage Summary</h4>
+                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.grounding_coverage }}</pre>
+                </div>
+                {% endif %}
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">8. Sources and Citations</h4>
                     <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.sources_citations }}</pre>
                 </div>
 
                 {% for fus in view_study_output.report_sections.followup_sections %}
                 <div style="margin-bottom: 20px;">
-                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #e8f0fe; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #5C7E8F;">{{ 5 + fus.round }}. Follow-up Round {{ fus.round }}</h4>
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #e8f0fe; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #5C7E8F;">{{ 8 + fus.round }}. Follow-up Round {{ fus.round }}</h4>
                     <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ fus.content }}</pre>
                 </div>
                 {% endfor %}
