@@ -124,8 +124,10 @@ USER_UPLOADS_DIR = os.path.join(
 ADMIN_UPLOADS_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "uploads", "admin"
 )
+SURVEY_IMAGES_DIR = os.path.join(USER_UPLOADS_DIR, "survey_images")
 os.makedirs(USER_UPLOADS_DIR, exist_ok=True)
 os.makedirs(ADMIN_UPLOADS_DIR, exist_ok=True)
+os.makedirs(SURVEY_IMAGES_DIR, exist_ok=True)
 
 BLOG_IMAGE_MAX_SIZE = 300 * 1024
 BLOG_IMAGE_ALLOWED = {"png", "jpg", "jpeg"}
@@ -720,13 +722,16 @@ def _validate_survey_questions(questions):
                 ref_a = (images.get("A") or "").strip()
                 ref_b = (images.get("B") or "").strip()
                 if not ref_a or not ref_b:
-                    errors.append(f"Q{i} (ab_image): both image A and image B references are required.")
+                    errors.append(f"Q{i} (ab_image): both image A and image B must be uploaded.")
                 else:
                     for label, ref in [("A", ref_a), ("B", ref_b)]:
                         if "." in ref:
                             ext = ("." + ref.rsplit(".", 1)[-1]).lower()
                             if ext not in AB_IMAGE_LIMITS["allowed_extensions"]:
                                 errors.append(f"Q{i} (ab_image): image {label} must be JPG or PNG (got '{ext}').")
+                        fpath = os.path.join(SURVEY_IMAGES_DIR, os.path.basename(ref))
+                        if not os.path.isfile(fpath):
+                            errors.append(f"Q{i} (ab_image): image {label} file not found. Please re-upload.")
                 total_images += 2
         elif qtype == "range":
             r_min = q.get("min")
@@ -2096,6 +2101,60 @@ def landing_page():
 @app.route("/static/blog/<path:filename>")
 def blog_static(filename):
     return send_from_directory(BLOG_STATIC_DIR, filename)
+
+
+@app.route("/survey-image/<path:filename>")
+def serve_survey_image(filename):
+    safe = os.path.basename(filename)
+    return send_from_directory(SURVEY_IMAGES_DIR, safe)
+
+
+@app.route("/upload-survey-image/<int:study_id>/<int:q_index>/<side>", methods=["POST"])
+def upload_survey_image(study_id, q_index, side):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return jsonify({"ok": False, "error": "You must be an active user."}), 403
+
+    if side not in ("A", "B"):
+        return jsonify({"ok": False, "error": "Side must be 'A' or 'B'."}), 400
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return jsonify({"ok": False, "error": "Draft study not found."}), 404
+    if study["study_type"] != "synthetic_survey":
+        conn.close()
+        return jsonify({"ok": False, "error": "Survey images only apply to synthetic survey studies."}), 400
+    conn.close()
+
+    f = request.files.get("image")
+    if not f or not f.filename:
+        return jsonify({"ok": False, "error": "No image file provided."}), 400
+
+    orig = f.filename.strip()
+    ext = ""
+    if "." in orig:
+        ext = ("." + orig.rsplit(".", 1)[-1]).lower()
+    if ext not in AB_IMAGE_LIMITS["allowed_extensions"]:
+        return jsonify({"ok": False, "error": f"Only JPG/PNG images are allowed (got '{ext}')."}), 400
+
+    data = f.read()
+    if len(data) > AB_IMAGE_LIMITS["max_size_bytes"]:
+        max_kb = AB_IMAGE_LIMITS["max_size_bytes"] // 1024
+        return jsonify({"ok": False, "error": f"Image exceeds {max_kb}KB limit ({len(data) // 1024}KB)."}), 400
+
+    import uuid as _uuid
+    safe_name = f"s{study_id}_q{q_index}_{side}_{_uuid.uuid4().hex[:8]}{ext}"
+    dest = os.path.join(SURVEY_IMAGES_DIR, safe_name)
+    with open(dest, "wb") as out:
+        out.write(data)
+
+    return jsonify({"ok": True, "filename": safe_name, "side": side, "size": len(data)})
 
 
 BLOG_PAGE_SIZE = 10
@@ -4051,6 +4110,17 @@ def ben_precheck(study, persona_count, persona_dossiers=None):
             failures.append("Question count must be between 1 and 12.")
         if len(sq) != qc:
             failures.append(f"Survey has {len(sq)} questions but needs exactly {qc}.")
+        for qi, q in enumerate(sq, 1):
+            if isinstance(q, dict) and q.get("type") == "ab_image":
+                imgs = q.get("images") or {}
+                for side_label in ("A", "B"):
+                    ref = (imgs.get(side_label) or "").strip()
+                    if not ref:
+                        failures.append(f"Q{qi} (ab_image): image {side_label} not uploaded.")
+                    else:
+                        fpath = os.path.join(SURVEY_IMAGES_DIR, os.path.basename(ref))
+                        if not os.path.isfile(fpath):
+                            failures.append(f"Q{qi} (ab_image): image {side_label} file missing. Please re-upload.")
     elif st in ("synthetic_idi", "synthetic_focus_group"):
         anchor_labels = [
             ("business_problem", "Business Problem"),

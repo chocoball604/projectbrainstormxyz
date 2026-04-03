@@ -786,10 +786,34 @@
                                 </div>
                             </div>
                             <div class="sq-field-imgs" style="{{ '' if eq_type == 'ab_image' else 'display:none;' }}margin-bottom:8px;">
-                                <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Image references:</span>
-                                <div style="display:flex;gap:8px;">
-                                    <input type="text" class="sq-img-a" value="{{ eq_img_a }}" placeholder="Image A (filename or URL)" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
-                                    <input type="text" class="sq-img-b" value="{{ eq_img_b }}" placeholder="Image B (filename or URL)" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
+                                <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Upload images (JPG/PNG, max 500KB each):</span>
+                                <input type="hidden" class="sq-img-a" value="{{ eq_img_a }}">
+                                <input type="hidden" class="sq-img-b" value="{{ eq_img_b }}">
+                                <div style="display:flex;gap:12px;">
+                                    <div style="flex:1;">
+                                        <label style="font-size:11px;color:#777;display:block;margin-bottom:2px;">Image A</label>
+                                        <input type="file" class="sq-img-file-a" accept=".jpg,.jpeg,.png" style="font-size:11px;max-width:100%;" data-idx="{{ i }}">
+                                        {% if eq_img_a %}
+                                        <div class="sq-img-preview-a" style="margin-top:4px;">
+                                            <img src="/survey-image/{{ eq_img_a }}" style="max-width:80px;max-height:60px;border:1px solid #ddd;border-radius:3px;" alt="Image A">
+                                            <span style="font-size:10px;color:#27ae60;margin-left:4px;">Uploaded</span>
+                                        </div>
+                                        {% else %}
+                                        <div class="sq-img-preview-a" style="margin-top:4px;font-size:11px;color:#999;">No image</div>
+                                        {% endif %}
+                                    </div>
+                                    <div style="flex:1;">
+                                        <label style="font-size:11px;color:#777;display:block;margin-bottom:2px;">Image B</label>
+                                        <input type="file" class="sq-img-file-b" accept=".jpg,.jpeg,.png" style="font-size:11px;max-width:100%;" data-idx="{{ i }}">
+                                        {% if eq_img_b %}
+                                        <div class="sq-img-preview-b" style="margin-top:4px;">
+                                            <img src="/survey-image/{{ eq_img_b }}" style="max-width:80px;max-height:60px;border:1px solid #ddd;border-radius:3px;" alt="Image B">
+                                            <span style="font-size:10px;color:#27ae60;margin-left:4px;">Uploaded</span>
+                                        </div>
+                                        {% else %}
+                                        <div class="sq-img-preview-b" style="margin-top:4px;font-size:11px;color:#999;">No image</div>
+                                        {% endif %}
+                                    </div>
                                 </div>
                             </div>
                             <div class="sq-field-range" style="{{ '' if eq_type == 'range' else 'display:none;' }}margin-bottom:8px;">
@@ -1789,7 +1813,7 @@
                 } else if (qtype === 'ab_image') {
                     var imgA = (row.querySelector('.sq-img-a') || {}).value || '';
                     var imgB = (row.querySelector('.sq-img-b') || {}).value || '';
-                    if (!imgA.trim() || !imgB.trim()) return {error: 'Q' + idx + ' (ab_image): both image references are required.'};
+                    if (!imgA.trim() || !imgB.trim()) return {error: 'Q' + idx + ' (ab_image): both images must be uploaded before saving.'};
                     qobj.images = {A: imgA.trim(), B: imgB.trim()};
                 } else if (qtype === 'range') {
                     qobj.min = parseFloat((row.querySelector('.sq-range-min') || {}).value) || 0;
@@ -1821,6 +1845,57 @@
 
             document.querySelectorAll('.sq-mc-remove').forEach(function(btn) {
                 btn.addEventListener('click', function() { btn.closest('div').remove(); });
+            });
+
+            function handleImageUpload(fileInput, side) {
+                var idx = fileInput.getAttribute('data-idx');
+                var file = fileInput.files[0];
+                if (!file) return;
+                var ext = file.name.split('.').pop().toLowerCase();
+                if (['jpg', 'jpeg', 'png'].indexOf(ext) === -1) {
+                    alert('Only JPG/PNG images are allowed.');
+                    fileInput.value = '';
+                    return;
+                }
+                if (file.size > 500 * 1024) {
+                    alert('Image exceeds 500KB limit (' + Math.round(file.size / 1024) + 'KB).');
+                    fileInput.value = '';
+                    return;
+                }
+                var row = fileInput.closest('.sq-row');
+                var fd = new FormData();
+                fd.append('token', token);
+                fd.append('image', file);
+                fetch('/upload-survey-image/' + studyId + '/' + idx + '/' + side, {
+                    method: 'POST', body: fd,
+                    headers: {'X-Requested-With': 'XMLHttpRequest'}
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        var hidden = row.querySelector('.sq-img-' + side.toLowerCase());
+                        if (hidden) hidden.value = data.filename;
+                        var preview = row.querySelector('.sq-img-preview-' + side.toLowerCase());
+                        if (preview) {
+                            preview.innerHTML = '<img src="/survey-image/' + data.filename + '" style="max-width:80px;max-height:60px;border:1px solid #ddd;border-radius:3px;" alt="Image ' + side + '">'
+                                + '<span style="font-size:10px;color:#27ae60;margin-left:4px;">Uploaded</span>';
+                        }
+                    } else {
+                        alert(data.error || 'Upload failed.');
+                        fileInput.value = '';
+                    }
+                })
+                .catch(function(err) {
+                    alert('Upload error: ' + err.message);
+                    fileInput.value = '';
+                });
+            }
+
+            document.querySelectorAll('.sq-img-file-a').forEach(function(inp) {
+                inp.addEventListener('change', function() { handleImageUpload(inp, 'A'); });
+            });
+            document.querySelectorAll('.sq-img-file-b').forEach(function(inp) {
+                inp.addEventListener('change', function() { handleImageUpload(inp, 'B'); });
             });
 
             document.querySelectorAll('.sq-save-btn').forEach(function(btn) {
@@ -2293,6 +2368,7 @@
             </div>
             {% endif %}
 
+            {% if view_study_output.study_type != 'synthetic_survey' %}
             {% if view_study_output.final_report %}
             <details style="margin-bottom: 16px;">
                 <summary style="cursor: pointer; font-size: 14px; color: #5C7E8F; font-weight: 500; padding: 8px 0;">Show Raw Output</summary>
@@ -2303,6 +2379,7 @@
                 <summary style="cursor: pointer; font-size: 14px; color: #5C7E8F; font-weight: 500; padding: 8px 0;">Show Raw Output</summary>
                 <pre style="background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; line-height: 1.6; margin-top: 8px;">{{ view_study_output.study_output }}</pre>
             </details>
+            {% endif %}
             {% endif %}
 
             {% if view_study_output.study_type in ['synthetic_idi', 'synthetic_focus_group'] and view_study_output.status == 'completed' %}
