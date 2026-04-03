@@ -2453,12 +2453,14 @@
                     <div style="display: flex; gap: 24px; flex-wrap: wrap;">
                         <div style="text-align: center;">
                             <div style="font-size: 12px; font-weight: 600; color: #5C7E8F; margin-bottom: 4px;">Option A</div>
-                            <img src="/survey-image/{{ sq.images.A }}?token={{ token }}" style="max-width:120px;max-height:90px;border:1px solid #ddd;border-radius:4px;display:block;margin:0 auto 4px;" alt="Image A" onerror="this.style.display='none';">
+                            <img src="/survey-image/{{ sq.images.A }}?token={{ token }}" style="max-width:120px;max-height:90px;border:1px solid #ddd;border-radius:4px;display:block;margin:0 auto 4px;" alt="Image A" onerror="this.style.display='none';this.nextElementSibling.style.display='';">
+                            <span style="display:none;font-size:10px;color:#e67e22;">(preview unavailable)</span>
                             <div style="font-size: 10px; color: #888; word-break: break-all;">{{ sq.images.A }}</div>
                         </div>
                         <div style="text-align: center;">
                             <div style="font-size: 12px; font-weight: 600; color: #5C7E8F; margin-bottom: 4px;">Option B</div>
-                            <img src="/survey-image/{{ sq.images.B }}?token={{ token }}" style="max-width:120px;max-height:90px;border:1px solid #ddd;border-radius:4px;display:block;margin:0 auto 4px;" alt="Image B" onerror="this.style.display='none';">
+                            <img src="/survey-image/{{ sq.images.B }}?token={{ token }}" style="max-width:120px;max-height:90px;border:1px solid #ddd;border-radius:4px;display:block;margin:0 auto 4px;" alt="Image B" onerror="this.style.display='none';this.nextElementSibling.style.display='';">
+                            <span style="display:none;font-size:10px;color:#e67e22;">(preview unavailable)</span>
                             <div style="font-size: 10px; color: #888; word-break: break-all;">{{ sq.images.B }}</div>
                         </div>
                     </div>
