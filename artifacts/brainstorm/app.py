@@ -2107,6 +2107,10 @@ def blog_static(filename):
 
 @app.route("/survey-image/<path:filename>")
 def serve_survey_image(filename):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return "Unauthorized", 403
     safe = os.path.basename(filename)
     return send_from_directory(SURVEY_IMAGES_DIR, safe)
 
@@ -5913,7 +5917,7 @@ def _build_precheck_state(study_dict, persona_count):
     return {
         "has_bp": has_bp, "has_ds": has_ds, "has_mg": has_mg,
         "has_pc": has_pc, "has_ta": has_ta, "has_dui": has_dui,
-        "all_anchors": has_bp and has_ds and has_mg and has_pc and has_ta and has_dui,
+        "all_anchors": (has_bp and has_ds and has_mg and has_pc and has_ta) if st == "synthetic_survey" else (has_bp and has_ds and has_mg and has_pc and has_ta and has_dui),
         "persona_count": persona_count, "personas_min": p_min,
         "personas_complete": p_complete, "personas_gap": p_gap,
         "study_type": st,

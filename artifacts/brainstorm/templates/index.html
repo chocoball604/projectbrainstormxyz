@@ -1479,17 +1479,22 @@
                 var items = panel.querySelectorAll('ul li');
                 if (pc.study_type === 'synthetic_survey') {
                     var sFields = [
-                        {key: 'has_bp', label: 'Business Problem'},
-                        {key: 'has_ds', label: 'Decision to Support'},
-                        {key: 'has_mg', label: 'Market / Geography'},
-                        {key: 'has_pc', label: 'Product / Concept'},
-                        {key: 'has_ta', label: 'Target Audience'},
-                        {key: 'has_dui', label: 'Definition of Useful Insight'}
+                        {key: 'has_bp', label: 'Business Problem', optional: false},
+                        {key: 'has_ds', label: 'Decision to Support', optional: false},
+                        {key: 'has_mg', label: 'Market / Geography', optional: false},
+                        {key: 'has_pc', label: 'Product / Concept', optional: false},
+                        {key: 'has_ta', label: 'Target Audience', optional: false},
+                        {key: 'has_dui', label: 'Definition of Useful Insight', optional: true}
                     ];
                     for (var i = 0; i < sFields.length && i < items.length; i++) {
                         var done = pc[sFields[i].key];
-                        items[i].style.color = done ? '#27ae60' : '#e74c3c';
-                        items[i].innerHTML = (done ? '\u2713 ' : '\u2717 ') + sFields[i].label;
+                        if (sFields[i].optional) {
+                            items[i].style.color = done ? '#27ae60' : '#999';
+                            items[i].innerHTML = (done ? '\u2713 ' : '\u2013 ') + sFields[i].label + ' <span style="font-size:11px;color:#999;">(optional)</span>';
+                        } else {
+                            items[i].style.color = done ? '#27ae60' : '#e74c3c';
+                            items[i].innerHTML = (done ? '\u2713 ' : '\u2717 ') + sFields[i].label;
+                        }
                     }
                     var rcLi = items[sFields.length];
                     if (rcLi) {
@@ -1963,7 +1968,7 @@
                     var statusEl = document.getElementById('sq-save-all-status');
                     var fd = new FormData();
                     fd.append('token', token);
-                    fd.append('questions_json', JSON.stringify(questions));
+                    fd.append('survey_questions_json', JSON.stringify(questions));
                     fetch('/save-survey-questions/' + studyId, {
                         method: 'POST', body: fd,
                         headers: {'X-Requested-With': 'XMLHttpRequest'}
