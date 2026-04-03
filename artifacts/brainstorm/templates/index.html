@@ -679,8 +679,8 @@
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="hidden" name="anchor_key" value="definition_useful_insight">
                     <div class="form-group" style="margin-bottom: 6px;">
-                        <label>6. Definition of Useful Insight</label>
-                        <textarea name="anchor_value" rows="2" required placeholder="What would a useful insight look like for this study?"></textarea>
+                        <label>6. Definition of Useful Insight <span style="font-weight:400;color:#999;font-size:12px;">(optional)</span></label>
+                        <textarea name="anchor_value" rows="2" placeholder="What would a useful insight look like for this study?"></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary btn-small">Save Definition of Useful Insight</button>
                 </form>
@@ -831,6 +831,10 @@
                         </div>
                     </div>
                     {% endfor %}
+                </div>
+                <div style="display:flex;justify-content:flex-end;margin-top:12px;gap:8px;align-items:center;">
+                    <button type="button" id="sq-save-all-btn" class="btn btn-primary btn-small" style="padding:6px 18px;">Save All Questions</button>
+                    <span id="sq-save-all-status" style="font-size:12px;color:#27ae60;display:none;"></span>
                 </div>
             </div>
 
@@ -1372,8 +1376,8 @@
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_ta_panel else '#e74c3c' }};">
                         {{ '✓' if has_ta_panel else '✗' }} Target Audience
                     </li>
-                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_dui_panel else '#e74c3c' }};">
-                        {{ '✓' if has_dui_panel else '✗' }} Definition of Useful Insight
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_dui_panel else '#999' }};">
+                        {{ '✓' if has_dui_panel else '–' }} Definition of Useful Insight <span style="font-size:11px;color:#999;">(optional)</span>
                     </li>
                     <li style="padding: 8px 0 4px; border-top: 1px solid #eee; margin-top: 4px; color: {{ '#27ae60' if rc_panel >= 25 else '#e74c3c' }};">
                         {{ '✓' if rc_panel >= 25 else '✗' }} Respondent count{% if rc_panel >= 25 %} ({{ rc_panel }}){% endif %}
@@ -1834,6 +1838,10 @@
                     var row = btn.closest('.sq-row');
                     var container = row.querySelector('.sq-mc-options');
                     var count = container.querySelectorAll('.sq-mc-opt').length;
+                    if (count >= 8) {
+                        alert('Maximum 8 options allowed for Multiple Choice.');
+                        return;
+                    }
                     var div = document.createElement('div');
                     div.style.cssText = 'display:flex;gap:4px;margin-bottom:4px;align-items:center;';
                     div.innerHTML = '<input type="text" class="sq-mc-opt" placeholder="Option ' + (count + 1) + '" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">'
@@ -1936,6 +1944,53 @@
                     });
                 });
             });
+
+            var saveAllBtn = document.getElementById('sq-save-all-btn');
+            if (saveAllBtn) {
+                saveAllBtn.addEventListener('click', function() {
+                    var rows = document.querySelectorAll('.sq-row');
+                    var questions = [];
+                    for (var r = 0; r < rows.length; r++) {
+                        var result = buildQuestionObj(rows[r]);
+                        if (result.error) {
+                            alert('Q' + rows[r].getAttribute('data-idx') + ': ' + result.error);
+                            return;
+                        }
+                        questions.push(result.question);
+                    }
+                    saveAllBtn.disabled = true;
+                    saveAllBtn.textContent = 'Saving All...';
+                    var statusEl = document.getElementById('sq-save-all-status');
+                    var fd = new FormData();
+                    fd.append('token', token);
+                    fd.append('questions_json', JSON.stringify(questions));
+                    fetch('/save-survey-questions/' + studyId, {
+                        method: 'POST', body: fd,
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        saveAllBtn.disabled = false;
+                        saveAllBtn.textContent = 'Save All Questions';
+                        if (data.ok) {
+                            if (statusEl) { statusEl.textContent = 'All saved'; statusEl.style.display = ''; }
+                            rows.forEach(function(row) {
+                                row.style.background = '#f0fff0';
+                                row.style.borderColor = '#c3e6cb';
+                            });
+                            if (data.precheck) updatePrecheckPanel(data.precheck);
+                            if (data.qa_status) updatePrecheckStatusBox(data);
+                        } else {
+                            alert(data.error || 'Bulk save failed.');
+                        }
+                    })
+                    .catch(function(err) {
+                        saveAllBtn.disabled = false;
+                        saveAllBtn.textContent = 'Save All Questions';
+                        alert('Network error: ' + err.message);
+                    });
+                });
+            }
 
             var configForm = document.querySelector('form[action*="/save-survey-config/"]');
             if (configForm) {

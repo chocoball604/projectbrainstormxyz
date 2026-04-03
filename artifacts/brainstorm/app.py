@@ -710,6 +710,8 @@ def _validate_survey_questions(questions):
         elif qtype == "mc":
             if not isinstance(opts, list) or len(opts) < 3:
                 errors.append(f"Q{i} (mc): must have at least 3 options.")
+            elif len(opts) > 8:
+                errors.append(f"Q{i} (mc): cannot have more than 8 options.")
         elif qtype == "ab":
             if not isinstance(opts, list) or len(opts) != 2:
                 errors.append(f"Q{i} (ab): must have exactly 2 options.")
@@ -4084,15 +4086,14 @@ def ben_precheck(study, persona_count, persona_dossiers=None):
         return failures
 
     if st == "synthetic_survey":
-        anchor_labels = [
+        required_anchors = [
             ("business_problem", "Business Problem"),
             ("decision_to_support", "Decision to Support"),
             ("market_geography", "Market / Geography"),
             ("product_concept", "Product / Concept"),
             ("target_audience", "Target Audience"),
-            ("definition_useful_insight", "Definition of Useful Insight"),
         ]
-        for field, label in anchor_labels:
+        for field, label in required_anchors:
             val = get_v1a_value(study, field)
             if not val:
                 failures.append(f"{label} is missing.")
@@ -5743,6 +5744,43 @@ def save_survey_question(study_id, q_index):
         if ajax:
             return jsonify({"ok": False, "error": "Question prompt is required."}), 400
         return render_error("Question prompt is required.")
+
+    qtype = nq.get("type", "open")
+    q_errors = []
+    if qtype == "likert":
+        opts = nq.get("options") or []
+        if not isinstance(opts, list) or len(opts) != 5:
+            q_errors.append("Likert must have exactly 5 labels.")
+    elif qtype == "mc":
+        opts = nq.get("options") or []
+        if not isinstance(opts, list) or len(opts) < 3:
+            q_errors.append("Multiple Choice must have at least 3 options.")
+        elif len(opts) > 8:
+            q_errors.append("Multiple Choice cannot have more than 8 options.")
+    elif qtype == "ab":
+        opts = nq.get("options") or []
+        if not isinstance(opts, list) or len(opts) != 2:
+            q_errors.append("A/B Choice must have exactly 2 options.")
+    elif qtype == "ab_image":
+        imgs = nq.get("images") or {}
+        if not isinstance(imgs, dict) or set(imgs.keys()) != {"A", "B"}:
+            q_errors.append("A/B Image must have exactly keys 'A' and 'B'.")
+        else:
+            ref_a = (imgs.get("A") or "").strip()
+            ref_b = (imgs.get("B") or "").strip()
+            if not ref_a or not ref_b:
+                q_errors.append("A/B Image: both images must be uploaded.")
+    elif qtype == "range":
+        r_min = nq.get("min")
+        r_max = nq.get("max")
+        if r_min is not None and r_max is not None and r_min >= r_max:
+            q_errors.append("Range: min must be less than max.")
+    if q_errors:
+        conn.close()
+        err_msg = "; ".join(q_errors)
+        if ajax:
+            return jsonify({"ok": False, "error": err_msg}), 400
+        return render_error(err_msg)
 
     existing[q_index - 1] = nq
 
