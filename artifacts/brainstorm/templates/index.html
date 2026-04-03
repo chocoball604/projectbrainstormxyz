@@ -462,6 +462,7 @@
         </div>
 
         {% set sq_list_panel = configure_study.survey_questions_list or [] %}
+        {% set sq_saved_panel = sq_list_panel|reject("none")|list|length %}
         {% set q_count_panel = configure_study.question_count or 0 %}
         {% set rc_panel = configure_study.respondent_count or 0 %}
         {% set has_bp_panel = configure_study.business_problem and configure_study.business_problem|trim|length > 0 %}
@@ -473,7 +474,7 @@
         {% set persona_count_panel = configure_study_personas|length %}
 
         {% if configure_study.study_type == 'synthetic_survey' %}
-            {% set checklist_complete = rc_panel >= 1 and q_count_panel >= 1 and sq_list_panel|length == q_count_panel %}
+            {% set checklist_complete = rc_panel >= 1 and q_count_panel >= 1 and sq_saved_panel == q_count_panel %}
         {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
             {% set all_anchors_panel = has_bp_panel and has_ds_panel and has_mg_panel and has_pc_panel and has_ta_panel and has_dui_panel %}
             {% if configure_study.study_type == 'synthetic_idi' %}
@@ -1389,8 +1390,8 @@
                     <li style="padding: 4px 0; color: {{ '#27ae60' if q_count_panel >= 1 else '#e74c3c' }};">
                         {{ '✓' if q_count_panel >= 1 else '✗' }} Question count{% if q_count_panel >= 1 %} ({{ q_count_panel }}){% endif %}
                     </li>
-                    <li style="padding: 4px 0; color: {{ '#27ae60' if sq_list_panel|length == q_count_panel and q_count_panel >= 1 else '#e74c3c' }};">
-                        {{ '✓' if sq_list_panel|length == q_count_panel and q_count_panel >= 1 else '✗' }} Survey questions ({{ sq_list_panel|length }}/{{ q_count_panel }})
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if sq_saved_panel == q_count_panel and q_count_panel >= 1 else '#e74c3c' }};">
+                        {{ '✓' if sq_saved_panel == q_count_panel and q_count_panel >= 1 else '✗' }} Survey questions ({{ sq_saved_panel }}/{{ q_count_panel }})
                     </li>
                 </ul>
 

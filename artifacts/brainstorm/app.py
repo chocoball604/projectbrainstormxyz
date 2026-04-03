@@ -1677,9 +1677,7 @@ def index():
                 configure_study = dict(row)
                 if configure_study.get("survey_questions"):
                     try:
-                        configure_study["survey_questions_list"] = [
-                            q for q in json.loads(configure_study["survey_questions"]) if q is not None
-                        ]
+                        configure_study["survey_questions_list"] = json.loads(configure_study["survey_questions"])
                     except (json.JSONDecodeError, TypeError):
                         configure_study["survey_questions_list"] = []
                 else:
