@@ -1670,9 +1670,9 @@ def index():
                 configure_study = dict(row)
                 if configure_study.get("survey_questions"):
                     try:
-                        configure_study["survey_questions_list"] = json.loads(
-                            configure_study["survey_questions"]
-                        )
+                        configure_study["survey_questions_list"] = [
+                            q for q in json.loads(configure_study["survey_questions"]) if q is not None
+                        ]
                     except (json.JSONDecodeError, TypeError):
                         configure_study["survey_questions_list"] = []
                 else:
@@ -3288,7 +3288,7 @@ def build_structured_report(
         sq = []
         if study.get("survey_questions"):
             try:
-                sq = json.loads(study["survey_questions"])
+                sq = [q for q in json.loads(study["survey_questions"]) if q is not None]
             except (json.JSONDecodeError, TypeError):
                 sq = []
         if sq:
@@ -4042,7 +4042,7 @@ def ben_precheck(study, persona_count, persona_dossiers=None):
         sq = []
         if study["survey_questions"]:
             try:
-                sq = json.loads(study["survey_questions"])
+                sq = [q for q in json.loads(study["survey_questions"]) if q is not None]
             except (json.JSONDecodeError, TypeError):
                 sq = []
         if rc < 25 or rc > 100:
@@ -4353,7 +4353,7 @@ def get_save_buttons(study):
         sq = []
         if study["survey_questions"]:
             try:
-                sq = json.loads(study["survey_questions"])
+                sq = [q for q in json.loads(study["survey_questions"]) if q is not None]
             except (json.JSONDecodeError, TypeError):
                 sq = []
         if len(sq) < qc:
@@ -4399,7 +4399,7 @@ def get_coaching_nudge(study, persona_count):
         sq = []
         if study["survey_questions"]:
             try:
-                sq = json.loads(study["survey_questions"])
+                sq = [q for q in json.loads(study["survey_questions"]) if q is not None]
             except (json.JSONDecodeError, TypeError):
                 sq = []
         if rc < 1:
@@ -4501,7 +4501,7 @@ def save_chat_field(study_id):
         sq = []
         if study["survey_questions"]:
             try:
-                sq = json.loads(study["survey_questions"])
+                sq = [q for q in json.loads(study["survey_questions"]) if q is not None]
             except (json.JSONDecodeError, TypeError):
                 sq = []
         qc = study["question_count"] or 0
@@ -4859,7 +4859,7 @@ def run_study(study_id):
             if ajax:
                 return jsonify({"ok": False, "error": "Survey question count must be between 1 and 12."}), 400
             return render_error("Survey question count must be between 1 and 12.")
-        sq = json.loads(study["survey_questions"] or "[]")
+        sq = [q for q in json.loads(study["survey_questions"] or "[]") if q is not None]
         if len(sq) != q_count:
             conn.close()
             if ajax:
@@ -5056,7 +5056,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             study_dict = dict(study)
             r_count = study_dict.get("respondent_count") or 100
             q_count = study_dict.get("question_count") or 8
-            sq = json.loads(study_dict.get("survey_questions") or "[]")
+            sq = [q for q in json.loads(study_dict.get("survey_questions") or "[]") if q is not None]
             bp = (study_dict.get("business_problem") or "").strip()
             ds = (study_dict.get("decision_to_support") or "").strip()
             mg = (study_dict.get("study_fit") or "").strip()
@@ -5458,6 +5458,32 @@ def save_survey_config(study_id):
         (r_count, q_count, study_id),
     )
     conn.commit()
+
+    study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+    study_dict = dict(study)
+    auto_ben_precheck(conn, study_dict, user["id"])
+
+    ajax = _is_ajax(request)
+    if ajax:
+        study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+        study_dict = dict(study)
+        personas_used = normalize_personas_used(study_dict.get("personas_used"))
+        precheck = _build_precheck_state(study_dict, len(personas_used))
+        qa_status = study_dict.get("qa_status", "")
+        qa_failures = []
+        if qa_status == "precheck_failed" and study_dict.get("qa_notes"):
+            try:
+                qa_failures = json.loads(study_dict["qa_notes"])
+            except (json.JSONDecodeError, TypeError):
+                qa_failures = []
+        conn.close()
+        return jsonify({
+            "ok": True,
+            "precheck": precheck,
+            "qa_status": qa_status,
+            "qa_failures": qa_failures,
+        })
+
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
 
@@ -5649,11 +5675,10 @@ def save_survey_question(study_id, q_index):
         return render_error("Question prompt is required.")
 
     existing[q_index - 1] = nq
-    clean = [q for q in existing if q is not None]
 
     conn.execute(
         "UPDATE studies SET survey_questions = ? WHERE id = ?",
-        (json.dumps(clean), study_id),
+        (json.dumps(existing), study_id),
     )
     conn.commit()
 
@@ -5671,6 +5696,7 @@ def save_survey_question(study_id, q_index):
             qa_failures = json.loads(study_dict["qa_notes"])
         except (json.JSONDecodeError, TypeError):
             qa_failures = []
+    saved_count = len([q for q in existing if q is not None])
     conn.close()
 
     if ajax:
@@ -5678,7 +5704,7 @@ def save_survey_question(study_id, q_index):
             "ok": True,
             "q_index": q_index,
             "question": nq,
-            "saved_count": len(clean),
+            "saved_count": saved_count,
             "precheck": precheck,
             "qa_status": qa_status,
             "qa_failures": qa_failures,
@@ -5772,7 +5798,7 @@ def _build_precheck_state(study_dict, persona_count):
         sq_raw = study_dict.get("survey_questions") or "[]"
         try:
             sq_list = json.loads(sq_raw) if isinstance(sq_raw, str) else sq_raw
-            survey_sq_count = len(sq_list) if isinstance(sq_list, list) else 0
+            survey_sq_count = len([q for q in sq_list if q is not None]) if isinstance(sq_list, list) else 0
         except (json.JSONDecodeError, TypeError):
             survey_sq_count = 0
 

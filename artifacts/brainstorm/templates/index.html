@@ -1534,6 +1534,38 @@
                         + '<span style="font-size:13px;color:#856404;font-weight:600;">Precheck: ' + n + ' item' + s + ' remaining</span>'
                         + '<p style="font-size:11px;color:#999;margin:4px 0 0;">Precheck updates automatically as you fill in the brief.</p></div>';
                 }
+                updateRunStudySection(data);
+            }
+
+            function updateRunStudySection(data) {
+                var section = document.getElementById('run-study-section');
+                if (!section || _executionRunning) return;
+                var sid = section.getAttribute('data-study-id');
+                if (!sid) return;
+                var h = '<h3 style="font-size:16px;color:#1a1a2e;margin-bottom:12px;">Run Study</h3>';
+                if (data.qa_status === 'precheck_passed') {
+                    h += '<p style="font-size:13px;color:#27ae60;margin-bottom:4px;font-weight:600;">Precheck: Ready to run</p>'
+                        + '<p style="font-size:12px;color:#888;margin:0 0 12px;">Precheck updates automatically as you fill in the brief.</p>'
+                        + '<form action="/run-study/' + sid + '" method="POST" id="run-study-form">'
+                        + '<input type="hidden" name="token" value="' + token + '">'
+                        + '<button type="submit" class="btn btn-success" onclick="return confirm(\'Run this study?\');">Run Study</button>'
+                        + '</form>';
+                } else if (data.qa_status === 'precheck_failed') {
+                    var fails = data.qa_failures || [];
+                    var n = fails.length;
+                    var s = n !== 1 ? 's' : '';
+                    h += '<p style="color:#e67e22;font-size:13px;margin-bottom:4px;font-weight:600;">Precheck: ' + n + ' item' + s + ' remaining</p>'
+                        + '<p style="font-size:12px;color:#888;margin:0 0 8px;">Precheck updates automatically as you fill in the brief.</p>';
+                    if (n > 0) {
+                        h += '<ul style="color:#856404;font-size:13px;margin:0 0 8px 20px;line-height:1.8;">';
+                        for (var i = 0; i < n; i++) {
+                            h += '<li>' + escHtml(fails[i]) + '</li>';
+                        }
+                        h += '</ul>';
+                    }
+                    h += '<p style="color:#888;font-size:12px;margin:0;">Cannot run yet. Please complete the remaining required items listed above.</p>';
+                }
+                section.innerHTML = h;
             }
 
             function autoRunStudy() {
@@ -1829,6 +1861,37 @@
                     });
                 });
             });
+
+            var configForm = document.querySelector('form[action*="/save-survey-config/"]');
+            if (configForm) {
+                configForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    var fd = new FormData(configForm);
+                    var btn = configForm.querySelector('button[type="submit"]');
+                    btn.disabled = true;
+                    btn.textContent = 'Saving...';
+                    fetch(configForm.action, {
+                        method: 'POST', body: fd,
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        btn.disabled = false;
+                        btn.textContent = 'Update Survey Config';
+                        if (data.ok) {
+                            if (data.precheck) updatePrecheckPanel(data.precheck);
+                            if (data.qa_status) updatePrecheckStatusBox(data);
+                        } else {
+                            alert(data.error || 'Save failed.');
+                        }
+                    })
+                    .catch(function(err) {
+                        btn.disabled = false;
+                        btn.textContent = 'Update Survey Config';
+                        alert('Network error: ' + err.message);
+                    });
+                });
+            }
 
             document.querySelectorAll('.discovery-form').forEach(function(form) {
                 form.addEventListener('submit', function(e) {
