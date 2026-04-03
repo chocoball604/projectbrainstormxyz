@@ -1947,6 +1947,12 @@ def index():
                     version=report_version,
                     uploaded_filenames=all_upload_names,
                 )
+                if view_study_output.get("study_type") == "synthetic_survey":
+                    _sq_raw = view_study_output.get("survey_questions") or "[]"
+                    try:
+                        view_study_output["survey_questions_parsed"] = json.loads(_sq_raw) if isinstance(_sq_raw, str) else _sq_raw
+                    except (json.JSONDecodeError, TypeError):
+                        view_study_output["survey_questions_parsed"] = []
 
         conn.close()
 
@@ -3407,16 +3413,39 @@ def build_structured_report(
             if last_brace >= 0 and last_brace < len(clean_json) - 1:
                 clean_json = clean_json[: last_brace + 1]
             survey_data = json.loads(clean_json)
+            sq_meta = []
+            if study.get("survey_questions"):
+                try:
+                    sq_meta = json.loads(study["survey_questions"]) if isinstance(study["survey_questions"], str) else study["survey_questions"]
+                    if not isinstance(sq_meta, list):
+                        sq_meta = []
+                except (json.JSONDecodeError, TypeError):
+                    sq_meta = []
             if isinstance(survey_data, dict) and "questions" in survey_data:
                 for qi, qobj in enumerate(survey_data["questions"], 1):
                     q_text = qobj.get("q", f"Question {qi}")
+                    q_type = qobj.get("type", "")
                     conf_label = "Indicative" if confidence else "Exploratory"
                     if confidence and confidence.get("Strong", 0) > 0 and qi == 1:
                         conf_label = "Strong"
                     findings_lines.append(f"Finding {qi} [{conf_label}]: {q_text}")
+                    if q_type == "ab_image" and qi - 1 < len(sq_meta) and sq_meta[qi - 1]:
+                        imgs = (sq_meta[qi - 1] or {}).get("images") or {}
+                        if imgs.get("A"):
+                            findings_lines.append(f"  Image A: {imgs['A']}")
+                        if imgs.get("B"):
+                            findings_lines.append(f"  Image B: {imgs['B']}")
                     results = qobj.get("results", {})
                     for k, v in results.items():
-                        findings_lines.append(f"  - {k}: {v}")
+                        if q_type == "ab_image":
+                            img_ref = ""
+                            if k == "A" and qi - 1 < len(sq_meta) and sq_meta[qi - 1]:
+                                img_ref = f" ({(sq_meta[qi - 1] or {{}}).get('images', {{}}).get('A', '')})"
+                            elif k == "B" and qi - 1 < len(sq_meta) and sq_meta[qi - 1]:
+                                img_ref = f" ({(sq_meta[qi - 1] or {{}}).get('images', {{}}).get('B', '')})"
+                            findings_lines.append(f"  - {k}{img_ref}: {v}")
+                        else:
+                            findings_lines.append(f"  - {k}: {v}")
                     findings_lines.append("")
                 if survey_data.get("top_findings"):
                     findings_lines.append("Top Findings:")
@@ -3770,6 +3799,47 @@ def generate_report_pdf(study, sections):
             pdf, fus["content"], 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5
         )
         pdf.ln(4)
+
+    if study.get("study_type") == "synthetic_survey":
+        sq_meta = []
+        if study.get("survey_questions"):
+            try:
+                sq_meta = json.loads(study["survey_questions"]) if isinstance(study["survey_questions"], str) else study["survey_questions"]
+                if not isinstance(sq_meta, list):
+                    sq_meta = []
+            except (json.JSONDecodeError, TypeError):
+                sq_meta = []
+        ab_img_items = []
+        for qi, sq in enumerate(sq_meta, 1):
+            if sq and isinstance(sq, dict) and sq.get("type") == "ab_image" and sq.get("images"):
+                ab_img_items.append((qi, sq))
+        if ab_img_items:
+            pdf.add_page()
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.cell(0, 10, "Appendix: A/B Image Reference", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(4)
+            for qi, sq in ab_img_items:
+                prompt = sq.get("prompt") or f"Question {qi}"
+                imgs = sq.get("images") or {}
+                pdf.set_font("Helvetica", "B", 11)
+                _pdf_write_text(pdf, f"Q{qi}: {prompt}", 11, style="B", cjk_available=cjk_ok, h=6)
+                pdf.ln(2)
+                for side_label in ("A", "B"):
+                    fname = imgs.get(side_label, "")
+                    pdf.set_font("Helvetica", "", 10)
+                    pdf.cell(0, 5, f"  Image {side_label}: {fname}", new_x="LMARGIN", new_y="NEXT")
+                    if fname:
+                        fpath = os.path.join(SURVEY_IMAGES_DIR, os.path.basename(fname))
+                        if os.path.isfile(fpath):
+                            try:
+                                img_x = pdf.get_x() + 10
+                                pdf.image(fpath, x=img_x, w=40)
+                                pdf.ln(2)
+                            except Exception:
+                                pdf.cell(0, 5, "    (thumbnail could not be embedded)", new_x="LMARGIN", new_y="NEXT")
+                        else:
+                            pdf.cell(0, 5, "    (file not found on disk)", new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(4)
 
     return pdf.output()
 
