@@ -2112,6 +2112,20 @@ def serve_survey_image(filename):
     if not user or user["state"] != "active":
         return "Unauthorized", 403
     safe = os.path.basename(filename)
+    parts = safe.split("_")
+    if len(parts) >= 2:
+        try:
+            study_id = int(parts[0])
+            conn = get_db()
+            study = conn.execute(
+                "SELECT id FROM studies WHERE id = ? AND user_id = ?",
+                (study_id, user["id"]),
+            ).fetchone()
+            conn.close()
+            if not study:
+                return "Forbidden", 403
+        except (ValueError, TypeError):
+            pass
     return send_from_directory(SURVEY_IMAGES_DIR, safe)
 
 

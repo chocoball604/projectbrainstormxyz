@@ -589,23 +589,25 @@
 
             {% if configure_study.study_type == 'synthetic_survey' %}
 
+            {% set has_bp = configure_study.business_problem and configure_study.business_problem|trim|length > 0 %}
+            {% set has_ds = configure_study.decision_to_support and configure_study.decision_to_support|trim|length > 0 %}
             {% set has_mg = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
             {% set has_pc = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
             {% set has_ta = configure_study.target_audience and configure_study.target_audience|trim|length > 0 %}
             {% set has_dui = configure_study.definition_useful_insight and configure_study.definition_useful_insight|trim|length > 0 %}
-            {% set all_anchors_complete = has_mg and has_pc and has_ta and has_dui %}
+            {% set all_anchors_complete = has_bp and has_ds and has_mg and has_pc and has_ta %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             {% if all_anchors_complete %}
             <div style="background: #e8f5e9; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
-                <p style="margin: 0; font-weight: 600; color: #27ae60;">Research Brief Complete (all 6 anchors filled)</p>
+                <p style="margin: 0; font-weight: 600; color: #27ae60;">Research Brief Complete (5 required anchors filled{% if has_dui %} + optional insight{% endif %})</p>
                 <ul style="margin: 8px 0 0 20px; line-height: 1.6;">
                     <li><strong>Business Problem:</strong> {{ configure_study.business_problem }}</li>
                     <li><strong>Decision to Support:</strong> {{ configure_study.decision_to_support }}</li>
                     <li><strong>Market / Geography:</strong> {{ configure_study.study_fit }}</li>
                     <li><strong>Product / Concept:</strong> {{ configure_study.known_vs_unknown }}</li>
                     <li><strong>Target Audience:</strong> {{ configure_study.target_audience }}</li>
-                    <li><strong>Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}</li>
+                    {% if has_dui %}<li><strong>Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}</li>{% endif %}
                 </ul>
             </div>
             {% else %}
@@ -872,11 +874,13 @@
 
             {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
 
+            {% set has_bp = configure_study.business_problem and configure_study.business_problem|trim|length > 0 %}
+            {% set has_ds = configure_study.decision_to_support and configure_study.decision_to_support|trim|length > 0 %}
             {% set has_mg = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
             {% set has_pc = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
             {% set has_ta = configure_study.target_audience and configure_study.target_audience|trim|length > 0 %}
             {% set has_dui = configure_study.definition_useful_insight and configure_study.definition_useful_insight|trim|length > 0 %}
-            {% set all_anchors_complete = has_mg and has_pc and has_ta and has_dui %}
+            {% set all_anchors_complete = has_bp and has_ds and has_mg and has_pc and has_ta and has_dui %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             {% if all_anchors_complete %}
