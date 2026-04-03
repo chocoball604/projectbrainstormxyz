@@ -588,25 +588,125 @@
             {% endif %}
 
             {% if configure_study.study_type == 'synthetic_survey' %}
+
+            {% set has_mg = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
+            {% set has_pc = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
+            {% set has_ta = configure_study.target_audience and configure_study.target_audience|trim|length > 0 %}
+            {% set has_dui = configure_study.definition_useful_insight and configure_study.definition_useful_insight|trim|length > 0 %}
+            {% set all_anchors_complete = has_mg and has_pc and has_ta and has_dui %}
+
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            {% if all_anchors_complete %}
+            <div style="background: #e8f5e9; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
+                <p style="margin: 0; font-weight: 600; color: #27ae60;">Research Brief Complete (all 6 anchors filled)</p>
+                <ul style="margin: 8px 0 0 20px; line-height: 1.6;">
+                    <li><strong>Business Problem:</strong> {{ configure_study.business_problem }}</li>
+                    <li><strong>Decision to Support:</strong> {{ configure_study.decision_to_support }}</li>
+                    <li><strong>Market / Geography:</strong> {{ configure_study.study_fit }}</li>
+                    <li><strong>Product / Concept:</strong> {{ configure_study.known_vs_unknown }}</li>
+                    <li><strong>Target Audience:</strong> {{ configure_study.target_audience }}</li>
+                    <li><strong>Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}</li>
+                </ul>
+            </div>
+            {% else %}
+            <div style="background: #fff3cd; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ffc107;">
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Required to run this study</h3>
+                <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
+                    Business Problem and Decision to Support were collected during discovery. Save each remaining anchor individually below.
+                </p>
+
+                <div id="anchor-slot-market_geography">
+                {% if has_mg %}
+                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
+                    <strong style="color: #27ae60;">&#10003; 3. Market / Geography:</strong> {{ configure_study.study_fit }}
+                </div>
+                {% else %}
+                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="market_geography">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="anchor_key" value="market_geography">
+                    <div class="form-group" style="margin-bottom: 6px;">
+                        <label>3. Market / Geography</label>
+                        <textarea name="anchor_value" rows="2" required placeholder="What market or geography does this study focus on?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Save Market / Geography</button>
+                </form>
+                {% endif %}
+                </div>
+
+                <div id="anchor-slot-product_concept">
+                {% if has_pc %}
+                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
+                    <strong style="color: #27ae60;">&#10003; 4. Product / Concept:</strong> {{ configure_study.known_vs_unknown }}
+                </div>
+                {% else %}
+                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="product_concept">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="anchor_key" value="product_concept">
+                    <div class="form-group" style="margin-bottom: 6px;">
+                        <label>4. Product / Concept</label>
+                        <textarea name="anchor_value" rows="2" required placeholder="What product, service, or concept is being researched?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Save Product / Concept</button>
+                </form>
+                {% endif %}
+                </div>
+
+                <div id="anchor-slot-target_audience">
+                {% if has_ta %}
+                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
+                    <strong style="color: #27ae60;">&#10003; 5. Target Audience:</strong> {{ configure_study.target_audience }}
+                </div>
+                {% else %}
+                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="target_audience">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="anchor_key" value="target_audience">
+                    <div class="form-group" style="margin-bottom: 6px;">
+                        <label>5. Target Audience</label>
+                        <textarea name="anchor_value" rows="2" required placeholder="Who is the target audience for this research?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Save Target Audience</button>
+                </form>
+                {% endif %}
+                </div>
+
+                <div id="anchor-slot-definition_useful_insight">
+                {% if has_dui %}
+                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
+                    <strong style="color: #27ae60;">&#10003; 6. Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}
+                </div>
+                {% else %}
+                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="definition_useful_insight">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="anchor_key" value="definition_useful_insight">
+                    <div class="form-group" style="margin-bottom: 6px;">
+                        <label>6. Definition of Useful Insight</label>
+                        <textarea name="anchor_value" rows="2" required placeholder="What would a useful insight look like for this study?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Save Definition of Useful Insight</button>
+                </form>
+                {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Survey Setup</h3>
             <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                Surveys do not use inspectable personas. Configure counts, then enter your survey questions.
+                Configure respondent and question counts, then build your survey instrument question by question.
             </p>
 
             {% set sq_list = configure_study.survey_questions_list or [] %}
             {% set q_count = configure_study.question_count or 8 %}
             {% set r_count = configure_study.respondent_count or 100 %}
-            {% set survey_questions_ready = (sq_list|length == q_count) and q_count >= 1 %}
 
             <form action="/save-survey-config/{{ configure_study.id }}" method="POST" style="margin-bottom: 16px;">
                 <input type="hidden" name="token" value="{{ token }}">
                 <div style="display: flex; gap: 16px; margin-bottom: 12px;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label for="respondent-count">Respondent Count (1–400)</label>
+                        <label for="respondent-count">Respondent Count (25–100)</label>
                         <input type="number" id="respondent-count" name="respondent_count"
                                value="{{ r_count }}"
-                               min="1" max="400" required
+                               min="25" max="100" required
                                style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
                     </div>
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
@@ -620,112 +720,95 @@
                 <button type="submit" class="btn btn-primary btn-small">Update Survey Config</button>
             </form>
 
-            {% if sq_list %}
-            <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
-                <p style="margin: 0 0 8px;"><strong>Current Survey Questions ({{ sq_list|length }}/{{ q_count }}):</strong>
-                {% if sq_list|length != q_count %}
-                <span style="color: #e74c3c; font-weight: 600;">Mismatch — need exactly {{ q_count }}</span>
-                {% else %}
-                <span style="color: #27ae60; font-weight: 600;">Complete</span>
-                {% endif %}
-                </p>
-                <ol style="margin: 4px 0 0 20px; line-height: 1.8;">
-                    {% for q in sq_list %}
-                    {% if q is mapping %}
-                    <li><span style="background:#e8f4fd;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:600;text-transform:uppercase;">{{ q.type or 'open' }}</span> {{ q.prompt or '' }}
-                        {% if q.options %}<br><span style="color:#777;font-size:12px;">Options: {{ q.options | join(' | ') }}</span>{% endif %}
-                        {% if q.images %}<br><span style="color:#777;font-size:12px;">Images: A={{ q.images.A or '?' }}, B={{ q.images.B or '?' }}</span>{% endif %}
-                        {% if q.min is defined and q.max is defined %}<br><span style="color:#777;font-size:12px;">Range: {{ q.min }}–{{ q.max }}</span>{% endif %}
-                        {% if q.max_words %}<br><span style="color:#777;font-size:12px;">Max words: {{ q.max_words }}</span>{% endif %}
-                    </li>
-                    {% else %}
-                    <li>{{ q }}</li>
-                    {% endif %}
-                    {% endfor %}
-                </ol>
-            </div>
-            {% endif %}
-
             <div style="background: #f0f4ff; border-radius: 8px; padding: 20px; margin-bottom: 16px; border: 1px solid #d0d9f5;">
-                <h4 style="margin: 0 0 12px; font-size: 15px; color: #1a1a2e;">
-                    {% if sq_list %}Update{% else %}Enter{% endif %} Survey Questions ({{ q_count }} required)
+                <h4 style="margin: 0 0 4px; font-size: 15px; color: #1a1a2e;">
+                    Survey Questions ({{ sq_list|length }}/{{ q_count }} saved)
                 </h4>
-                <form id="survey-q-form" action="/save-survey-questions/{{ configure_study.id }}" method="POST">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <input type="hidden" name="survey_questions_json" id="survey-questions-json" value="">
-                    <div id="survey-q-builder">
-                        {% for i in range(1, q_count + 1) %}
-                        {% set existing = sq_list[i-1] if i <= sq_list|length else none %}
-                        {% set eq_type = existing.type if existing is mapping else 'open' %}
-                        {% set eq_prompt = existing.prompt if existing is mapping else (existing if existing is string else '') %}
-                        {% set eq_opts = existing.options|join('|') if existing is mapping and existing.options else '' %}
-                        {% set eq_img_a = existing.images.A if existing is mapping and existing.images else '' %}
-                        {% set eq_img_b = existing.images.B if existing is mapping and existing.images else '' %}
-                        {% set eq_min = existing.min if existing is mapping and existing.min is defined else 0 %}
-                        {% set eq_max = existing.max if existing is mapping and existing.max is defined else 100 %}
-                        {% set eq_maxw = existing.max_words if existing is mapping and existing.max_words else 50 %}
-                        <div class="sq-row" data-idx="{{ i }}" style="margin-bottom: 12px; padding: 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px;">
-                            <div style="display: flex; gap: 8px; margin-bottom: 6px; align-items: center;">
-                                <label style="font-size: 13px; font-weight: 600; min-width: 30px;">Q{{ i }}</label>
-                                <select name="survey_qtype_{{ i }}" class="sq-type-select" data-idx="{{ i }}" style="padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; min-width: 110px;">
-                                    <option value="open" {{ 'selected' if eq_type == 'open' }}>Open-ended</option>
-                                    <option value="likert" {{ 'selected' if eq_type == 'likert' }}>Likert (5-pt)</option>
-                                    <option value="mc" {{ 'selected' if eq_type == 'mc' }}>Multiple Choice</option>
-                                    <option value="ab" {{ 'selected' if eq_type == 'ab' }}>A/B Choice</option>
-                                    <option value="ab_image" {{ 'selected' if eq_type == 'ab_image' }}>A/B Image</option>
-                                    <option value="range" {{ 'selected' if eq_type == 'range' }}>Range/Scale</option>
-                                </select>
-                                <input type="text" name="survey_q_{{ i }}" required
-                                       value="{{ eq_prompt }}"
-                                       placeholder="Enter question {{ i }}"
-                                       style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                <p style="font-size: 12px; color: #777; margin: 0 0 16px;">Save each question individually. Open-ended responses are capped at 50 words.</p>
+
+                <div id="survey-q-builder">
+                    {% for i in range(1, q_count + 1) %}
+                    {% set existing = sq_list[i-1] if i <= sq_list|length else none %}
+                    {% set eq_type = existing.type if existing is mapping else 'open' %}
+                    {% set eq_prompt = existing.prompt if existing is mapping else (existing if existing is string else '') %}
+                    {% set eq_opts = existing.options if existing is mapping and existing.options else [] %}
+                    {% set eq_img_a = existing.images.A if existing is mapping and existing.images else '' %}
+                    {% set eq_img_b = existing.images.B if existing is mapping and existing.images else '' %}
+                    {% set eq_min = existing.min if existing is mapping and existing.min is defined else 0 %}
+                    {% set eq_max = existing.max if existing is mapping and existing.max is defined else 100 %}
+                    {% set eq_saved = existing is not none and existing is mapping and eq_prompt %}
+                    <div class="sq-row" data-idx="{{ i }}" style="margin-bottom: 12px; padding: 14px; background: {{ '#f0fff0' if eq_saved else '#fff' }}; border: 1px solid {{ '#c3e6cb' if eq_saved else '#e0e0e0' }}; border-radius: 6px;">
+                        <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+                            <span style="font-size: 13px; font-weight: 700; min-width: 30px; color: #1a1a2e;">Q{{ i }}</span>
+                            <select class="sq-type-select" data-idx="{{ i }}" style="padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; min-width: 130px;">
+                                <option value="open" {{ 'selected' if eq_type == 'open' }}>Open-ended</option>
+                                <option value="likert" {{ 'selected' if eq_type == 'likert' }}>Likert (1–5)</option>
+                                <option value="mc" {{ 'selected' if eq_type == 'mc' }}>Multiple Choice</option>
+                                <option value="ab" {{ 'selected' if eq_type == 'ab' }}>A/B Choice</option>
+                                <option value="ab_image" {{ 'selected' if eq_type == 'ab_image' }}>A/B Image</option>
+                                <option value="range" {{ 'selected' if eq_type == 'range' }}>Range/Scale</option>
+                            </select>
+                            {% if eq_saved %}<span style="color: #27ae60; font-size: 11px; font-weight: 600; margin-left: auto;">Saved</span>{% endif %}
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <textarea class="sq-prompt" rows="2" placeholder="Enter question {{ i }}" style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; resize: vertical;">{{ eq_prompt }}</textarea>
+                        </div>
+                        <div class="sq-type-fields" id="sq-fields-{{ i }}">
+                            <div class="sq-field-likert" style="{{ '' if eq_type == 'likert' else 'display:none;' }}margin-bottom:8px;">
+                                <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Scale labels (1 = lowest, 5 = highest):</span>
+                                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                    {% for li in range(5) %}
+                                    <div style="flex:1;min-width:80px;">
+                                        <label style="font-size:11px;color:#777;">{{ li + 1 }}.</label>
+                                        <input type="text" class="sq-likert-label" data-pos="{{ li }}" value="{{ eq_opts[li] if eq_opts|length > li else '' }}" placeholder="Label {{ li + 1 }}" style="width:100%;padding:4px 6px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
+                                    </div>
+                                    {% endfor %}
+                                </div>
                             </div>
-                            <div class="sq-type-fields" id="sq-fields-{{ i }}">
-                                <div class="sq-field-opts" style="{{ '' if eq_type in ('likert', 'mc', 'ab') else 'display:none;' }}margin-top:4px;">
-                                    <input type="text" name="survey_qopts_{{ i }}" value="{{ eq_opts }}" placeholder="Option1 | Option2 | ..." style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
-                                    <span style="font-size:11px;color:#999;">Separate options with |{% if eq_type == 'likert' %} (exactly 5 required){% elif eq_type == 'ab' %} (exactly 2 required){% elif eq_type == 'mc' %} (at least 3 required){% endif %}</span>
-                                </div>
-                                <div class="sq-field-imgs" style="{{ '' if eq_type == 'ab_image' else 'display:none;' }}margin-top:4px;">
-                                    <div style="display:flex;gap:8px;">
-                                        <input type="text" name="survey_qimg_a_{{ i }}" value="{{ eq_img_a }}" placeholder="Image A reference" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
-                                        <input type="text" name="survey_qimg_b_{{ i }}" value="{{ eq_img_b }}" placeholder="Image B reference" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
+                            <div class="sq-field-mc" style="{{ '' if eq_type == 'mc' else 'display:none;' }}margin-bottom:8px;">
+                                <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Options (min 3):</span>
+                                <div class="sq-mc-options">
+                                    {% set mc_count = [eq_opts|length, 3] | max if eq_type == 'mc' else 3 %}
+                                    {% for oi in range(mc_count) %}
+                                    <div style="display:flex;gap:4px;margin-bottom:4px;align-items:center;">
+                                        <input type="text" class="sq-mc-opt" value="{{ eq_opts[oi] if eq_opts|length > oi else '' }}" placeholder="Option {{ oi + 1 }}" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
+                                        {% if oi >= 3 %}<button type="button" class="sq-mc-remove" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:14px;padding:2px 4px;" title="Remove">&times;</button>{% endif %}
                                     </div>
-                                    <span style="font-size:11px;color:#999;">Enter image references for A and B (e.g. file name or URL)</span>
+                                    {% endfor %}
                                 </div>
-                                <div class="sq-field-range" style="{{ '' if eq_type == 'range' else 'display:none;' }}margin-top:4px;">
-                                    <div style="display:flex;gap:8px;align-items:center;">
-                                        <label style="font-size:12px;">Min:</label>
-                                        <input type="number" name="survey_qmin_{{ i }}" value="{{ eq_min }}" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
-                                        <label style="font-size:12px;">Max:</label>
-                                        <input type="number" name="survey_qmax_{{ i }}" value="{{ eq_max }}" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
-                                    </div>
+                                <button type="button" class="sq-mc-add" style="font-size:12px;color:#5C7E8F;background:none;border:none;cursor:pointer;padding:2px 0;margin-top:2px;">+ Add option</button>
+                            </div>
+                            <div class="sq-field-ab" style="{{ '' if eq_type == 'ab' else 'display:none;' }}margin-bottom:8px;">
+                                <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">A/B options (exactly 2):</span>
+                                <div style="display:flex;gap:8px;">
+                                    <input type="text" class="sq-ab-a" value="{{ eq_opts[0] if eq_opts|length > 0 else '' }}" placeholder="Option A" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
+                                    <input type="text" class="sq-ab-b" value="{{ eq_opts[1] if eq_opts|length > 1 else '' }}" placeholder="Option B" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
                                 </div>
-                                <div class="sq-field-maxw" style="{{ '' if eq_type == 'open' else 'display:none;' }}margin-top:4px;">
-                                    <div style="display:flex;gap:8px;align-items:center;">
-                                        <label style="font-size:12px;">Max words:</label>
-                                        <input type="number" name="survey_qmaxw_{{ i }}" value="{{ eq_maxw }}" min="1" max="500" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
-                                    </div>
+                            </div>
+                            <div class="sq-field-imgs" style="{{ '' if eq_type == 'ab_image' else 'display:none;' }}margin-bottom:8px;">
+                                <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Image references:</span>
+                                <div style="display:flex;gap:8px;">
+                                    <input type="text" class="sq-img-a" value="{{ eq_img_a }}" placeholder="Image A (filename or URL)" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
+                                    <input type="text" class="sq-img-b" value="{{ eq_img_b }}" placeholder="Image B (filename or URL)" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
+                                </div>
+                            </div>
+                            <div class="sq-field-range" style="{{ '' if eq_type == 'range' else 'display:none;' }}margin-bottom:8px;">
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <label style="font-size:12px;">Min:</label>
+                                    <input type="number" class="sq-range-min" value="{{ eq_min }}" style="width:80px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
+                                    <label style="font-size:12px;">Max:</label>
+                                    <input type="number" class="sq-range-max" value="{{ eq_max }}" style="width:80px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
                                 </div>
                             </div>
                         </div>
-                        {% endfor %}
+                        <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+                            <button type="button" class="btn btn-primary btn-small sq-save-btn" data-idx="{{ i }}">Save Q{{ i }}</button>
+                            <span class="sq-save-status" data-idx="{{ i }}" style="font-size:12px;margin-left:8px;line-height:30px;color:#27ae60;display:none;"></span>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Save Questions</button>
-                </form>
-            </div>
-
-            {% if configure_study.survey_brief_data %}
-            <div style="background: #f8f9fa; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
-                <p style="margin: 0 0 4px;"><strong>Survey Brief:</strong></p>
-                <ul style="margin: 4px 0 0 20px; line-height: 1.6;">
-                    {% for k, v in configure_study.survey_brief_data.items() %}
-                    {% if k != 'optional_context' %}
-                    <li><strong>{{ k | replace('_', ' ') | title }}:</strong> {{ v }}</li>
-                    {% endif %}
                     {% endfor %}
-                </ul>
+                </div>
             </div>
-            {% endif %}
 
             {% set oc_survey = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
@@ -1250,17 +1333,32 @@
 
                 {% if configure_study.study_type == 'synthetic_survey' %}
                 <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px;">
-                    <li style="padding: 4px 0; color: {{ '#27ae60' if rc_panel >= 1 else '#e74c3c' }};">
-                        {{ '✓' if rc_panel >= 1 else '✗' }} Respondent count set{% if rc_panel >= 1 %} ({{ rc_panel }}){% endif %}
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_bp_panel else '#e74c3c' }};">
+                        {{ '✓' if has_bp_panel else '✗' }} Business Problem
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_ds_panel else '#e74c3c' }};">
+                        {{ '✓' if has_ds_panel else '✗' }} Decision to Support
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_mg_panel else '#e74c3c' }};">
+                        {{ '✓' if has_mg_panel else '✗' }} Market / Geography
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_pc_panel else '#e74c3c' }};">
+                        {{ '✓' if has_pc_panel else '✗' }} Product / Concept
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_ta_panel else '#e74c3c' }};">
+                        {{ '✓' if has_ta_panel else '✗' }} Target Audience
+                    </li>
+                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_dui_panel else '#e74c3c' }};">
+                        {{ '✓' if has_dui_panel else '✗' }} Definition of Useful Insight
+                    </li>
+                    <li style="padding: 8px 0 4px; border-top: 1px solid #eee; margin-top: 4px; color: {{ '#27ae60' if rc_panel >= 25 else '#e74c3c' }};">
+                        {{ '✓' if rc_panel >= 25 else '✗' }} Respondent count{% if rc_panel >= 25 %} ({{ rc_panel }}){% endif %}
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if q_count_panel >= 1 else '#e74c3c' }};">
-                        {{ '✓' if q_count_panel >= 1 else '✗' }} Question count set{% if q_count_panel >= 1 %} ({{ q_count_panel }}){% endif %}
+                        {{ '✓' if q_count_panel >= 1 else '✗' }} Question count{% if q_count_panel >= 1 %} ({{ q_count_panel }}){% endif %}
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if sq_list_panel|length == q_count_panel and q_count_panel >= 1 else '#e74c3c' }};">
                         {{ '✓' if sq_list_panel|length == q_count_panel and q_count_panel >= 1 else '✗' }} Survey questions ({{ sq_list_panel|length }}/{{ q_count_panel }})
-                    </li>
-                    <li style="padding: 8px 0 4px; border-top: 1px solid #eee; margin-top: 4px; color: #999;">
-                        — Personas: Not applicable (survey)
                     </li>
                 </ul>
 
@@ -1348,34 +1446,68 @@
             }
 
             function updatePrecheckPanel(pc) {
-                var fields = [
-                    {key: 'has_bp', label: 'Business Problem'},
-                    {key: 'has_ds', label: 'Decision to Support'},
-                    {key: 'has_mg', label: 'Market / Geography'},
-                    {key: 'has_pc', label: 'Product / Concept'},
-                    {key: 'has_ta', label: 'Target Audience'},
-                    {key: 'has_dui', label: 'Definition of Useful Insight'}
-                ];
                 var panel = document.getElementById('side-panel-brief');
                 if (!panel) return;
                 var items = panel.querySelectorAll('ul li');
-                for (var i = 0; i < fields.length && i < items.length; i++) {
-                    var done = pc[fields[i].key];
-                    items[i].style.color = done ? '#27ae60' : '#e74c3c';
-                    items[i].innerHTML = (done ? '\u2713 ' : '\u2717 ') + fields[i].label;
-                }
-                var pLi = items[fields.length];
-                if (pLi && pc.personas_min > 0) {
-                    if (pc.personas_complete) {
-                        pLi.style.color = '#27ae60';
-                        pLi.innerHTML = '\u2713 Personas (' + pc.persona_count + '/' + pc.personas_min + ')';
-                    } else {
-                        pLi.style.color = '#e67e22';
-                        var gap = pc.personas_gap;
-                        var msg = pc.persona_count === 0
-                            ? 'will be auto-generated at run'
-                            : 'Lisa will generate ' + gap + ' more at run';
-                        pLi.innerHTML = '\u26A0 Personas (' + pc.persona_count + '/' + pc.personas_min + ' \u2014 ' + msg + ')';
+                if (pc.study_type === 'synthetic_survey') {
+                    var sFields = [
+                        {key: 'has_bp', label: 'Business Problem'},
+                        {key: 'has_ds', label: 'Decision to Support'},
+                        {key: 'has_mg', label: 'Market / Geography'},
+                        {key: 'has_pc', label: 'Product / Concept'},
+                        {key: 'has_ta', label: 'Target Audience'},
+                        {key: 'has_dui', label: 'Definition of Useful Insight'}
+                    ];
+                    for (var i = 0; i < sFields.length && i < items.length; i++) {
+                        var done = pc[sFields[i].key];
+                        items[i].style.color = done ? '#27ae60' : '#e74c3c';
+                        items[i].innerHTML = (done ? '\u2713 ' : '\u2717 ') + sFields[i].label;
+                    }
+                    var rcLi = items[sFields.length];
+                    if (rcLi) {
+                        var rcOk = pc.survey_rc >= 25;
+                        rcLi.style.color = rcOk ? '#27ae60' : '#e74c3c';
+                        rcLi.innerHTML = (rcOk ? '\u2713 ' : '\u2717 ') + 'Respondent count' + (rcOk ? ' (' + pc.survey_rc + ')' : '');
+                    }
+                    var qcLi = items[sFields.length + 1];
+                    if (qcLi) {
+                        var qcOk = pc.survey_qc >= 1;
+                        qcLi.style.color = qcOk ? '#27ae60' : '#e74c3c';
+                        qcLi.innerHTML = (qcOk ? '\u2713 ' : '\u2717 ') + 'Question count' + (qcOk ? ' (' + pc.survey_qc + ')' : '');
+                    }
+                    var sqLi = items[sFields.length + 2];
+                    if (sqLi) {
+                        var sqOk = pc.survey_sq_count === pc.survey_qc && pc.survey_qc >= 1;
+                        sqLi.style.color = sqOk ? '#27ae60' : '#e74c3c';
+                        sqLi.innerHTML = (sqOk ? '\u2713 ' : '\u2717 ') + 'Survey questions (' + pc.survey_sq_count + '/' + pc.survey_qc + ')';
+                    }
+                } else {
+                    var fields = [
+                        {key: 'has_bp', label: 'Business Problem'},
+                        {key: 'has_ds', label: 'Decision to Support'},
+                        {key: 'has_mg', label: 'Market / Geography'},
+                        {key: 'has_pc', label: 'Product / Concept'},
+                        {key: 'has_ta', label: 'Target Audience'},
+                        {key: 'has_dui', label: 'Definition of Useful Insight'}
+                    ];
+                    for (var i = 0; i < fields.length && i < items.length; i++) {
+                        var done = pc[fields[i].key];
+                        items[i].style.color = done ? '#27ae60' : '#e74c3c';
+                        items[i].innerHTML = (done ? '\u2713 ' : '\u2717 ') + fields[i].label;
+                    }
+                    var pLi = items[fields.length];
+                    if (pLi && pc.personas_min > 0) {
+                        if (pc.personas_complete) {
+                            pLi.style.color = '#27ae60';
+                            pLi.innerHTML = '\u2713 Personas (' + pc.persona_count + '/' + pc.personas_min + ')';
+                        } else {
+                            pLi.style.color = '#e67e22';
+                            var gap = pc.personas_gap;
+                            var msg = pc.persona_count === 0
+                                ? 'will be auto-generated at run'
+                                : 'Lisa will generate ' + gap + ' more at run';
+                            pLi.innerHTML = '\u26A0 Personas (' + pc.persona_count + '/' + pc.personas_min + ' \u2014 ' + msg + ')';
+                        }
                     }
                 }
             }
@@ -1478,7 +1610,18 @@
                 var outputText = data.final_report || data.study_output || '';
                 if (outputText && data.study_type === 'synthetic_survey') {
                     try {
-                        var surveyJson = JSON.parse(data.study_output || '{}');
+                        var rawSurvey = data.study_output || '{}';
+                        rawSurvey = rawSurvey.trim();
+                        if (rawSurvey.indexOf('```') === 0) {
+                            rawSurvey = rawSurvey.substring(rawSurvey.indexOf('\n') + 1);
+                            if (rawSurvey.lastIndexOf('```') === rawSurvey.length - 3) rawSurvey = rawSurvey.substring(0, rawSurvey.length - 3);
+                            rawSurvey = rawSurvey.trim();
+                        }
+                        var braceIdx = rawSurvey.indexOf('{');
+                        if (braceIdx > 0) rawSurvey = rawSurvey.substring(braceIdx);
+                        var lastBrace = rawSurvey.lastIndexOf('}');
+                        if (lastBrace >= 0 && lastBrace < rawSurvey.length - 1) rawSurvey = rawSurvey.substring(0, lastBrace + 1);
+                        var surveyJson = JSON.parse(rawSurvey);
                         html += '<div style="margin-bottom:16px;">';
                         if (surveyJson.study_title) {
                             html += '<h4 style="font-size:15px;color:#1a1a2e;margin-bottom:8px;">' + escHtml(surveyJson.study_title) + '</h4>';
@@ -1577,14 +1720,51 @@
             function sqToggleFields(idx, qtype) {
                 var row = document.querySelector('.sq-row[data-idx="' + idx + '"]');
                 if (!row) return;
-                var opts = row.querySelector('.sq-field-opts');
+                var likert = row.querySelector('.sq-field-likert');
+                var mc = row.querySelector('.sq-field-mc');
+                var ab = row.querySelector('.sq-field-ab');
                 var imgs = row.querySelector('.sq-field-imgs');
                 var rng = row.querySelector('.sq-field-range');
-                var maxw = row.querySelector('.sq-field-maxw');
-                if (opts) opts.style.display = (qtype === 'likert' || qtype === 'mc' || qtype === 'ab') ? '' : 'none';
+                if (likert) likert.style.display = (qtype === 'likert') ? '' : 'none';
+                if (mc) mc.style.display = (qtype === 'mc') ? '' : 'none';
+                if (ab) ab.style.display = (qtype === 'ab') ? '' : 'none';
                 if (imgs) imgs.style.display = (qtype === 'ab_image') ? '' : 'none';
                 if (rng) rng.style.display = (qtype === 'range') ? '' : 'none';
-                if (maxw) maxw.style.display = (qtype === 'open') ? '' : 'none';
+            }
+
+            function buildQuestionObj(row) {
+                var idx = row.getAttribute('data-idx');
+                var qtype = (row.querySelector('.sq-type-select') || {}).value || 'open';
+                var prompt = (row.querySelector('.sq-prompt') || {}).value || '';
+                if (!prompt.trim()) return {error: 'Q' + idx + ': question text is required.'};
+                var qobj = {type: qtype, prompt: prompt.trim()};
+                if (qtype === 'likert') {
+                    var labels = [];
+                    row.querySelectorAll('.sq-likert-label').forEach(function(inp) { labels.push(inp.value.trim()); });
+                    labels = labels.filter(Boolean);
+                    if (labels.length !== 5) return {error: 'Q' + idx + ' (likert): exactly 5 scale labels required, got ' + labels.length + '.'};
+                    qobj.options = labels;
+                } else if (qtype === 'mc') {
+                    var opts = [];
+                    row.querySelectorAll('.sq-mc-opt').forEach(function(inp) { if (inp.value.trim()) opts.push(inp.value.trim()); });
+                    if (opts.length < 3) return {error: 'Q' + idx + ' (mc): at least 3 options required, got ' + opts.length + '.'};
+                    qobj.options = opts;
+                } else if (qtype === 'ab') {
+                    var a = (row.querySelector('.sq-ab-a') || {}).value || '';
+                    var b = (row.querySelector('.sq-ab-b') || {}).value || '';
+                    if (!a.trim() || !b.trim()) return {error: 'Q' + idx + ' (ab): both option A and B are required.'};
+                    qobj.options = [a.trim(), b.trim()];
+                } else if (qtype === 'ab_image') {
+                    var imgA = (row.querySelector('.sq-img-a') || {}).value || '';
+                    var imgB = (row.querySelector('.sq-img-b') || {}).value || '';
+                    if (!imgA.trim() || !imgB.trim()) return {error: 'Q' + idx + ' (ab_image): both image references are required.'};
+                    qobj.images = {A: imgA.trim(), B: imgB.trim()};
+                } else if (qtype === 'range') {
+                    qobj.min = parseFloat((row.querySelector('.sq-range-min') || {}).value) || 0;
+                    qobj.max = parseFloat((row.querySelector('.sq-range-max') || {}).value) || 100;
+                    if (qobj.min >= qobj.max) return {error: 'Q' + idx + ' (range): min must be less than max.'};
+                }
+                return {question: qobj};
             }
 
             document.querySelectorAll('.sq-type-select').forEach(function(sel) {
@@ -1593,58 +1773,62 @@
                 });
             });
 
-            var sqForm = document.getElementById('survey-q-form');
-            if (sqForm) {
-                sqForm.addEventListener('submit', function(e) {
-                    var rows = sqForm.querySelectorAll('.sq-row');
-                    var questions = [];
-                    var clientErrors = [];
-                    var abImageCount = 0;
-                    rows.forEach(function(row) {
-                        var idx = row.getAttribute('data-idx');
-                        var qtype = (sqForm.querySelector('[name="survey_qtype_' + idx + '"]') || {}).value || 'open';
-                        var prompt = (sqForm.querySelector('[name="survey_q_' + idx + '"]') || {}).value || '';
-                        if (!prompt.trim()) return;
-                        var qobj = {type: qtype, prompt: prompt.trim()};
-                        if (qtype === 'likert' || qtype === 'mc' || qtype === 'ab') {
-                            var optsRaw = (sqForm.querySelector('[name="survey_qopts_' + idx + '"]') || {}).value || '';
-                            qobj.options = optsRaw.split('|').map(function(o) { return o.trim(); }).filter(Boolean);
-                            if (qtype === 'likert' && qobj.options.length !== 5) clientErrors.push('Q' + idx + ' (likert): exactly 5 options required, got ' + qobj.options.length + '.');
-                            if (qtype === 'mc' && qobj.options.length < 3) clientErrors.push('Q' + idx + ' (mc): at least 3 options required, got ' + qobj.options.length + '.');
-                            if (qtype === 'ab' && qobj.options.length !== 2) clientErrors.push('Q' + idx + ' (ab): exactly 2 options required, got ' + qobj.options.length + '.');
-                        } else if (qtype === 'ab_image') {
-                            abImageCount++;
-                            var imgA = (sqForm.querySelector('[name="survey_qimg_a_' + idx + '"]') || {}).value || '';
-                            var imgB = (sqForm.querySelector('[name="survey_qimg_b_' + idx + '"]') || {}).value || '';
-                            qobj.images = {A: imgA.trim(), B: imgB.trim()};
-                            if (!qobj.images.A || !qobj.images.B) clientErrors.push('Q' + idx + ' (ab_image): both image A and B references are required.');
-                            var allowedExt = ['.jpg', '.jpeg', '.png'];
-                            [['A', qobj.images.A], ['B', qobj.images.B]].forEach(function(pair) {
-                                var ref = pair[1];
-                                if (ref && ref.indexOf('.') !== -1) {
-                                    var ext = '.' + ref.split('.').pop().toLowerCase();
-                                    if (allowedExt.indexOf(ext) === -1) clientErrors.push('Q' + idx + ' (ab_image): image ' + pair[0] + ' must be JPG or PNG.');
-                                }
-                            });
-                        } else if (qtype === 'range') {
-                            qobj.min = parseFloat((sqForm.querySelector('[name="survey_qmin_' + idx + '"]') || {}).value) || 0;
-                            qobj.max = parseFloat((sqForm.querySelector('[name="survey_qmax_' + idx + '"]') || {}).value) || 100;
-                            if (qobj.min >= qobj.max) clientErrors.push('Q' + idx + ' (range): min must be less than max.');
-                        } else if (qtype === 'open') {
-                            qobj.max_words = parseInt((sqForm.querySelector('[name="survey_qmaxw_' + idx + '"]') || {}).value) || 50;
-                            if (qobj.max_words < 1 || qobj.max_words > 500) clientErrors.push('Q' + idx + ' (open): max_words must be 1–500.');
-                        }
-                        questions.push(qobj);
-                    });
-                    if (abImageCount > 6) clientErrors.push('Maximum 6 ab_image questions allowed per survey.');
-                    if (clientErrors.length > 0) {
-                        e.preventDefault();
-                        alert('Validation errors:\n\n' + clientErrors.join('\n'));
-                        return;
-                    }
-                    document.getElementById('survey-questions-json').value = JSON.stringify(questions);
+            document.querySelectorAll('.sq-mc-add').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var row = btn.closest('.sq-row');
+                    var container = row.querySelector('.sq-mc-options');
+                    var count = container.querySelectorAll('.sq-mc-opt').length;
+                    var div = document.createElement('div');
+                    div.style.cssText = 'display:flex;gap:4px;margin-bottom:4px;align-items:center;';
+                    div.innerHTML = '<input type="text" class="sq-mc-opt" placeholder="Option ' + (count + 1) + '" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">'
+                        + '<button type="button" class="sq-mc-remove" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:14px;padding:2px 4px;" title="Remove">&times;</button>';
+                    container.appendChild(div);
+                    div.querySelector('.sq-mc-remove').addEventListener('click', function() { div.remove(); });
                 });
-            }
+            });
+
+            document.querySelectorAll('.sq-mc-remove').forEach(function(btn) {
+                btn.addEventListener('click', function() { btn.closest('div').remove(); });
+            });
+
+            document.querySelectorAll('.sq-save-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var idx = btn.getAttribute('data-idx');
+                    var row = document.querySelector('.sq-row[data-idx="' + idx + '"]');
+                    if (!row) return;
+                    var result = buildQuestionObj(row);
+                    if (result.error) { alert(result.error); return; }
+                    btn.disabled = true;
+                    btn.textContent = 'Saving...';
+                    var status = document.querySelector('.sq-save-status[data-idx="' + idx + '"]');
+                    var fd = new FormData();
+                    fd.append('token', token);
+                    fd.append('question_json', JSON.stringify(result.question));
+                    fetch('/save-survey-question/' + studyId + '/' + idx, {
+                        method: 'POST', body: fd,
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        btn.disabled = false;
+                        btn.textContent = 'Save Q' + idx;
+                        if (data.ok) {
+                            row.style.background = '#f0fff0';
+                            row.style.borderColor = '#c3e6cb';
+                            if (status) { status.textContent = 'Saved'; status.style.display = ''; }
+                            if (data.precheck) updatePrecheckPanel(data.precheck);
+                            if (data.qa_status) updatePrecheckStatusBox(data);
+                        } else {
+                            alert(data.error || 'Save failed.');
+                        }
+                    })
+                    .catch(function(err) {
+                        btn.disabled = false;
+                        btn.textContent = 'Save Q' + idx;
+                        alert('Network error: ' + err.message);
+                    });
+                });
+            });
 
             document.querySelectorAll('.discovery-form').forEach(function(form) {
                 form.addEventListener('submit', function(e) {

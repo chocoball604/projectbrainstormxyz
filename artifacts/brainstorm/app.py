@@ -654,11 +654,7 @@ def _normalize_survey_question(q):
         q["type"] = "open"
     if "options" in q and isinstance(q["options"], list):
         q["options"] = [str(o).strip() for o in q["options"] if str(o).strip()]
-    if "max_words" in q:
-        try:
-            q["max_words"] = max(1, min(500, int(q["max_words"])))
-        except (ValueError, TypeError):
-            q["max_words"] = 50
+    q["max_words"] = 50
     if "min" in q:
         try:
             q["min"] = float(q["min"])
@@ -2488,7 +2484,7 @@ def create_study():
             question_count = int(request.form.get("question_count", 8))
         except (ValueError, TypeError):
             question_count = 8
-        respondent_count = max(1, min(400, respondent_count))
+        respondent_count = max(25, min(100, respondent_count))
         question_count = max(1, min(12, question_count))
 
         survey_questions = []
@@ -3317,9 +3313,19 @@ def build_structured_report(
         findings_lines.append("[Placeholder findings — not based on real data]")
     if st == "synthetic_survey" and output_raw:
         try:
-            survey_data = json.loads(
-                output_raw.split("\n", 1)[-1] if "===" in output_raw else output_raw
-            )
+            clean_json = output_raw.strip()
+            if clean_json.startswith("```"):
+                clean_json = clean_json.split("\n", 1)[-1]
+                if clean_json.endswith("```"):
+                    clean_json = clean_json[:-3]
+                clean_json = clean_json.strip()
+            brace_idx = clean_json.find("{")
+            if brace_idx > 0:
+                clean_json = clean_json[brace_idx:]
+            last_brace = clean_json.rfind("}")
+            if last_brace >= 0 and last_brace < len(clean_json) - 1:
+                clean_json = clean_json[: last_brace + 1]
+            survey_data = json.loads(clean_json)
             if isinstance(survey_data, dict) and "questions" in survey_data:
                 for qi, qobj in enumerate(survey_data["questions"], 1):
                     q_text = qobj.get("q", f"Question {qi}")
@@ -3330,6 +3336,16 @@ def build_structured_report(
                     results = qobj.get("results", {})
                     for k, v in results.items():
                         findings_lines.append(f"  - {k}: {v}")
+                    findings_lines.append("")
+                if survey_data.get("top_findings"):
+                    findings_lines.append("Top Findings:")
+                    for tf in survey_data["top_findings"]:
+                        findings_lines.append(f"  - {tf}")
+                    findings_lines.append("")
+                if survey_data.get("risks_unknowns"):
+                    findings_lines.append("Risks & Unknowns:")
+                    for ru in survey_data["risks_unknowns"]:
+                        findings_lines.append(f"  - {ru}")
                     findings_lines.append("")
         except (json.JSONDecodeError, TypeError, IndexError):
             findings_lines.append(
@@ -4009,6 +4025,18 @@ def ben_precheck(study, persona_count, persona_dossiers=None):
         return failures
 
     if st == "synthetic_survey":
+        anchor_labels = [
+            ("business_problem", "Business Problem"),
+            ("decision_to_support", "Decision to Support"),
+            ("market_geography", "Market / Geography"),
+            ("product_concept", "Product / Concept"),
+            ("target_audience", "Target Audience"),
+            ("definition_useful_insight", "Definition of Useful Insight"),
+        ]
+        for field, label in anchor_labels:
+            val = get_v1a_value(study, field)
+            if not val:
+                failures.append(f"{label} is missing.")
         rc = study["respondent_count"] or 0
         qc = study["question_count"] or 0
         sq = []
@@ -4017,8 +4045,8 @@ def ben_precheck(study, persona_count, persona_dossiers=None):
                 sq = json.loads(study["survey_questions"])
             except (json.JSONDecodeError, TypeError):
                 sq = []
-        if rc < 1 or rc > 400:
-            failures.append("Respondent count must be between 1 and 400.")
+        if rc < 25 or rc > 100:
+            failures.append("Respondent count must be between 25 and 100.")
         if qc < 1 or qc > 12:
             failures.append("Question count must be between 1 and 12.")
         if len(sq) != qc:
@@ -4821,11 +4849,11 @@ def run_study(study_id):
     if study_type == "synthetic_survey":
         r_count = study["respondent_count"] or 100
         q_count = study["question_count"] or 8
-        if r_count < 1 or r_count > 400:
+        if r_count < 25 or r_count > 100:
             conn.close()
             if ajax:
-                return jsonify({"ok": False, "error": "Survey respondent count must be between 1 and 400."}), 400
-            return render_error("Survey respondent count must be between 1 and 400.")
+                return jsonify({"ok": False, "error": "Survey respondent count must be between 25 and 100."}), 400
+            return render_error("Survey respondent count must be between 25 and 100.")
         if q_count < 1 or q_count > 12:
             conn.close()
             if ajax:
@@ -5030,7 +5058,11 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             q_count = study_dict.get("question_count") or 8
             sq = json.loads(study_dict.get("survey_questions") or "[]")
             bp = (study_dict.get("business_problem") or "").strip()
+            ds = (study_dict.get("decision_to_support") or "").strip()
+            mg = (study_dict.get("study_fit") or "").strip()
+            pc = (study_dict.get("known_vs_unknown") or "").strip()
             ta = (study_dict.get("target_audience") or "").strip()
+            dui = (study_dict.get("definition_useful_insight") or "").strip()
 
             q_lines = []
             for i, q in enumerate(sq):
@@ -5097,7 +5129,11 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
                 f"Generate synthetic survey results for:\n"
                 f"Title: {study_dict.get('title', 'Untitled Study')}\n"
                 f"Business Problem: {bp or 'Not specified'}\n"
+                f"Decision to Support: {ds or 'Not specified'}\n"
+                f"Market / Geography: {mg or 'Not specified'}\n"
+                f"Product / Concept: {pc or 'Not specified'}\n"
                 f"Target Audience: {ta or 'Not specified'}\n"
+                f"Definition of Useful Insight: {dui or 'Not specified'}\n"
                 f"Respondent Count: {r_count}\n"
                 f"Questions ({q_count}):\n{questions_text}\n"
                 f"{oc_section}\n"
@@ -5122,6 +5158,12 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
                 if cleaned.endswith("```"):
                     cleaned = cleaned[:-3]
                 cleaned = cleaned.strip()
+            brace_idx = cleaned.find("{")
+            if brace_idx > 0:
+                cleaned = cleaned[brace_idx:]
+            last_brace = cleaned.rfind("}")
+            if last_brace >= 0 and last_brace < len(cleaned) - 1:
+                cleaned = cleaned[: last_brace + 1]
 
             parsed = json.loads(cleaned)
             output = json.dumps(parsed, indent=2)
@@ -5408,7 +5450,7 @@ def save_survey_config(study_id):
     except (ValueError, TypeError):
         q_count = 8
 
-    r_count = max(1, min(400, r_count))
+    r_count = max(25, min(100, r_count))
     q_count = max(1, min(12, q_count))
 
     conn.execute(
@@ -5544,6 +5586,106 @@ def save_survey_questions(study_id):
     return redirect(url_for("index", token=token, configure=study_id))
 
 
+@app.route("/save-survey-question/<int:study_id>/<int:q_index>", methods=["POST"])
+def save_survey_question(study_id, q_index):
+    token = get_token()
+    user, _ = get_session_data(token)
+    ajax = _is_ajax(request)
+    if not user or user["state"] != "active":
+        if ajax:
+            return jsonify({"ok": False, "error": "You must be an active user."}), 403
+        return render_error("You must be an active user.")
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": "Draft study not found."}), 404
+        return render_error("Draft study not found.")
+    if study["study_type"] != "synthetic_survey":
+        conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": "Survey questions only apply to synthetic survey studies."}), 400
+        return render_error("Survey questions only apply to synthetic survey studies.")
+
+    q_count = study["question_count"] or 8
+    if q_index < 1 or q_index > q_count:
+        conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": f"Question index must be between 1 and {q_count}."}), 400
+        return render_error(f"Question index must be between 1 and {q_count}.")
+
+    try:
+        existing = json.loads(study["survey_questions"] or "[]")
+    except (json.JSONDecodeError, TypeError):
+        existing = []
+    while len(existing) < q_count:
+        existing.append(None)
+
+    raw_json = request.form.get("question_json", "").strip()
+    if not raw_json:
+        conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": "No question data provided."}), 400
+        return render_error("No question data provided.")
+
+    try:
+        qobj = json.loads(raw_json)
+    except (json.JSONDecodeError, TypeError):
+        conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": "Invalid JSON for question."}), 400
+        return render_error("Invalid JSON for question.")
+
+    nq = _normalize_survey_question(qobj)
+    if not nq or not nq.get("prompt"):
+        conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": "Question prompt is required."}), 400
+        return render_error("Question prompt is required.")
+
+    existing[q_index - 1] = nq
+    clean = [q for q in existing if q is not None]
+
+    conn.execute(
+        "UPDATE studies SET survey_questions = ? WHERE id = ?",
+        (json.dumps(clean), study_id),
+    )
+    conn.commit()
+
+    study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+    study_dict = dict(study)
+    auto_ben_precheck(conn, study_dict, user["id"])
+    study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+    study_dict = dict(study)
+    personas_used = normalize_personas_used(study_dict.get("personas_used"))
+    precheck = _build_precheck_state(study_dict, len(personas_used))
+    qa_status = study_dict.get("qa_status", "")
+    qa_failures = []
+    if qa_status == "precheck_failed" and study_dict.get("qa_notes"):
+        try:
+            qa_failures = json.loads(study_dict["qa_notes"])
+        except (json.JSONDecodeError, TypeError):
+            qa_failures = []
+    conn.close()
+
+    if ajax:
+        return jsonify({
+            "ok": True,
+            "q_index": q_index,
+            "question": nq,
+            "saved_count": len(clean),
+            "precheck": precheck,
+            "qa_status": qa_status,
+            "qa_failures": qa_failures,
+        })
+    return redirect(url_for("index", token=token, configure=study_id))
+
+
 @app.route("/save-remaining-anchors/<int:study_id>", methods=["POST"])
 def save_remaining_anchors(study_id):
     token = get_token()
@@ -5620,6 +5762,20 @@ def _build_precheck_state(study_dict, persona_count):
         p_min = 0
     p_complete = persona_count >= p_min
     p_gap = max(0, p_min - persona_count)
+
+    survey_rc = 0
+    survey_qc = 0
+    survey_sq_count = 0
+    if st == "synthetic_survey":
+        survey_rc = study_dict.get("respondent_count") or 0
+        survey_qc = study_dict.get("question_count") or 0
+        sq_raw = study_dict.get("survey_questions") or "[]"
+        try:
+            sq_list = json.loads(sq_raw) if isinstance(sq_raw, str) else sq_raw
+            survey_sq_count = len(sq_list) if isinstance(sq_list, list) else 0
+        except (json.JSONDecodeError, TypeError):
+            survey_sq_count = 0
+
     return {
         "has_bp": has_bp, "has_ds": has_ds, "has_mg": has_mg,
         "has_pc": has_pc, "has_ta": has_ta, "has_dui": has_dui,
@@ -5627,6 +5783,8 @@ def _build_precheck_state(study_dict, persona_count):
         "persona_count": persona_count, "personas_min": p_min,
         "personas_complete": p_complete, "personas_gap": p_gap,
         "study_type": st,
+        "survey_rc": survey_rc, "survey_qc": survey_qc,
+        "survey_sq_count": survey_sq_count,
     }
 
 
