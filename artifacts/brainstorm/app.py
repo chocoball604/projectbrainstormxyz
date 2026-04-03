@@ -3551,11 +3551,26 @@ def build_structured_report(
 
         transcript_text, memo_raw, memo_sections_parsed = _parse_lisa_memo(clean_output)
 
+        conf_summary_line = ""
+        if confidence:
+            strong_n = confidence.get("Strong", 0)
+            ind_n = confidence.get("Indicative", 0)
+            exp_n = confidence.get("Exploratory", 0)
+            conf_summary_line = f"Confidence Assessment: Strong={strong_n}, Indicative={ind_n}, Exploratory={exp_n}"
+
         if memo_sections_parsed.get("key_themes"):
             findings_lines.append("Key Themes (from First-Pass Findings Memo):")
-            for line in memo_sections_parsed["key_themes"].split("\n"):
-                if line.strip():
-                    findings_lines.append(f"  {line.strip()}")
+            if conf_summary_line:
+                findings_lines.append(f"  {conf_summary_line}")
+            theme_lines = [l.strip() for l in memo_sections_parsed["key_themes"].split("\n") if l.strip()]
+            for ti, tl in enumerate(theme_lines, 1):
+                conf_label = "Indicative"
+                if confidence and confidence.get("Strong", 0) >= ti:
+                    conf_label = "Strong"
+                elif confidence and confidence.get("Exploratory", 0) > 0 and ti > (confidence.get("Strong", 0) + confidence.get("Indicative", 0)):
+                    conf_label = "Exploratory"
+                findings_lines.append(f"  Finding {ti} [{conf_label}]: {tl}")
+                findings_lines.append(f"    Confidence: {conf_label} — based on QA assessment of response consistency and grounding coverage.")
             findings_lines.append("")
 
         if memo_sections_parsed.get("strong_vs_exploratory"):
@@ -3571,6 +3586,13 @@ def build_structured_report(
                     else:
                         conf_tag = " [Indicative]"
                     findings_lines.append(f"  {line.strip()}{conf_tag}")
+            findings_lines.append("")
+
+        if memo_sections_parsed.get("contradictions"):
+            findings_lines.append("Contradictions and Tensions:")
+            for line in memo_sections_parsed["contradictions"].split("\n"):
+                if line.strip():
+                    findings_lines.append(f"  {line.strip()}")
             findings_lines.append("")
 
         if memo_sections_parsed.get("candidate_insights"):
@@ -3602,6 +3624,7 @@ def build_structured_report(
                     findings_lines.append(
                         f"Finding {bi} [{conf_label}]: Key themes from {speaker}"
                     )
+                    findings_lines.append(f"  Confidence: {conf_label} — based on QA assessment of response consistency and grounding coverage.")
                     snippet_lines = [
                         l.strip()
                         for l in block.split("\n")
@@ -3612,6 +3635,7 @@ def build_structured_report(
                     findings_lines.append("")
             elif clean_output.strip():
                 findings_lines.append(f"Finding 1 [Exploratory]: Study output summary")
+                findings_lines.append(f"  Confidence: Exploratory — no structured memo available for confidence classification.")
                 for line in clean_output.strip().split("\n")[:10]:
                     if line.strip():
                         findings_lines.append(f"  {line.strip()}")
