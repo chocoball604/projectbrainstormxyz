@@ -2113,19 +2113,23 @@ def serve_survey_image(filename):
         return "Unauthorized", 403
     safe = os.path.basename(filename)
     parts = safe.split("_")
-    if len(parts) >= 2:
-        try:
-            study_id = int(parts[0])
-            conn = get_db()
-            study = conn.execute(
-                "SELECT id FROM studies WHERE id = ? AND user_id = ?",
-                (study_id, user["id"]),
-            ).fetchone()
-            conn.close()
-            if not study:
-                return "Forbidden", 403
-        except (ValueError, TypeError):
-            pass
+    if len(parts) < 2:
+        return "Forbidden", 403
+    raw_id = parts[0]
+    if raw_id.startswith("s"):
+        raw_id = raw_id[1:]
+    try:
+        study_id = int(raw_id)
+    except (ValueError, TypeError):
+        return "Forbidden", 403
+    conn = get_db()
+    study = conn.execute(
+        "SELECT id FROM studies WHERE id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+    conn.close()
+    if not study:
+        return "Forbidden", 403
     return send_from_directory(SURVEY_IMAGES_DIR, safe)
 
 
