@@ -1598,27 +1598,50 @@
                 sqForm.addEventListener('submit', function(e) {
                     var rows = sqForm.querySelectorAll('.sq-row');
                     var questions = [];
+                    var clientErrors = [];
+                    var abImageCount = 0;
                     rows.forEach(function(row) {
                         var idx = row.getAttribute('data-idx');
                         var qtype = (sqForm.querySelector('[name="survey_qtype_' + idx + '"]') || {}).value || 'open';
                         var prompt = (sqForm.querySelector('[name="survey_q_' + idx + '"]') || {}).value || '';
+                        if (!prompt.trim()) return;
                         var qobj = {type: qtype, prompt: prompt.trim()};
                         if (qtype === 'likert' || qtype === 'mc' || qtype === 'ab') {
                             var optsRaw = (sqForm.querySelector('[name="survey_qopts_' + idx + '"]') || {}).value || '';
                             qobj.options = optsRaw.split('|').map(function(o) { return o.trim(); }).filter(Boolean);
+                            if (qtype === 'likert' && qobj.options.length !== 5) clientErrors.push('Q' + idx + ' (likert): exactly 5 options required, got ' + qobj.options.length + '.');
+                            if (qtype === 'mc' && qobj.options.length < 3) clientErrors.push('Q' + idx + ' (mc): at least 3 options required, got ' + qobj.options.length + '.');
+                            if (qtype === 'ab' && qobj.options.length !== 2) clientErrors.push('Q' + idx + ' (ab): exactly 2 options required, got ' + qobj.options.length + '.');
                         } else if (qtype === 'ab_image') {
-                            qobj.images = {
-                                A: (sqForm.querySelector('[name="survey_qimg_a_' + idx + '"]') || {}).value || '',
-                                B: (sqForm.querySelector('[name="survey_qimg_b_' + idx + '"]') || {}).value || ''
-                            };
+                            abImageCount++;
+                            var imgA = (sqForm.querySelector('[name="survey_qimg_a_' + idx + '"]') || {}).value || '';
+                            var imgB = (sqForm.querySelector('[name="survey_qimg_b_' + idx + '"]') || {}).value || '';
+                            qobj.images = {A: imgA.trim(), B: imgB.trim()};
+                            if (!qobj.images.A || !qobj.images.B) clientErrors.push('Q' + idx + ' (ab_image): both image A and B references are required.');
+                            var allowedExt = ['.jpg', '.jpeg', '.png'];
+                            [['A', qobj.images.A], ['B', qobj.images.B]].forEach(function(pair) {
+                                var ref = pair[1];
+                                if (ref && ref.indexOf('.') !== -1) {
+                                    var ext = '.' + ref.split('.').pop().toLowerCase();
+                                    if (allowedExt.indexOf(ext) === -1) clientErrors.push('Q' + idx + ' (ab_image): image ' + pair[0] + ' must be JPG or PNG.');
+                                }
+                            });
                         } else if (qtype === 'range') {
                             qobj.min = parseFloat((sqForm.querySelector('[name="survey_qmin_' + idx + '"]') || {}).value) || 0;
                             qobj.max = parseFloat((sqForm.querySelector('[name="survey_qmax_' + idx + '"]') || {}).value) || 100;
+                            if (qobj.min >= qobj.max) clientErrors.push('Q' + idx + ' (range): min must be less than max.');
                         } else if (qtype === 'open') {
                             qobj.max_words = parseInt((sqForm.querySelector('[name="survey_qmaxw_' + idx + '"]') || {}).value) || 50;
+                            if (qobj.max_words < 1 || qobj.max_words > 500) clientErrors.push('Q' + idx + ' (open): max_words must be 1–500.');
                         }
-                        if (qobj.prompt) questions.push(qobj);
+                        questions.push(qobj);
                     });
+                    if (abImageCount > 6) clientErrors.push('Maximum 6 ab_image questions allowed per survey.');
+                    if (clientErrors.length > 0) {
+                        e.preventDefault();
+                        alert('Validation errors:\n\n' + clientErrors.join('\n'));
+                        return;
+                    }
                     document.getElementById('survey-questions-json').value = JSON.stringify(questions);
                 });
             }

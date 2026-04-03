@@ -637,6 +637,10 @@ AB_IMAGE_LIMITS = {
     "allowed_types": ("image/jpeg", "image/png"),
     "allowed_extensions": (".jpg", ".jpeg", ".png"),
 }
+# NOTE: max_size_bytes and allowed_types are enforced at upload time
+# when file upload infrastructure is added (future prompt). Currently
+# ab_image questions store text references only; extension checks are
+# applied in _validate_survey_questions().
 
 
 def _normalize_survey_question(q):
