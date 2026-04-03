@@ -648,6 +648,29 @@ def _normalize_survey_question(q):
         return {"type": "open", "prompt": q.strip(), "max_words": 50}
     if not isinstance(q, dict):
         return None
+    q["prompt"] = (q.get("prompt") or "").strip()
+    q["type"] = (q.get("type") or "open").strip().lower()
+    if q["type"] not in VALID_SURVEY_Q_TYPES:
+        q["type"] = "open"
+    if "options" in q and isinstance(q["options"], list):
+        q["options"] = [str(o).strip() for o in q["options"] if str(o).strip()]
+    if "max_words" in q:
+        try:
+            q["max_words"] = max(1, min(500, int(q["max_words"])))
+        except (ValueError, TypeError):
+            q["max_words"] = 50
+    if "min" in q:
+        try:
+            q["min"] = float(q["min"])
+        except (ValueError, TypeError):
+            q["min"] = 0
+    if "max" in q:
+        try:
+            q["max"] = float(q["max"])
+        except (ValueError, TypeError):
+            q["max"] = 100
+    if "images" in q and isinstance(q["images"], dict):
+        q["images"] = {k: str(v).strip() for k, v in q["images"].items()}
     return q
 
 
