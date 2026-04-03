@@ -629,6 +629,103 @@ STUDY_TYPE_LIMITS = {
     "synthetic_focus_group": {"min_personas": 4, "max_personas": 6},
 }
 
+VALID_SURVEY_Q_TYPES = ("likert", "mc", "ab", "ab_image", "range", "open")
+AB_IMAGE_LIMITS = {
+    "max_ab_image_questions": 6,
+    "max_images_per_survey": 12,
+    "max_size_bytes": 500 * 1024,
+    "allowed_types": ("image/jpeg", "image/png"),
+    "allowed_extensions": (".jpg", ".jpeg", ".png"),
+}
+
+
+def _normalize_survey_question(q):
+    if isinstance(q, str):
+        return {"type": "open", "prompt": q.strip(), "max_words": 50}
+    if not isinstance(q, dict):
+        return None
+    return q
+
+
+def _get_q_prompt(q):
+    if isinstance(q, dict):
+        return (q.get("prompt") or "").strip()
+    if isinstance(q, str):
+        return q.strip()
+    return ""
+
+
+def _validate_survey_questions(questions):
+    errors = []
+    if not isinstance(questions, list) or len(questions) == 0:
+        return ["At least 1 survey question is required."]
+    if len(questions) > 12:
+        return ["Maximum 12 survey questions allowed."]
+
+    ab_image_count = 0
+    total_images = 0
+
+    for i, q in enumerate(questions, 1):
+        if not isinstance(q, dict):
+            errors.append(f"Q{i}: invalid question format.")
+            continue
+        qtype = q.get("type", "")
+        prompt = (q.get("prompt") or "").strip()
+        if not prompt:
+            errors.append(f"Q{i}: prompt text is required.")
+        if qtype not in VALID_SURVEY_Q_TYPES:
+            errors.append(f"Q{i}: invalid type '{qtype}'. Must be one of: {', '.join(VALID_SURVEY_Q_TYPES)}.")
+            continue
+
+        opts = q.get("options") or []
+
+        if qtype == "likert":
+            if not isinstance(opts, list) or len(opts) != 5:
+                errors.append(f"Q{i} (likert): must have exactly 5 options.")
+        elif qtype == "mc":
+            if not isinstance(opts, list) or len(opts) < 3:
+                errors.append(f"Q{i} (mc): must have at least 3 options.")
+        elif qtype == "ab":
+            if not isinstance(opts, list) or len(opts) != 2:
+                errors.append(f"Q{i} (ab): must have exactly 2 options.")
+        elif qtype == "ab_image":
+            ab_image_count += 1
+            images = q.get("images") or {}
+            if not isinstance(images, dict) or set(images.keys()) != {"A", "B"}:
+                errors.append(f"Q{i} (ab_image): images must contain exactly keys 'A' and 'B'.")
+            else:
+                total_images += 2
+        elif qtype == "range":
+            r_min = q.get("min")
+            r_max = q.get("max")
+            if r_min is None or r_max is None:
+                errors.append(f"Q{i} (range): min and max bounds are required.")
+            else:
+                try:
+                    if float(r_min) >= float(r_max):
+                        errors.append(f"Q{i} (range): min must be less than max.")
+                except (ValueError, TypeError):
+                    errors.append(f"Q{i} (range): min and max must be numeric.")
+        elif qtype == "open":
+            mw = q.get("max_words")
+            if mw is None:
+                q["max_words"] = 50
+            else:
+                try:
+                    mw = int(mw)
+                    if mw < 1 or mw > 500:
+                        errors.append(f"Q{i} (open): max_words must be between 1 and 500.")
+                except (ValueError, TypeError):
+                    errors.append(f"Q{i} (open): max_words must be a number.")
+
+    if ab_image_count > AB_IMAGE_LIMITS["max_ab_image_questions"]:
+        errors.append(f"Maximum {AB_IMAGE_LIMITS['max_ab_image_questions']} ab_image questions allowed per survey.")
+    if total_images > AB_IMAGE_LIMITS["max_images_per_survey"]:
+        errors.append(f"Maximum {AB_IMAGE_LIMITS['max_images_per_survey']} stimulus images allowed per survey.")
+
+    return errors
+
+
 V1A_FIELD_MAP = {
     "market_geography": "study_fit",
     "product_concept": "known_vs_unknown",
@@ -3164,7 +3261,7 @@ def build_structured_report(
         if sq:
             studied_lines.append("Questions:")
             for i, q in enumerate(sq, 1):
-                studied_lines.append(f"  {i}. {q}")
+                studied_lines.append(f"  {i}. {_get_q_prompt(q)}")
     else:
         for field, label in ANCHOR_FIELDS:
             val = (study.get(field) or "").strip()
@@ -3673,7 +3770,7 @@ def run_ben_qa(study_dict):
             sq = raw_sq
         else:
             sq = []
-        sq = [q for q in sq if isinstance(q, str) and q.strip()]
+        sq = [q for q in sq if (isinstance(q, str) and q.strip()) or (isinstance(q, dict) and _get_q_prompt(q))]
         r_count = study_dict.get("respondent_count")
         q_count = study_dict.get("question_count")
         failures = []
@@ -4348,7 +4445,7 @@ def save_chat_field(study_id):
             return render_error(
                 f"Already have {len(sq)}/{qc} questions. Cannot add more."
             )
-        sq.append(value)
+        sq.append({"type": "open", "prompt": value, "max_words": 50})
         conn.execute(
             "UPDATE studies SET survey_questions = ? WHERE id = ?",
             (json.dumps(sq), study_id),
@@ -4898,7 +4995,25 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             bp = (study_dict.get("business_problem") or "").strip()
             ta = (study_dict.get("target_audience") or "").strip()
 
-            questions_text = "\n".join(f"  Q{i + 1}: {q}" for i, q in enumerate(sq))
+            q_lines = []
+            for i, q in enumerate(sq):
+                nq = _normalize_survey_question(q)
+                if not nq:
+                    continue
+                qtype = nq.get("type", "open")
+                prompt = _get_q_prompt(nq)
+                line = f"  Q{i + 1} [{qtype}]: {prompt}"
+                if qtype in ("likert", "mc", "ab") and nq.get("options"):
+                    line += f"\n    Options: {' | '.join(nq['options'])}"
+                elif qtype == "ab_image":
+                    imgs = nq.get("images") or {}
+                    line += f"\n    Image A: {imgs.get('A', '?')} | Image B: {imgs.get('B', '?')}"
+                elif qtype == "range":
+                    line += f"\n    Range: {nq.get('min', 0)} to {nq.get('max', 100)}"
+                elif qtype == "open":
+                    line += f"\n    Max words: {nq.get('max_words', 50)}"
+                q_lines.append(line)
+            questions_text = "\n".join(q_lines)
 
             lisa_system = (
                 "You are Lisa, a senior quantitative research analyst at Project Brainstorm. "
@@ -4918,17 +5033,23 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
                 '  "questions": [\n'
                 "    {\n"
                 '      "q": "<question text>",\n'
-                '      "results": {"<option>": "<percent>%", ...}\n'
+                '      "type": "<likert|mc|ab|ab_image|range|open>",\n'
+                '      "results": { ... }\n'
                 "    }\n"
                 "  ],\n"
                 '  "top_findings": ["<finding1>", ...],\n'
                 '  "risks_unknowns": ["<risk1>", ...]\n'
-                "}\n"
-                "3. Each question's result percentages must sum to 100%.\n"
-                "4. Provide 3-5 top_findings and 2-4 risks_unknowns.\n"
-                "5. limitations should mention this is AI-simulated, not real respondents.\n"
-                "6. sources should list plausible grounding references.\n"
-                "7. Be realistic and culturally grounded for Asia-Pacific markets where relevant."
+                "}\n\n"
+                "TYPE-SPECIFIC OUTPUT RULES:\n"
+                "- likert/mc/ab: results is {\"<option>\": \"<percent>%\", ...}, percentages must sum to 100%.\n"
+                "- ab_image: results is {\"A\": \"<percent>%\", \"B\": \"<percent>%\"}, must sum to 100%. No explanatory text.\n"
+                "- range: results is {\"mean\": <number>, \"median\": <number>, \"std_dev\": <number>}, all within min/max bounds.\n"
+                "- open: results is {\"themes\": [\"<theme1>\", ...], \"sample_responses\": [\"<resp1>\", ...]}, "
+                "each sample response must be <= max_words words.\n\n"
+                "3. Provide 3-5 top_findings and 2-4 risks_unknowns.\n"
+                "4. limitations should mention this is AI-simulated, not real respondents.\n"
+                "5. sources should list plausible grounding references.\n"
+                "6. Be realistic and culturally grounded for Asia-Pacific markets where relevant."
             )
 
             oc_block, oc_keys = _extract_optional_context(study_dict)
@@ -5266,7 +5387,10 @@ def save_survey_config(study_id):
 def save_survey_questions(study_id):
     token = get_token()
     user, _ = get_session_data(token)
+    ajax = _is_ajax(request)
     if not user or user["state"] != "active":
+        if ajax:
+            return jsonify({"ok": False, "error": "You must be an active user."}), 403
         return render_error("You must be an active user.")
 
     conn = get_db()
@@ -5276,29 +5400,104 @@ def save_survey_questions(study_id):
     ).fetchone()
     if not study:
         conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": "Draft study not found."}), 404
         return render_error("Draft study not found.")
     if study["study_type"] != "synthetic_survey":
         conn.close()
+        if ajax:
+            return jsonify({"ok": False, "error": "Survey questions only apply to synthetic survey studies."}), 400
         return render_error("Survey questions only apply to synthetic survey studies.")
 
     q_count = study["question_count"] or 8
-    questions = []
-    for i in range(1, q_count + 1):
-        q = (request.form.get(f"survey_q_{i}") or "").strip()
-        if q:
-            questions.append(q)
+
+    raw_json = request.form.get("survey_questions_json", "").strip()
+    if raw_json:
+        try:
+            questions = json.loads(raw_json)
+        except (json.JSONDecodeError, TypeError):
+            conn.close()
+            if ajax:
+                return jsonify({"ok": False, "error": "Invalid JSON for survey questions."}), 400
+            return render_error("Invalid JSON for survey questions.")
+        normalized = []
+        for q in questions:
+            nq = _normalize_survey_question(q)
+            if nq:
+                normalized.append(nq)
+        questions = normalized
+    else:
+        questions = []
+        for i in range(1, q_count + 1):
+            prompt = (request.form.get(f"survey_q_{i}") or "").strip()
+            qtype = (request.form.get(f"survey_qtype_{i}") or "open").strip()
+            if not prompt:
+                continue
+            qobj = {"type": qtype, "prompt": prompt}
+            if qtype in ("likert", "mc", "ab"):
+                opts_raw = (request.form.get(f"survey_qopts_{i}") or "").strip()
+                qobj["options"] = [o.strip() for o in opts_raw.split("|") if o.strip()] if opts_raw else []
+            elif qtype == "ab_image":
+                img_a = (request.form.get(f"survey_qimg_a_{i}") or "").strip()
+                img_b = (request.form.get(f"survey_qimg_b_{i}") or "").strip()
+                qobj["images"] = {"A": img_a, "B": img_b}
+            elif qtype == "range":
+                try:
+                    qobj["min"] = float(request.form.get(f"survey_qmin_{i}", 0))
+                    qobj["max"] = float(request.form.get(f"survey_qmax_{i}", 100))
+                except (ValueError, TypeError):
+                    qobj["min"] = 0
+                    qobj["max"] = 100
+            elif qtype == "open":
+                try:
+                    qobj["max_words"] = int(request.form.get(f"survey_qmaxw_{i}", 50))
+                except (ValueError, TypeError):
+                    qobj["max_words"] = 50
+            questions.append(qobj)
 
     if len(questions) != q_count:
         conn.close()
-        return render_error(
-            f"You must provide exactly {q_count} questions (got {len(questions)})."
-        )
+        err = f"You must provide exactly {q_count} questions (got {len(questions)})."
+        if ajax:
+            return jsonify({"ok": False, "error": err}), 400
+        return render_error(err)
+
+    validation_errors = _validate_survey_questions(questions)
+    if validation_errors:
+        conn.close()
+        err = " ".join(validation_errors)
+        if ajax:
+            return jsonify({"ok": False, "error": err, "validation_errors": validation_errors}), 400
+        return render_error(err)
 
     conn.execute(
         "UPDATE studies SET survey_questions = ? WHERE id = ?",
         (json.dumps(questions), study_id),
     )
     conn.commit()
+
+    if ajax:
+        study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
+        study_dict = dict(study)
+        auto_ben_precheck(conn, study_dict, user["id"])
+        personas_used = normalize_personas_used(study_dict.get("personas_used"))
+        precheck = _build_precheck_state(study_dict, len(personas_used))
+        qa_status = study_dict.get("qa_status", "")
+        qa_failures = []
+        if qa_status == "precheck_failed" and study_dict.get("qa_notes"):
+            try:
+                qa_failures = json.loads(study_dict["qa_notes"])
+            except (json.JSONDecodeError, TypeError):
+                qa_failures = []
+        conn.close()
+        return jsonify({
+            "ok": True,
+            "questions": questions,
+            "precheck": precheck,
+            "qa_status": qa_status,
+            "qa_failures": qa_failures,
+        })
+
     conn.close()
     return redirect(url_for("index", token=token, configure=study_id))
 

@@ -631,7 +631,16 @@
                 </p>
                 <ol style="margin: 4px 0 0 20px; line-height: 1.8;">
                     {% for q in sq_list %}
+                    {% if q is mapping %}
+                    <li><span style="background:#e8f4fd;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:600;text-transform:uppercase;">{{ q.type or 'open' }}</span> {{ q.prompt or '' }}
+                        {% if q.options %}<br><span style="color:#777;font-size:12px;">Options: {{ q.options | join(' | ') }}</span>{% endif %}
+                        {% if q.images %}<br><span style="color:#777;font-size:12px;">Images: A={{ q.images.A or '?' }}, B={{ q.images.B or '?' }}</span>{% endif %}
+                        {% if q.min is defined and q.max is defined %}<br><span style="color:#777;font-size:12px;">Range: {{ q.min }}–{{ q.max }}</span>{% endif %}
+                        {% if q.max_words %}<br><span style="color:#777;font-size:12px;">Max words: {{ q.max_words }}</span>{% endif %}
+                    </li>
+                    {% else %}
                     <li>{{ q }}</li>
+                    {% endif %}
                     {% endfor %}
                 </ol>
             </div>
@@ -641,16 +650,63 @@
                 <h4 style="margin: 0 0 12px; font-size: 15px; color: #1a1a2e;">
                     {% if sq_list %}Update{% else %}Enter{% endif %} Survey Questions ({{ q_count }} required)
                 </h4>
-                <form action="/save-survey-questions/{{ configure_study.id }}" method="POST">
+                <form id="survey-q-form" action="/save-survey-questions/{{ configure_study.id }}" method="POST">
                     <input type="hidden" name="token" value="{{ token }}">
+                    <input type="hidden" name="survey_questions_json" id="survey-questions-json" value="">
                     <div id="survey-q-builder">
                         {% for i in range(1, q_count + 1) %}
-                        <div class="form-group" style="margin-bottom: 8px;">
-                            <label style="font-size: 13px; font-weight: 500;">Question {{ i }}</label>
-                            <input type="text" name="survey_q_{{ i }}" required
-                                   value="{{ sq_list[i-1] if i <= sq_list|length else '' }}"
-                                   placeholder="Enter question {{ i }}"
-                                   style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        {% set existing = sq_list[i-1] if i <= sq_list|length else none %}
+                        {% set eq_type = existing.type if existing is mapping else 'open' %}
+                        {% set eq_prompt = existing.prompt if existing is mapping else (existing if existing is string else '') %}
+                        {% set eq_opts = existing.options|join('|') if existing is mapping and existing.options else '' %}
+                        {% set eq_img_a = existing.images.A if existing is mapping and existing.images else '' %}
+                        {% set eq_img_b = existing.images.B if existing is mapping and existing.images else '' %}
+                        {% set eq_min = existing.min if existing is mapping and existing.min is defined else 0 %}
+                        {% set eq_max = existing.max if existing is mapping and existing.max is defined else 100 %}
+                        {% set eq_maxw = existing.max_words if existing is mapping and existing.max_words else 50 %}
+                        <div class="sq-row" data-idx="{{ i }}" style="margin-bottom: 12px; padding: 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px;">
+                            <div style="display: flex; gap: 8px; margin-bottom: 6px; align-items: center;">
+                                <label style="font-size: 13px; font-weight: 600; min-width: 30px;">Q{{ i }}</label>
+                                <select name="survey_qtype_{{ i }}" class="sq-type-select" data-idx="{{ i }}" style="padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; min-width: 110px;">
+                                    <option value="open" {{ 'selected' if eq_type == 'open' }}>Open-ended</option>
+                                    <option value="likert" {{ 'selected' if eq_type == 'likert' }}>Likert (5-pt)</option>
+                                    <option value="mc" {{ 'selected' if eq_type == 'mc' }}>Multiple Choice</option>
+                                    <option value="ab" {{ 'selected' if eq_type == 'ab' }}>A/B Choice</option>
+                                    <option value="ab_image" {{ 'selected' if eq_type == 'ab_image' }}>A/B Image</option>
+                                    <option value="range" {{ 'selected' if eq_type == 'range' }}>Range/Scale</option>
+                                </select>
+                                <input type="text" name="survey_q_{{ i }}" required
+                                       value="{{ eq_prompt }}"
+                                       placeholder="Enter question {{ i }}"
+                                       style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                            </div>
+                            <div class="sq-type-fields" id="sq-fields-{{ i }}">
+                                <div class="sq-field-opts" style="{{ '' if eq_type in ('likert', 'mc', 'ab') else 'display:none;' }}margin-top:4px;">
+                                    <input type="text" name="survey_qopts_{{ i }}" value="{{ eq_opts }}" placeholder="Option1 | Option2 | ..." style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
+                                    <span style="font-size:11px;color:#999;">Separate options with |{% if eq_type == 'likert' %} (exactly 5 required){% elif eq_type == 'ab' %} (exactly 2 required){% elif eq_type == 'mc' %} (at least 3 required){% endif %}</span>
+                                </div>
+                                <div class="sq-field-imgs" style="{{ '' if eq_type == 'ab_image' else 'display:none;' }}margin-top:4px;">
+                                    <div style="display:flex;gap:8px;">
+                                        <input type="text" name="survey_qimg_a_{{ i }}" value="{{ eq_img_a }}" placeholder="Image A reference" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
+                                        <input type="text" name="survey_qimg_b_{{ i }}" value="{{ eq_img_b }}" placeholder="Image B reference" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
+                                    </div>
+                                    <span style="font-size:11px;color:#999;">Enter image references for A and B (e.g. file name or URL)</span>
+                                </div>
+                                <div class="sq-field-range" style="{{ '' if eq_type == 'range' else 'display:none;' }}margin-top:4px;">
+                                    <div style="display:flex;gap:8px;align-items:center;">
+                                        <label style="font-size:12px;">Min:</label>
+                                        <input type="number" name="survey_qmin_{{ i }}" value="{{ eq_min }}" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
+                                        <label style="font-size:12px;">Max:</label>
+                                        <input type="number" name="survey_qmax_{{ i }}" value="{{ eq_max }}" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
+                                    </div>
+                                </div>
+                                <div class="sq-field-maxw" style="{{ '' if eq_type == 'open' else 'display:none;' }}margin-top:4px;">
+                                    <div style="display:flex;gap:8px;align-items:center;">
+                                        <label style="font-size:12px;">Max words:</label>
+                                        <input type="number" name="survey_qmaxw_{{ i }}" value="{{ eq_maxw }}" min="1" max="500" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         {% endfor %}
                     </div>
@@ -1435,12 +1491,33 @@
                         }
                         if (surveyJson.questions && surveyJson.questions.length) {
                             surveyJson.questions.forEach(function(q, i) {
+                                var qt = q.type || 'open';
                                 html += '<div style="background:#fafafa;border:1px solid #e9ecef;border-radius:6px;padding:12px;margin-bottom:8px;font-size:13px;">';
+                                html += '<span style="background:#e8f4fd;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:600;text-transform:uppercase;margin-right:6px;">' + escHtml(qt) + '</span>';
                                 html += '<strong>Q' + (i + 1) + ':</strong> ' + escHtml(q.q || '') + '<br>';
                                 if (q.results) {
-                                    Object.keys(q.results).forEach(function(k) {
-                                        html += '<span style="display:inline-block;margin:4px 8px 0 0;background:#e8f4fd;padding:2px 8px;border-radius:4px;">' + escHtml(k) + ': <strong>' + escHtml(String(q.results[k])) + '</strong></span>';
-                                    });
+                                    if (qt === 'open' && q.results.themes) {
+                                        html += '<div style="margin-top:6px;"><strong>Themes:</strong> ';
+                                        (q.results.themes || []).forEach(function(t) {
+                                            html += '<span style="display:inline-block;margin:2px 4px 0 0;background:#f0e8fd;padding:2px 8px;border-radius:4px;">' + escHtml(t) + '</span>';
+                                        });
+                                        html += '</div>';
+                                        if (q.results.sample_responses && q.results.sample_responses.length) {
+                                            html += '<div style="margin-top:4px;"><strong>Sample:</strong><ul style="margin:2px 0 0 16px;">';
+                                            q.results.sample_responses.forEach(function(r) { html += '<li style="font-size:12px;color:#555;">' + escHtml(r) + '</li>'; });
+                                            html += '</ul></div>';
+                                        }
+                                    } else if (qt === 'range' && q.results.mean !== undefined) {
+                                        html += '<div style="margin-top:6px;">';
+                                        html += '<span style="display:inline-block;margin:2px 8px 0 0;background:#e8f4fd;padding:2px 8px;border-radius:4px;">Mean: <strong>' + escHtml(String(q.results.mean)) + '</strong></span>';
+                                        html += '<span style="display:inline-block;margin:2px 8px 0 0;background:#e8f4fd;padding:2px 8px;border-radius:4px;">Median: <strong>' + escHtml(String(q.results.median)) + '</strong></span>';
+                                        if (q.results.std_dev !== undefined) html += '<span style="display:inline-block;margin:2px 8px 0 0;background:#e8f4fd;padding:2px 8px;border-radius:4px;">Std Dev: <strong>' + escHtml(String(q.results.std_dev)) + '</strong></span>';
+                                        html += '</div>';
+                                    } else {
+                                        Object.keys(q.results).forEach(function(k) {
+                                            html += '<span style="display:inline-block;margin:4px 8px 0 0;background:#e8f4fd;padding:2px 8px;border-radius:4px;">' + escHtml(k) + ': <strong>' + escHtml(String(q.results[k])) + '</strong></span>';
+                                        });
+                                    }
                                 }
                                 html += '</div>';
                             });
@@ -1495,6 +1572,55 @@
             function handleAjaxResponse(data) {
                 if (data.precheck) updatePrecheckPanel(data.precheck);
                 if (data.qa_status) updatePrecheckStatusBox(data);
+            }
+
+            function sqToggleFields(idx, qtype) {
+                var row = document.querySelector('.sq-row[data-idx="' + idx + '"]');
+                if (!row) return;
+                var opts = row.querySelector('.sq-field-opts');
+                var imgs = row.querySelector('.sq-field-imgs');
+                var rng = row.querySelector('.sq-field-range');
+                var maxw = row.querySelector('.sq-field-maxw');
+                if (opts) opts.style.display = (qtype === 'likert' || qtype === 'mc' || qtype === 'ab') ? '' : 'none';
+                if (imgs) imgs.style.display = (qtype === 'ab_image') ? '' : 'none';
+                if (rng) rng.style.display = (qtype === 'range') ? '' : 'none';
+                if (maxw) maxw.style.display = (qtype === 'open') ? '' : 'none';
+            }
+
+            document.querySelectorAll('.sq-type-select').forEach(function(sel) {
+                sel.addEventListener('change', function() {
+                    sqToggleFields(sel.getAttribute('data-idx'), sel.value);
+                });
+            });
+
+            var sqForm = document.getElementById('survey-q-form');
+            if (sqForm) {
+                sqForm.addEventListener('submit', function(e) {
+                    var rows = sqForm.querySelectorAll('.sq-row');
+                    var questions = [];
+                    rows.forEach(function(row) {
+                        var idx = row.getAttribute('data-idx');
+                        var qtype = (sqForm.querySelector('[name="survey_qtype_' + idx + '"]') || {}).value || 'open';
+                        var prompt = (sqForm.querySelector('[name="survey_q_' + idx + '"]') || {}).value || '';
+                        var qobj = {type: qtype, prompt: prompt.trim()};
+                        if (qtype === 'likert' || qtype === 'mc' || qtype === 'ab') {
+                            var optsRaw = (sqForm.querySelector('[name="survey_qopts_' + idx + '"]') || {}).value || '';
+                            qobj.options = optsRaw.split('|').map(function(o) { return o.trim(); }).filter(Boolean);
+                        } else if (qtype === 'ab_image') {
+                            qobj.images = {
+                                A: (sqForm.querySelector('[name="survey_qimg_a_' + idx + '"]') || {}).value || '',
+                                B: (sqForm.querySelector('[name="survey_qimg_b_' + idx + '"]') || {}).value || ''
+                            };
+                        } else if (qtype === 'range') {
+                            qobj.min = parseFloat((sqForm.querySelector('[name="survey_qmin_' + idx + '"]') || {}).value) || 0;
+                            qobj.max = parseFloat((sqForm.querySelector('[name="survey_qmax_' + idx + '"]') || {}).value) || 100;
+                        } else if (qtype === 'open') {
+                            qobj.max_words = parseInt((sqForm.querySelector('[name="survey_qmaxw_' + idx + '"]') || {}).value) || 50;
+                        }
+                        if (qobj.prompt) questions.push(qobj);
+                    });
+                    document.getElementById('survey-questions-json').value = JSON.stringify(questions);
+                });
             }
 
             document.querySelectorAll('.discovery-form').forEach(function(form) {
