@@ -198,7 +198,7 @@
 <body>
 
 <div class="header">
-    <a href="/" class="brand-lockup">
+    <a href="{% if token %}/?token={{ token }}{% else %}/{% endif %}" class="brand-lockup">
         <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
         <span class="brand-wordmark" id="brand-wordmark"><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思廣益</span></span>
     </a>
@@ -210,8 +210,11 @@
                 <button type="submit" class="btn btn-secondary btn-small">Logout</button>
             </form>
         {% elif user %}
-            <span>{{ user.email }}</span>
-            <a href="/account?token={{ token }}" style="color: var(--pb-text); text-decoration: none; font-size: 11px; font-weight: 500; opacity: 0.8;">Account</a>
+            <a href="/blog" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500;">Blog / News</a>
+            <span style="color: var(--pb-text); font-size: 13px; opacity: 0.5;">|</span>
+            <a href="/?token={{ token }}&view=messages" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500;">Messages</a>
+            <span style="color: var(--pb-text); font-size: 13px; opacity: 0.5;">|</span>
+            <a href="/account?token={{ token }}" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500;">Account</a>
             <form action="/logout" method="POST" class="logout-form">
                 <input type="hidden" name="token" value="{{ token }}">
                 <button type="submit" class="btn btn-secondary btn-small">Logout</button>
@@ -347,23 +350,6 @@
             {% endif %}
         </div>
 
-        {% if latest_blog_posts %}
-        <div class="card" style="margin-bottom: 16px; padding: 18px;">
-            <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Latest from the Blog</h3>
-            {% for bp in latest_blog_posts %}
-            <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 8px;">
-                {% if bp.image_path %}
-                <img src="/static/blog/{{ bp.image_path }}" alt="{{ bp.title }}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 6px; flex-shrink: 0;">
-                {% endif %}
-                <div>
-                    <a href="/blog/{{ bp.id }}" style="font-size: 14px; font-weight: 600; color: #1a1a2e; text-decoration: none;">{{ bp.title }}</a>
-                    <div style="font-size: 12px; color: #999;">{{ bp.created_at }}</div>
-                </div>
-            </div>
-            {% endfor %}
-            <a href="/blog" style="font-size: 13px; color: #3498db; text-decoration: none; font-weight: 500;">View all posts &rarr;</a>
-        </div>
-        {% endif %}
 
         <div class="card">
             <div class="card-header">

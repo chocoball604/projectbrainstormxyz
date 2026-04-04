@@ -181,7 +181,7 @@
 </div>
 
 <div class="container">
-    <a href="/" class="back-link">&larr; Back to Home</a>
+    <a href="/" class="back-link">&larr; Back to Dashboard</a>
     <h1 class="page-title">Blog / News</h1>
 
     {% if error %}
@@ -193,11 +193,12 @@
         <div class="post-card{% if post.is_pinned %} pinned{% endif %}">
             {% if post.image_path %}
             <img src="/static/blog/{{ post.image_path }}" alt="{{ post.title }}" class="post-thumbnail">
+            {% else %}
+            <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm" class="post-thumbnail" style="object-fit: contain; background: #f5f5f5; padding: 8px;">
             {% endif %}
             <div class="post-content">
                 <h2><a href="/blog/{{ post.id }}">{{ post.title }}</a>{% if post.is_pinned %}<span class="pin-badge">Pinned</span>{% endif %}</h2>
                 <div class="post-date">{{ post.created_at }}</div>
-                <p class="post-excerpt">{{ post.body[:200] }}{% if post.body|length > 200 %}...{% endif %}</p>
             </div>
         </div>
         {% endfor %}
