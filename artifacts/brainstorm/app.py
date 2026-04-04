@@ -41,8 +41,6 @@ from flask import (
 from fpdf import FPDF
 from werkzeug.security import check_password_hash, generate_password_hash
 
-import message_store as ms
-
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-fallback-key")
 
@@ -1961,16 +1959,6 @@ def index():
     new_research_step = request.args.get("new_research")
     new_research_type = request.args.get("nr_type", "")
 
-    inbox_unread = 0
-    inbox_latest_msg = None
-    inbox_messages = []
-    show_inbox = request.args.get("inbox") == "1"
-    if user and user["state"] == "active":
-        inbox_unread = ms.get_unread_count_inbound(user["id"])
-        inbox_latest_msg = ms.get_latest_system_admin_message(user["id"])
-        if show_inbox:
-            inbox_messages = ms.list_messages(user["id"])
-
     return render_template(
         "index.html",
         user=user,
@@ -2035,10 +2023,6 @@ def index():
         user_storage_cap_mb=user_storage_cap_mb,
         user_storage_cap=UPLOAD_USER_STORAGE_CAP,
         latest_blog_posts=get_latest_blog_posts(2),
-        inbox_unread=inbox_unread,
-        inbox_latest_msg=inbox_latest_msg,
-        inbox_messages=inbox_messages,
-        show_inbox=show_inbox,
     )
 
 
@@ -7565,73 +7549,6 @@ def admin_llm_smoke():
         return jsonify({"model_id": model_id, "status": "ok", "response": result[:500]})
     except Exception as e:
         return jsonify({"model_id": model_id, "status": "error", "error": str(e)[:500]})
-
-
-@app.route("/api/messages")
-def api_messages():
-    token = get_token()
-    user, is_admin = get_session_data(token)
-    if not user:
-        return jsonify({"error": "Unauthorized"}), 401
-    msgs = ms.list_messages(user["id"])
-    unread = ms.get_unread_count_inbound(user["id"])
-    return jsonify({"ok": True, "messages": msgs, "unread": unread})
-
-
-@app.route("/api/messages/<message_id>/read", methods=["POST"])
-def api_mark_message_read(message_id):
-    token = get_token()
-    user, is_admin = get_session_data(token)
-    if not user:
-        return jsonify({"error": "Unauthorized"}), 401
-    ok = ms.mark_read(message_id, user["id"])
-    unread = ms.get_unread_count_inbound(user["id"])
-    return jsonify({"ok": ok, "unread": unread})
-
-
-@app.route("/api/messages/send", methods=["POST"])
-def api_send_user_message():
-    token = get_token()
-    user, is_admin = get_session_data(token)
-    if not user:
-        return jsonify({"error": "Unauthorized"}), 401
-    title = (request.form.get("title") or "").strip()
-    body = (request.form.get("body") or "").strip()
-    if not title or not body:
-        return jsonify({"error": "Title and body are required"}), 400
-    user_msg = ms.create_message("user", user["id"], title, body)
-    ms.mark_read(user_msg["id"], user["id"])
-    ms.create_message(
-        "system",
-        user["id"],
-        "Message received",
-        "Thank you for your message. An admin will review it shortly.",
-    )
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/messages/send", methods=["POST"])
-def api_admin_send_message():
-    token = get_token()
-    _, is_admin = get_session_data(token)
-    if not is_admin:
-        return jsonify({"error": "Admin access required"}), 403
-    recipient_user_id = request.form.get("recipient_user_id")
-    title = (request.form.get("title") or "").strip()
-    body = (request.form.get("body") or "").strip()
-    if not recipient_user_id or not title or not body:
-        return jsonify({"error": "recipient_user_id, title, and body are required"}), 400
-    try:
-        recipient_user_id = int(recipient_user_id)
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid recipient_user_id"}), 400
-    conn = get_db()
-    user_row = conn.execute("SELECT id FROM users WHERE id = ?", (recipient_user_id,)).fetchone()
-    conn.close()
-    if not user_row:
-        return jsonify({"error": "User not found"}), 404
-    ms.create_message("admin", recipient_user_id, title, body)
-    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
