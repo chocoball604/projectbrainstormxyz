@@ -137,7 +137,7 @@ BLOG_STATIC_DIR = os.path.join(
 os.makedirs(BLOG_STATIC_DIR, exist_ok=True)
 
 
-def call_llm(model_id, messages, purpose=""):
+def call_llm(model_id, messages, purpose="", timeout_seconds=60):
     """Single wrapper for all LLM calls via Replit AI Integrations (OpenRouter)."""
     import openai as _openai
 
@@ -146,7 +146,7 @@ def call_llm(model_id, messages, purpose=""):
     if not base_url or not api_key:
         raise NotImplementedError("LLM integration not connected yet")
 
-    client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=60)
+    client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=timeout_seconds)
     try:
         resp = client.chat.completions.create(
             model=model_id,
@@ -661,14 +661,25 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
             )
             print(f"PERSONA_GEN_RETRY study={study_id} model={lisa_model_id}", flush=True)
 
-        raw = call_llm(
-            lisa_model_id,
-            [
-                {"role": "system", "content": current_system},
-                {"role": "user", "content": user_prompt},
-            ],
-            purpose="lisa_auto_persona_generation",
-        )
+        try:
+            raw = call_llm(
+                lisa_model_id,
+                [
+                    {"role": "system", "content": current_system},
+                    {"role": "user", "content": user_prompt},
+                ],
+                purpose="lisa_auto_persona_generation",
+                timeout_seconds=120,
+            )
+        except RuntimeError as e:
+            print(
+                f"PERSONA_GEN_TIMEOUT study={study_id} attempt={attempt_label} "
+                f"model={lisa_model_id} err={e}",
+                flush=True,
+            )
+            if attempt == 0:
+                continue
+            raise
 
         try:
             parsed = _safe_parse_persona_json(raw, study_id, lisa_model_id)
@@ -5392,11 +5403,24 @@ def run_study(study_id):
                         (json.dumps(notes_list), study_id),
                     )
                     conn.commit()
-                persona_gen_model = _rng.choice(healthy_models)
-                print(f"PERSONA_POOL_MODEL_SELECTED={persona_gen_model} study={study_id}", flush=True)
+                _rng.shuffle(healthy_models)
+                generated = None
+                persona_gen_model = None
                 study_snapshot = dict(study)
                 conn.close()
-                generated = lisa_generate_personas(study_snapshot, auto_n, persona_gen_model)
+                models_to_try = healthy_models[:3]
+                for _model_idx, _try_model in enumerate(models_to_try):
+                    persona_gen_model = _try_model
+                    print(f"PERSONA_POOL_MODEL_SELECTED={persona_gen_model} study={study_id} pool_attempt={_model_idx+1}/{len(models_to_try)}", flush=True)
+                    try:
+                        generated = lisa_generate_personas(study_snapshot, auto_n, persona_gen_model)
+                        break
+                    except Exception as _model_err:
+                        print(f"PERSONA_MODEL_FAILED study={study_id} model={persona_gen_model} err={_model_err}", flush=True)
+                        if _model_idx < len(models_to_try) - 1:
+                            print(f"PERSONA_TRYING_NEXT_MODEL study={study_id}", flush=True)
+                            continue
+                        raise
                 conn = get_db()
                 new_persona_ids = []
                 def _pstr(val):
