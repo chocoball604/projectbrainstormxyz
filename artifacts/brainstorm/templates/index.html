@@ -384,7 +384,7 @@
                         </div>
                         <span style="font-size: 11px; color: #999;">{{ msg.timestamp }}</span>
                     </div>
-                    <p style="font-size: 13px; color: #555; margin: 0; line-height: 1.5;">{{ msg.body }}</p>
+                    <p style="font-size: 13px; color: #555; margin: 0; line-height: 1.5;">{{ msg.body[:200] }}{% if msg.body|length > 200 %}...{% endif %}</p>
                 </div>
                 {% endfor %}
             </div>

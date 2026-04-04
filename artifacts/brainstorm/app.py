@@ -76,10 +76,6 @@ VERIFY_EXEMPT_ENDPOINTS = {
     "set_language",
     "static",
     "serve_blog_image",
-    "api_messages",
-    "api_mark_message_read",
-    "api_send_user_message",
-    "api_admin_send_message",
 }
 
 
@@ -7628,6 +7624,11 @@ def api_admin_send_message():
         recipient_user_id = int(recipient_user_id)
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid recipient_user_id"}), 400
+    conn = get_db()
+    user_row = conn.execute("SELECT id FROM users WHERE id = ?", (recipient_user_id,)).fetchone()
+    conn.close()
+    if not user_row:
+        return jsonify({"error": "User not found"}), 404
     ms.create_message("admin", recipient_user_id, title, body)
     return jsonify({"ok": True})
 
