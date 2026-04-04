@@ -1,0 +1,29 @@
+[
+  {
+    "id": "2f9ca841a1c82a8e",
+    "sender_type": "system",
+    "recipient_user_id": 1,
+    "title": "Welcome to Project Brainstorm",
+    "body": "Your account has been set up.",
+    "timestamp": "2026-04-04 03:55:45",
+    "read": false
+  },
+  {
+    "id": "e63a02cc3fe2b6a5",
+    "sender_type": "admin",
+    "recipient_user_id": 1,
+    "title": "Platform Update",
+    "body": "New features added!",
+    "timestamp": "2026-04-04 03:55:45",
+    "read": false
+  },
+  {
+    "id": "ffb9c4458f12d72c",
+    "sender_type": "user",
+    "recipient_user_id": 1,
+    "title": "My feedback",
+    "body": "Great platform!",
+    "timestamp": "2026-04-04 03:55:45",
+    "read": true
+  }
+]
