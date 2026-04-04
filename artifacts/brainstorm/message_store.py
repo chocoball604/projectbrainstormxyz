@@ -74,9 +74,32 @@ def mark_read(message_id, recipient_user_id):
     return False
 
 
-def get_latest_message(recipient_user_id):
-    msgs = list_messages(recipient_user_id)
-    return msgs[0] if msgs else None
+def get_latest_system_admin_message(recipient_user_id):
+    with _lock:
+        messages = _load()
+    inbound = sorted(
+        [
+            m
+            for m in messages
+            if m["recipient_user_id"] == recipient_user_id
+            and m["sender_type"] in ("system", "admin")
+        ],
+        key=lambda m: m["timestamp"],
+        reverse=True,
+    )
+    return inbound[0] if inbound else None
+
+
+def get_unread_count_inbound(recipient_user_id):
+    with _lock:
+        messages = _load()
+    return sum(
+        1
+        for m in messages
+        if m["recipient_user_id"] == recipient_user_id
+        and not m["read"]
+        and m["sender_type"] in ("system", "admin")
+    )
 
 
 def list_all_messages_admin():

@@ -1966,8 +1966,8 @@ def index():
     inbox_messages = []
     show_inbox = request.args.get("inbox") == "1"
     if user and user["state"] == "active":
-        inbox_unread = ms.get_unread_count(user["id"])
-        inbox_latest_msg = ms.get_latest_message(user["id"])
+        inbox_unread = ms.get_unread_count_inbound(user["id"])
+        inbox_latest_msg = ms.get_latest_system_admin_message(user["id"])
         if show_inbox:
             inbox_messages = ms.list_messages(user["id"])
 
@@ -7574,7 +7574,7 @@ def api_messages():
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
     msgs = ms.list_messages(user["id"])
-    unread = sum(1 for m in msgs if not m["read"])
+    unread = ms.get_unread_count_inbound(user["id"])
     return jsonify({"ok": True, "messages": msgs, "unread": unread})
 
 
@@ -7585,7 +7585,7 @@ def api_mark_message_read(message_id):
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
     ok = ms.mark_read(message_id, user["id"])
-    unread = ms.get_unread_count(user["id"])
+    unread = ms.get_unread_count_inbound(user["id"])
     return jsonify({"ok": ok, "unread": unread})
 
 
@@ -7599,7 +7599,8 @@ def api_send_user_message():
     body = (request.form.get("body") or "").strip()
     if not title or not body:
         return jsonify({"error": "Title and body are required"}), 400
-    ms.create_message("user", user["id"], title, body)
+    user_msg = ms.create_message("user", user["id"], title, body)
+    ms.mark_read(user_msg["id"], user["id"])
     ms.create_message(
         "system",
         user["id"],
