@@ -1,0 +1,107 @@
+REPLIT CODING AGENT — BUGFIX PROMPT (V1A)
+Topic: Fix Focus Group auto-persona generation failure (JSON parsing error) safely
+
+Observed failure
+When starting a Focus Group study with no personas attached (auto-generation path), execution fails with:
+“Auto-persona generation failed: Expecting ',' delimiter: line 28 column 122 (char 4054). Please attach personas manually or contact admin.”
+
+This indicates the persona generator returned malformed JSON and json parsing failed during auto persona generation.
+
+Relevant code context
+- Persona generation uses lisa_generate_personas(...) with a system prompt requiring “Return STRICT JSON only” and then parses using json.loads(cleaned). [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=c29742b1-8a49-416c-b271-9dab95b73907&cid=bfec441e4a44d47e)
+- This strict parse is currently brittle: any trailing commas, stray text, unescaped quotes, or JSON-like content wrapped with extra tokens will break focus group auto-generation.
+- Focus Group requires auto-generation of 4 personas minimum when none selected.
+
+Hard constraints (NON-NEGOTIABLE)
+1) DO NOT change SQLite schema (no CREATE/ALTER/DROP, no new columns, no migrations).
+2) DO NOT modify brainstorm_v1_replit_singlepage_pack/ or brainstorm.db.
+3) Never hold DB connections open during any LLM call; commit+close before calling; reopen only for writes. [1](https://onedrive.live.com/personal/bfec441e4a44d47e/_layouts/15/doc.aspx?resid=c29742b1-8a49-416c-b271-9dab95b73907&cid=bfec441e4a44d47e)
+4) Minimal edits only; do not refactor unrelated study execution, prompts, or UI.
+5) DO NOT leak raw model output into the UI (security/UX).
+6) Do not change Mark/Lisa/Ben role prompts unless strictly necessary for JSON validity.
+
+================================================
+STEP 0 (MANDATORY): Job List
+Before writing any code, output a numbered checklist titled exactly:
+“Job List — FG Auto-Persona JSON Fix”
+
+It must include:
+- Where you will inspect the current parsing logic
+- How you will harden parsing safely
+- How you will implement retries / fallback behavior
+- What logging you will add for debugging (server logs only)
+- How you will test both IDI and Focus Group paths
+
+================================================
+Goals
+A) Make auto-persona generation resilient to minor JSON formatting issues without weakening governance.
+B) Ensure Focus Group auto-generation succeeds reliably (creates >=4 personas when none attached).
+C) If persona generation still fails after safe recovery attempts, show a clear error and leave the study in a safe state (draft) without partial writes.
+D) Add diagnostics in logs so we can identify root causes quickly (but do not show raw model output to users).
+
+================================================
+Implementation requirements (safe + bounded)
+
+1) Harden persona JSON parsing
+- Keep the “STRICT JSON” requirement in the prompt, but make the parser tolerant to:
+  - leading/trailing non-JSON text
+  - markdown fences
+  - accidental commentary
+- Implement safe extraction: locate the first “{” and the last “}” and attempt json.loads on that substring if the full string fails.
+- If extraction fails, add one more attempt:
+  - a minimal “JSON repair” pass (non-LLM, purely deterministic) such as stripping trailing commas and invalid control characters if present.
+- Do not implement a complex custom JSON parser; keep it minimal and predictable.
+
+2) Add controlled retry (max 1 retry)
+- If parsing fails on first attempt:
+  - retry the persona generation call once with a stricter system instruction emphasizing “no trailing commas, valid JSON”.
+- Use a new run_id / log marker so it is easy to correlate in logs.
+- Do not loop indefinitely.
+
+3) Logging (server-side only)
+- When parsing fails, log:
+  - study_id
+  - study_type
+  - model_id used
+  - length of raw response
+  - the exception message
+  - whether fallback extraction or retry succeeded
+- Do NOT log full raw response content (or if you must, log only a short sanitized excerpt <= 200 chars).
+
+4) Transaction safety
+- Ensure no personas are inserted unless parsing succeeds and persona list validates.
+- Ensure FG requires at least 4 personas:
+  - If generator returns fewer than required, treat as failure and retry once (or fail with clear error).
+- If failure persists, keep study draft unchanged and present a clear message:
+  - “Auto-persona generation failed due to invalid generator output. Please try again or attach personas manually.”
+
+5) Validation
+- Validate parsed structure:
+  - must contain key “personas” as a list
+  - each persona must include required fields (name, persona_summary, demographic_frame, psychographic_profile, contextual_constraints, behavioural_tendencies, grounding_sources, confidence_and_limits)
+- If missing required fields, treat as parse/format failure (retry once).
+
+================================================
+Explicit non-goals
+- Do NOT change Focus Group persona count policy (must remain 4–6).
+- Do NOT change UI/UX prompts 8A–8E work.
+- Do NOT add new DB tables/columns.
+- Do NOT replace persona generation with a different feature.
+
+================================================
+MANDATORY RESPONSE FORMAT
+At the end of your response, include exactly:
+
+(a) Files changed  
+(b) What changed  
+(c) How to test (step-by-step)
+
+Testing must include:
+1) Create a Focus Group study with 0 personas attached; run it; confirm auto-generation succeeds (>=4 personas inserted).
+2) Repeat Focus Group run at least twice to ensure no intermittent parsing failures.
+3) Create an IDI with 0 personas attached; run it; confirm auto-generation succeeds (exactly 1 persona inserted).
+4) Simulate a malformed JSON response (e.g., temporarily hardcode an invalid JSON test string or use a controlled test hook) and confirm:
+   - parser fallback extraction attempts run
+   - single retry occurs
+   - failures produce a clear user-facing error
+   - no partial personas are inserted.

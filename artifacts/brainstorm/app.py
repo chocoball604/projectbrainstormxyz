@@ -524,6 +524,74 @@ def _extract_optional_context(study_dict):
     return "\n".join(lines), sorted(present.keys())
 
 
+_PERSONA_REQUIRED_FIELDS = [
+    "name", "persona_summary", "demographic_frame", "psychographic_profile",
+    "contextual_constraints", "behavioural_tendencies", "grounding_sources",
+    "confidence_and_limits",
+]
+
+
+def _safe_parse_persona_json(raw, study_id, model_id):
+    if not raw or not raw.strip():
+        raise ValueError("LLM returned empty response for persona generation")
+
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        first_nl = cleaned.find("\n")
+        if first_nl != -1:
+            cleaned = cleaned[first_nl + 1:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    first_brace = cleaned.find("{")
+    last_brace = cleaned.rfind("}")
+    if first_brace != -1 and last_brace > first_brace:
+        subset = cleaned[first_brace:last_brace + 1]
+        try:
+            return json.loads(subset)
+        except json.JSONDecodeError:
+            pass
+
+        import re
+        repaired = re.sub(r',\s*([\]}])', r'\1', subset)
+        repaired = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', repaired)
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError as e:
+            excerpt = subset[:200] if len(subset) > 200 else subset
+            print(
+                f"PERSONA_JSON_PARSE_FAIL study={study_id} model={model_id} "
+                f"raw_len={len(raw)} excerpt={repr(excerpt)} err={e}",
+                flush=True,
+            )
+            raise ValueError(f"Persona JSON parse failed after fallback: {e}")
+
+    raise ValueError("No JSON object found in persona generation response")
+
+
+def _validate_persona_list(parsed, n_required):
+    if not isinstance(parsed, dict) or "personas" not in parsed:
+        raise ValueError("Parsed output missing 'personas' key")
+    personas = parsed["personas"]
+    if not isinstance(personas, list) or len(personas) < 1:
+        raise ValueError("'personas' is not a non-empty list")
+    for i, p in enumerate(personas):
+        if not isinstance(p, dict):
+            raise ValueError(f"Persona {i} is not a dict")
+        missing = [f for f in _PERSONA_REQUIRED_FIELDS if not p.get(f)]
+        if missing:
+            raise ValueError(f"Persona {i} missing fields: {', '.join(missing)}")
+    if len(personas) < n_required:
+        raise ValueError(f"Need {n_required} personas, got {len(personas)}")
+    return personas
+
+
 def lisa_generate_personas(study_dict, n, lisa_model_id):
     brief_fields = [
         ("business_problem", "Business Problem"),
@@ -544,15 +612,19 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
         else "Focus Group"
     )
 
-    system_prompt = (
-        "You are Lisa, a senior qualitative research analyst at Project Brainstorm. "
-        "Generate realistic, diverse synthetic research personas for a qualitative study.\n\n"
+    base_json_instruction = (
         "Return STRICT JSON only — no markdown, no commentary, no code fences.\n"
         "Schema:\n"
         '{"personas": [{"name": "...", "persona_summary": "...", "demographic_frame": "...", '
         '"psychographic_profile": "...", "contextual_constraints": "...", '
         '"behavioural_tendencies": "...", "grounding_sources": "...", '
         '"confidence_and_limits": "..."}]}\n\n'
+    )
+
+    system_prompt = (
+        "You are Lisa, a senior qualitative research analyst at Project Brainstorm. "
+        "Generate realistic, diverse synthetic research personas for a qualitative study.\n\n"
+        + base_json_instruction +
         "RULES:\n"
         f"1. Generate exactly {n} persona(s).\n"
         "2. Each persona must be distinct in demographics, psychographics, and behaviour.\n"
@@ -566,6 +638,7 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
     if oc_block:
         brief_text += f"\n{oc_block}\n"
     study_title = study_dict.get("title", "Untitled Study")
+    study_id = study_dict.get("id", "?")
     print(f'OPTIONAL_CONTEXT_INJECT_LISA_PERSONA study_title="{study_title}" included={"true" if oc_keys else "false"} keys={",".join(oc_keys)}', flush=True)
 
     user_prompt = (
@@ -575,33 +648,49 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
         f"Generate {n} persona(s) for this study."
     )
 
-    raw = call_llm(
-        lisa_model_id,
-        [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        purpose="lisa_auto_persona_generation",
-    )
+    for attempt in range(2):
+        attempt_label = "initial" if attempt == 0 else "retry"
+        current_system = system_prompt
+        if attempt == 1:
+            current_system = (
+                system_prompt +
+                "\n\nCRITICAL: Your previous response had invalid JSON. "
+                "You MUST return valid JSON with NO trailing commas, NO comments, "
+                "NO markdown fences. Start with { and end with }. "
+                "Ensure all strings are properly escaped."
+            )
+            print(f"PERSONA_GEN_RETRY study={study_id} model={lisa_model_id}", flush=True)
 
-    if not raw or not raw.strip():
-        raise ValueError("LLM returned empty response for persona generation")
+        raw = call_llm(
+            lisa_model_id,
+            [
+                {"role": "system", "content": current_system},
+                {"role": "user", "content": user_prompt},
+            ],
+            purpose="lisa_auto_persona_generation",
+        )
 
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        first_nl = cleaned.find("\n")
-        if first_nl != -1:
-            cleaned = cleaned[first_nl + 1 :]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-
-    parsed = json.loads(cleaned)
-    personas = parsed.get("personas", [])
-    if not isinstance(personas, list) or len(personas) < 1:
-        raise ValueError(f"Expected {n} personas, got invalid structure")
-
-    return personas[:n]
+        try:
+            parsed = _safe_parse_persona_json(raw, study_id, lisa_model_id)
+            personas = _validate_persona_list(parsed, n)
+            print(
+                f"PERSONA_GEN_OK study={study_id} attempt={attempt_label} "
+                f"model={lisa_model_id} count={len(personas)}",
+                flush=True,
+            )
+            return personas[:n]
+        except (ValueError, json.JSONDecodeError) as e:
+            print(
+                f"PERSONA_GEN_FAIL study={study_id} attempt={attempt_label} "
+                f"model={lisa_model_id} raw_len={len(raw) if raw else 0} err={e}",
+                flush=True,
+            )
+            if attempt == 0:
+                continue
+            raise ValueError(
+                "Auto-persona generation failed due to invalid generator output. "
+                "Please try again or attach personas manually."
+            )
 
 
 def get_monthly_usage(conn, user_id):
@@ -5371,8 +5460,8 @@ def run_study(study_id):
                 )
             except Exception as e:
                 conn.close()
-                print(f"AUTO_PERSONAS_FAILED study={study_id} reason={e}")
-                msg_ap = f"Auto-persona generation failed: {e}. Please attach personas manually or contact admin."
+                print(f"AUTO_PERSONAS_FAILED study={study_id} reason={e}", flush=True)
+                msg_ap = "Auto-persona generation failed due to invalid generator output. Please try again or attach personas manually."
                 if ajax:
                     return jsonify({"ok": False, "error": msg_ap}), 500
                 return render_error(msg_ap)
