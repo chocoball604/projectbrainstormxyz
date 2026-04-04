@@ -193,6 +193,54 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        .inbox-link {
+            position: relative;
+            color: var(--pb-text);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .inbox-link:hover { opacity: 0.7; }
+        .inbox-badge {
+            position: absolute;
+            top: -6px;
+            right: -10px;
+            background: #e74c3c;
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            min-width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 4px;
+            line-height: 1;
+        }
+        .msg-row {
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .msg-row:hover { background: #f8f9fa; }
+        .msg-row.unread { background: #f0f4ff; border-left: 3px solid var(--pb-accent); }
+        .msg-row.unread:hover { background: #e8eeff; }
+        .msg-sender-badge {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .msg-sender-system { background: #e8f4fd; color: #004085; }
+        .msg-sender-admin { background: #fff3cd; color: #856404; }
+        .msg-sender-user { background: #eafaf1; color: #1e8449; }
     </style>
 </head>
 <body>
@@ -210,6 +258,12 @@
                 <button type="submit" class="btn btn-secondary btn-small">Logout</button>
             </form>
         {% elif user %}
+            <a href="/?token={{ token }}&inbox=1" class="inbox-link" title="Messages">
+                &#9993; Messages
+                {% if inbox_unread > 0 %}
+                <span class="inbox-badge" id="inbox-badge-count">{{ inbox_unread }}</span>
+                {% endif %}
+            </a>
             <span>{{ user.email }}</span>
             <a href="/account?token={{ token }}" style="color: var(--pb-text); text-decoration: none; font-size: 11px; font-weight: 500; opacity: 0.8;">Account</a>
             <form action="/logout" method="POST" class="logout-form">
@@ -308,6 +362,106 @@
 
     {% if user and user.state == 'active' %}
     <div class="section visible" id="section-dashboard">
+
+        {% if show_inbox %}
+        <div class="card" id="inbox-section">
+            <div class="card-header">
+                <h2>Messages</h2>
+                <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
+            </div>
+
+            {% if inbox_messages %}
+            <div style="border: 1px solid #eee; border-radius: 6px; overflow: hidden; margin-bottom: 20px;">
+                {% for msg in inbox_messages %}
+                <div class="msg-row {{ 'unread' if not msg.read else '' }}" data-msg-id="{{ msg.id }}" id="msg-{{ msg.id }}">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="msg-sender-badge msg-sender-{{ msg.sender_type }}">{{ msg.sender_type }}</span>
+                            <strong style="font-size: 14px; color: #1a1a2e;">{{ msg.title }}</strong>
+                            {% if not msg.read %}
+                            <span style="font-size: 10px; color: #e74c3c; font-weight: 600;">NEW</span>
+                            {% endif %}
+                        </div>
+                        <span style="font-size: 11px; color: #999;">{{ msg.timestamp }}</span>
+                    </div>
+                    <p style="font-size: 13px; color: #555; margin: 0; line-height: 1.5;">{{ msg.body }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">No messages yet.</div>
+            {% endif %}
+
+            <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin-top: 8px;">
+                <h3 style="font-size: 14px; color: #1a1a2e; margin-bottom: 12px;">Send Feedback / Help Request</h3>
+                <div class="form-group">
+                    <label for="inbox-send-title">Subject</label>
+                    <input type="text" id="inbox-send-title" placeholder="e.g. Feature request or bug report">
+                </div>
+                <div class="form-group">
+                    <label for="inbox-send-body">Message</label>
+                    <textarea id="inbox-send-body" rows="3" placeholder="Describe your question or feedback..."></textarea>
+                </div>
+                <button type="button" class="btn btn-primary" id="inbox-send-btn">Send Message</button>
+                <span id="inbox-send-status" style="font-size: 12px; color: #27ae60; margin-left: 8px; display: none;">Sent!</span>
+            </div>
+        </div>
+        <script>
+        (function() {
+            var token = '{{ token }}';
+
+            document.querySelectorAll('.msg-row.unread').forEach(function(row) {
+                row.addEventListener('click', function() {
+                    var mid = row.getAttribute('data-msg-id');
+                    if (!mid) return;
+                    var fd = new FormData();
+                    fd.append('token', token);
+                    fetch('/api/messages/' + mid + '/read', { method: 'POST', body: fd })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            row.classList.remove('unread');
+                            var newTag = row.querySelector('span[style*="color: #e74c3c"]');
+                            if (newTag) newTag.remove();
+                            var badge = document.getElementById('inbox-badge-count');
+                            if (badge && data.unread > 0) {
+                                badge.textContent = data.unread;
+                            } else if (badge && data.unread <= 0) {
+                                badge.remove();
+                            }
+                        });
+                });
+            });
+
+            var sendBtn = document.getElementById('inbox-send-btn');
+            if (sendBtn) {
+                sendBtn.addEventListener('click', function() {
+                    var title = document.getElementById('inbox-send-title').value.trim();
+                    var body = document.getElementById('inbox-send-body').value.trim();
+                    if (!title || !body) { alert('Please fill in both subject and message.'); return; }
+                    var fd = new FormData();
+                    fd.append('token', token);
+                    fd.append('title', title);
+                    fd.append('body', body);
+                    sendBtn.disabled = true;
+                    fetch('/api/messages/send', { method: 'POST', body: fd })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (data.ok) {
+                                document.getElementById('inbox-send-title').value = '';
+                                document.getElementById('inbox-send-body').value = '';
+                                var st = document.getElementById('inbox-send-status');
+                                st.style.display = 'inline';
+                                setTimeout(function() { st.style.display = 'none'; }, 3000);
+                                setTimeout(function() { window.location.reload(); }, 1500);
+                            }
+                            sendBtn.disabled = false;
+                        })
+                        .catch(function() { sendBtn.disabled = false; });
+                });
+            }
+        })();
+        </script>
+        {% endif %}
 
         {% if not configure_study and not view_study_output %}
         <div style="background: #f0f4ff; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; border: 1px solid #d0d9f5;">
@@ -2824,6 +2978,27 @@
         </div>
         {% endif %}
 
+        {% if inbox_latest_msg and not configure_study and not view_study_output and not show_inbox %}
+        <div class="card" style="padding: 16px 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 16px;">&#9993;</span>
+                    <div>
+                        <div style="font-size: 13px; font-weight: 600; color: #1a1a2e;">
+                            <span class="msg-sender-badge msg-sender-{{ inbox_latest_msg.sender_type }}">{{ inbox_latest_msg.sender_type }}</span>
+                            {{ inbox_latest_msg.title }}
+                            {% if not inbox_latest_msg.read %}
+                            <span style="font-size: 10px; color: #e74c3c; font-weight: 600; margin-left: 4px;">NEW</span>
+                            {% endif %}
+                        </div>
+                        <div style="font-size: 12px; color: #777; margin-top: 2px;">{{ inbox_latest_msg.body[:120] }}{% if inbox_latest_msg.body|length > 120 %}...{% endif %}</div>
+                    </div>
+                </div>
+                <a href="/?token={{ token }}&inbox=1" class="btn btn-secondary btn-small">View All</a>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="card">
             <div class="card-header">
                 <h2>My Personas</h2>
@@ -3130,6 +3305,60 @@
             <p style="color: #777; font-size: 14px;">No users yet.</p>
             {% endif %}
         </div>
+
+        <div class="card">
+            <h2>Send Message to User</h2>
+            <div class="form-group">
+                <label for="admin-msg-uid">User ID</label>
+                <input type="number" id="admin-msg-uid" min="1" placeholder="e.g. 1">
+            </div>
+            <div class="form-group">
+                <label for="admin-msg-title">Subject</label>
+                <input type="text" id="admin-msg-title" placeholder="e.g. Welcome to Brainstorm">
+            </div>
+            <div class="form-group">
+                <label for="admin-msg-body">Message</label>
+                <textarea id="admin-msg-body" rows="3" placeholder="Your message to the user..."></textarea>
+            </div>
+            <button type="button" class="btn btn-primary" id="admin-msg-send-btn">Send</button>
+            <span id="admin-msg-status" style="font-size: 12px; margin-left: 8px; display: none;"></span>
+        </div>
+        <script>
+        (function() {
+            var btn = document.getElementById('admin-msg-send-btn');
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                var uid = document.getElementById('admin-msg-uid').value.trim();
+                var title = document.getElementById('admin-msg-title').value.trim();
+                var body = document.getElementById('admin-msg-body').value.trim();
+                if (!uid || !title || !body) { alert('All fields required.'); return; }
+                var fd = new FormData();
+                fd.append('token', '{{ token }}');
+                fd.append('recipient_user_id', uid);
+                fd.append('title', title);
+                fd.append('body', body);
+                btn.disabled = true;
+                fetch('/api/admin/messages/send', { method: 'POST', body: fd })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        var st = document.getElementById('admin-msg-status');
+                        if (data.ok) {
+                            st.style.color = '#27ae60';
+                            st.textContent = 'Sent!';
+                            document.getElementById('admin-msg-title').value = '';
+                            document.getElementById('admin-msg-body').value = '';
+                        } else {
+                            st.style.color = '#e74c3c';
+                            st.textContent = data.error || 'Error';
+                        }
+                        st.style.display = 'inline';
+                        setTimeout(function() { st.style.display = 'none'; }, 3000);
+                        btn.disabled = false;
+                    })
+                    .catch(function() { btn.disabled = false; });
+            });
+        })();
+        </script>
     </div>
     {% endif %}
 

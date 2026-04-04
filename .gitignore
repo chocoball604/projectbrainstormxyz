@@ -51,3 +51,6 @@ Thumbs.db
 # SQLite database
 *.db
 *.pdf
+
+# Message store (user data)
+artifacts/brainstorm/data/messages.json
