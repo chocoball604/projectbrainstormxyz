@@ -447,6 +447,10 @@
             <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
         </div>
 
+        <div id="mode-indicator" style="background: #f0f4ff; border: 1px solid #d0d9f5; border-radius: 8px; padding: 10px 20px; margin-bottom: 16px; text-align: center;">
+            <span style="font-size: 14px; font-weight: 700; color: #1a1a2e; letter-spacing: 1.5px;">&#128736; STUDY SETUP</span>
+        </div>
+
         {% set sq_list_panel = configure_study.survey_questions_list or [] %}
         {% set sq_saved_panel = sq_list_panel|reject("none")|list|length %}
         {% set q_count_panel = configure_study.question_count or 0 %}
@@ -475,7 +479,168 @@
 
         <div style="display: flex; gap: 20px; align-items: flex-start;">
 
-        <div class="card" id="configure-study-section" style="flex: 1; min-width: 0;">
+        <div id="mark-chat-tile" style="width: 340px; flex-shrink: 0; position: sticky; top: 80px;">
+            <div class="card" style="padding: 16px;">
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px; border-bottom: 2px solid #5C7E8F; padding-bottom: 8px;">Mark &mdash; Research Guide</h3>
+                <p style="font-size: 12px; color: #888; margin: 0 0 12px;">Mark can help you decide what to fill in next.</p>
+
+                <div id="chat-thread" style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; max-height: 400px; overflow-y: auto; margin-bottom: 12px;">
+                    {% if chat_messages %}
+                        {% for msg in chat_messages %}
+                        <div style="margin-bottom: 12px; display: flex; flex-direction: column; align-items: {{ 'flex-end' if msg.sender == 'user' else 'flex-start' }};">
+                            <div style="
+                                max-width: 80%;
+                                padding: 10px 14px;
+                                border-radius: 12px;
+                                font-size: 14px;
+                                line-height: 1.5;
+                                {% if msg.sender == 'user' %}
+                                background: #5C7E8F; color: #fff; border-bottom-right-radius: 4px;
+                                {% else %}
+                                background: #e8e8e8; color: #1a1a2e; border-bottom-left-radius: 4px;
+                                {% endif %}
+                            ">
+                                {{ msg.message_text }}
+                            </div>
+                            <div style="font-size: 11px; color: #999; margin-top: 2px; padding: 0 4px;">
+                                {{ msg.sender|capitalize }} &middot; {{ msg.timestamp_utc }}
+                            </div>
+                            {% if loop.last and msg.sender == 'mark' and chat_save_buttons %}
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
+                                {% for field_key, btn_label in chat_save_buttons %}
+                                <form action="/save-chat-field/{{ configure_study.id }}" method="POST" style="display: inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <input type="hidden" name="field" value="{{ field_key }}">
+                                    <button type="submit" style="
+                                        padding: 5px 12px;
+                                        font-size: 12px;
+                                        border: 1px solid #5C7E8F;
+                                        background: #fff;
+                                        color: #5C7E8F;
+                                        border-radius: 16px;
+                                        cursor: pointer;
+                                        white-space: nowrap;
+                                    ">{{ btn_label }}</button>
+                                </form>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p style="color: #999; font-size: 13px; text-align: center; margin: 20px 0;">No messages yet. Start chatting with Mark about your study.</p>
+                    {% endif %}
+                </div>
+
+                <form id="chat-form" style="display: flex; gap: 8px;">
+                    <input type="text" id="chat-input" name="message_text" required placeholder="Type your message to Mark..." style="flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    <button type="submit" class="btn btn-primary" id="chat-send-btn" style="white-space: nowrap;">Send</button>
+                </form>
+
+                <script>
+                (function() {
+                    var studyId = {{ configure_study.id }};
+                    var token = '{{ token }}';
+                    var chatThread = document.getElementById('chat-thread');
+                    var chatForm = document.getElementById('chat-form');
+                    var chatInput = document.getElementById('chat-input');
+                    var sendBtn = document.getElementById('chat-send-btn');
+                    var polling = false;
+
+                    function makeBubble(sender, text) {
+                        var wrap = document.createElement('div');
+                        wrap.style.cssText = 'margin-bottom:12px;display:flex;flex-direction:column;align-items:' + (sender === 'user' ? 'flex-end' : 'flex-start') + ';';
+                        var bubble = document.createElement('div');
+                        bubble.style.cssText = 'max-width:80%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.5;' +
+                            (sender === 'user'
+                                ? 'background:#5C7E8F;color:#fff;border-bottom-right-radius:4px;'
+                                : 'background:#e8e8e8;color:#1a1a2e;border-bottom-left-radius:4px;');
+                        bubble.textContent = text;
+                        wrap.appendChild(bubble);
+                        var ts = document.createElement('div');
+                        ts.style.cssText = 'font-size:11px;color:#999;margin-top:2px;padding:0 4px;';
+                        ts.textContent = sender.charAt(0).toUpperCase() + sender.slice(1) + ' \u00b7 now';
+                        wrap.appendChild(ts);
+                        return wrap;
+                    }
+
+                    function renderMessages(messages) {
+                        var emptyMsg = chatThread.querySelector('p');
+                        if (emptyMsg) emptyMsg.remove();
+
+                        chatThread.innerHTML = '';
+                        for (var i = 0; i < messages.length; i++) {
+                            var m = messages[i];
+                            if (m.text === '\u23f3 Mark is thinking...') continue;
+                            chatThread.appendChild(makeBubble(m.sender, m.text));
+                        }
+                        chatThread.scrollTop = chatThread.scrollHeight;
+                    }
+
+                    function startPolling() {
+                        if (polling) return;
+                        polling = true;
+                        var pollCount = 0;
+                        var iv = setInterval(function() {
+                            pollCount++;
+                            if (pollCount > 40) { clearInterval(iv); polling = false; return; }
+                            fetch('/chat-status/' + studyId + '?token=' + encodeURIComponent(token))
+                                .then(function(r) { return r.json(); })
+                                .then(function(data) {
+                                    if (data.ready && data.messages) {
+                                        clearInterval(iv);
+                                        polling = false;
+                                        renderMessages(data.messages);
+                                        sendBtn.disabled = false;
+                                        sendBtn.textContent = 'Send';
+                                    }
+                                })
+                                .catch(function() {});
+                        }, 3000);
+                    }
+
+                    chatForm.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        var msg = chatInput.value.trim();
+                        if (!msg) return;
+
+                        var emptyMsg = chatThread.querySelector('p');
+                        if (emptyMsg) emptyMsg.remove();
+
+                        chatThread.appendChild(makeBubble('user', msg));
+                        chatThread.scrollTop = chatThread.scrollHeight;
+                        chatInput.value = '';
+                        sendBtn.disabled = true;
+                        sendBtn.textContent = 'Sending...';
+
+                        var formData = new FormData();
+                        formData.append('token', token);
+                        formData.append('message_text', msg);
+
+                        fetch('/send-chat/' + studyId, { method: 'POST', body: formData, redirect: 'manual' })
+                            .then(function() {
+                                sendBtn.textContent = 'Waiting...';
+                                startPolling();
+                            })
+                            .catch(function() {
+                                sendBtn.disabled = false;
+                                sendBtn.textContent = 'Send';
+                            });
+                    });
+
+                    var hasThinking = chatThread.textContent.indexOf('Mark is thinking') !== -1;
+                    if (hasThinking) {
+                        sendBtn.disabled = true;
+                        sendBtn.textContent = 'Waiting...';
+                        startPolling();
+                    }
+                })();
+                </script>
+            </div>
+        </div>
+
+        <div id="study-builder-right" style="flex: 1; min-width: 0;">
+        <div class="card" id="configure-study-section">
 
             <div class="info-msg" style="margin-bottom: 16px;">
                 Type: <strong>{{ configure_study.study_type or 'Not set' }}</strong>
@@ -1184,164 +1349,10 @@
             {% endif %}
             </div>
 
-            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Chat with Mark</h3>
 
-            <div id="chat-thread" style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; max-height: 400px; overflow-y: auto; margin-bottom: 12px;">
-                {% if chat_messages %}
-                    {% for msg in chat_messages %}
-                    <div style="margin-bottom: 12px; display: flex; flex-direction: column; align-items: {{ 'flex-end' if msg.sender == 'user' else 'flex-start' }};">
-                        <div style="
-                            max-width: 80%;
-                            padding: 10px 14px;
-                            border-radius: 12px;
-                            font-size: 14px;
-                            line-height: 1.5;
-                            {% if msg.sender == 'user' %}
-                            background: #5C7E8F; color: #fff; border-bottom-right-radius: 4px;
-                            {% else %}
-                            background: #e8e8e8; color: #1a1a2e; border-bottom-left-radius: 4px;
-                            {% endif %}
-                        ">
-                            {{ msg.message_text }}
-                        </div>
-                        <div style="font-size: 11px; color: #999; margin-top: 2px; padding: 0 4px;">
-                            {{ msg.sender|capitalize }} &middot; {{ msg.timestamp_utc }}
-                        </div>
-                        {% if loop.last and msg.sender == 'mark' and chat_save_buttons %}
-                        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
-                            {% for field_key, btn_label in chat_save_buttons %}
-                            <form action="/save-chat-field/{{ configure_study.id }}" method="POST" style="display: inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <input type="hidden" name="field" value="{{ field_key }}">
-                                <button type="submit" style="
-                                    padding: 5px 12px;
-                                    font-size: 12px;
-                                    border: 1px solid #5C7E8F;
-                                    background: #fff;
-                                    color: #5C7E8F;
-                                    border-radius: 16px;
-                                    cursor: pointer;
-                                    white-space: nowrap;
-                                ">{{ btn_label }}</button>
-                            </form>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <p style="color: #999; font-size: 13px; text-align: center; margin: 20px 0;">No messages yet. Start chatting with Mark about your study.</p>
-                {% endif %}
-            </div>
-
-            <form id="chat-form" style="display: flex; gap: 8px;">
-                <input type="text" id="chat-input" name="message_text" required placeholder="Type your message to Mark..." style="flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
-                <button type="submit" class="btn btn-primary" id="chat-send-btn" style="white-space: nowrap;">Send</button>
-            </form>
-
-            <script>
-            (function() {
-                var studyId = {{ configure_study.id }};
-                var token = '{{ token }}';
-                var chatThread = document.getElementById('chat-thread');
-                var chatForm = document.getElementById('chat-form');
-                var chatInput = document.getElementById('chat-input');
-                var sendBtn = document.getElementById('chat-send-btn');
-                var polling = false;
-
-                function makeBubble(sender, text) {
-                    var wrap = document.createElement('div');
-                    wrap.style.cssText = 'margin-bottom:12px;display:flex;flex-direction:column;align-items:' + (sender === 'user' ? 'flex-end' : 'flex-start') + ';';
-                    var bubble = document.createElement('div');
-                    bubble.style.cssText = 'max-width:80%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.5;' +
-                        (sender === 'user'
-                            ? 'background:#5C7E8F;color:#fff;border-bottom-right-radius:4px;'
-                            : 'background:#e8e8e8;color:#1a1a2e;border-bottom-left-radius:4px;');
-                    bubble.textContent = text;
-                    wrap.appendChild(bubble);
-                    var ts = document.createElement('div');
-                    ts.style.cssText = 'font-size:11px;color:#999;margin-top:2px;padding:0 4px;';
-                    ts.textContent = sender.charAt(0).toUpperCase() + sender.slice(1) + ' \u00b7 now';
-                    wrap.appendChild(ts);
-                    return wrap;
-                }
-
-                function renderMessages(messages) {
-                    var emptyMsg = chatThread.querySelector('p');
-                    if (emptyMsg) emptyMsg.remove();
-
-                    chatThread.innerHTML = '';
-                    for (var i = 0; i < messages.length; i++) {
-                        var m = messages[i];
-                        if (m.text === '\u23f3 Mark is thinking...') continue;
-                        chatThread.appendChild(makeBubble(m.sender, m.text));
-                    }
-                    chatThread.scrollTop = chatThread.scrollHeight;
-                }
-
-                function startPolling() {
-                    if (polling) return;
-                    polling = true;
-                    var pollCount = 0;
-                    var iv = setInterval(function() {
-                        pollCount++;
-                        if (pollCount > 40) { clearInterval(iv); polling = false; return; }
-                        fetch('/chat-status/' + studyId + '?token=' + encodeURIComponent(token))
-                            .then(function(r) { return r.json(); })
-                            .then(function(data) {
-                                if (data.ready && data.messages) {
-                                    clearInterval(iv);
-                                    polling = false;
-                                    renderMessages(data.messages);
-                                    sendBtn.disabled = false;
-                                    sendBtn.textContent = 'Send';
-                                }
-                            })
-                            .catch(function() {});
-                    }, 3000);
-                }
-
-                chatForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    var msg = chatInput.value.trim();
-                    if (!msg) return;
-
-                    var emptyMsg = chatThread.querySelector('p');
-                    if (emptyMsg) emptyMsg.remove();
-
-                    chatThread.appendChild(makeBubble('user', msg));
-                    chatThread.scrollTop = chatThread.scrollHeight;
-                    chatInput.value = '';
-                    sendBtn.disabled = true;
-                    sendBtn.textContent = 'Sending...';
-
-                    var formData = new FormData();
-                    formData.append('token', token);
-                    formData.append('message_text', msg);
-
-                    fetch('/send-chat/' + studyId, { method: 'POST', body: formData, redirect: 'manual' })
-                        .then(function() {
-                            sendBtn.textContent = 'Waiting...';
-                            startPolling();
-                        })
-                        .catch(function() {
-                            sendBtn.disabled = false;
-                            sendBtn.textContent = 'Send';
-                        });
-                });
-
-                var hasThinking = chatThread.textContent.indexOf('Mark is thinking') !== -1;
-                if (hasThinking) {
-                    sendBtn.disabled = true;
-                    sendBtn.textContent = 'Waiting...';
-                    startPolling();
-                }
-            })();
-            </script>
         </div>
 
-        <div id="side-panel-brief" style="width: 300px; flex-shrink: 0; position: sticky; top: 20px;">
+        <div id="side-panel-brief" style="flex-shrink: 0;">
             <div class="card" style="padding: 16px;">
                 <h3 style="font-size: 15px; color: #1a1a2e; margin: 0 0 12px; border-bottom: 2px solid #5C7E8F; padding-bottom: 8px;">Brief So Far</h3>
 
@@ -1443,6 +1454,7 @@
                 {% endif %}
                 </div>
             </div>
+        </div>
         </div>
 
         <script>
@@ -2350,6 +2362,9 @@
         {% endif %}
 
         {% if view_study_output %}
+        <div id="mode-indicator-results" style="background: #2c3e50; border: 1px solid #1a252f; border-radius: 8px; padding: 10px 20px; margin-bottom: 16px; text-align: center;">
+            <span style="font-size: 14px; font-weight: 700; color: #ecf0f1; letter-spacing: 1.5px;">&#128202; STUDY RESULTS</span>
+        </div>
         <div class="card" id="view-output-section">
             <div class="card-header">
                 <h2>Study Output: {{ view_study_output.title }}</h2>
