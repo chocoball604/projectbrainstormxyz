@@ -3206,10 +3206,10 @@
                     <span>{{ dm_total }} messages — Page {{ dm_page }} of {{ dm_total_pages }}</span>
                     <div style="display:flex;gap:6px;">
                         {% if dm_page > 1 %}
-                        <a href="/?token={{ token }}&dm_page={{ dm_page - 1 }}#acc-messages" class="btn btn-secondary btn-small" onclick="setTimeout(function(){toggleAdminAcc('acc-messages-body')},100)">Prev</a>
+                        <a href="/?token={{ token }}&dm_page={{ dm_page - 1 }}#acc-messages" class="btn btn-secondary btn-small" data-ajax-page="1">Prev</a>
                         {% endif %}
                         {% if dm_page < dm_total_pages %}
-                        <a href="/?token={{ token }}&dm_page={{ dm_page + 1 }}#acc-messages" class="btn btn-secondary btn-small" onclick="setTimeout(function(){toggleAdminAcc('acc-messages-body')},100)">Next</a>
+                        <a href="/?token={{ token }}&dm_page={{ dm_page + 1 }}#acc-messages" class="btn btn-secondary btn-small" data-ajax-page="1">Next</a>
                         {% endif %}
                     </div>
                 </div>
@@ -3429,7 +3429,7 @@
                                 </form>
                                 <form action="/admin/delete-upload/{{ au.id }}" method="POST" style="display: inline;">
                                     <input type="hidden" name="token" value="{{ token }}">
-                                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Delete this upload?');">Delete</button>
+                                    <button type="submit" class="btn btn-danger btn-small" data-confirm="Delete this upload?">Delete</button>
                                 </form>
                             </td>
                         </tr>
@@ -3492,9 +3492,27 @@
                         </div>
                     </div>
                     <p style="font-size: 12px; color: #999; margin-bottom: 8px;">
-                        Current: Mark = <code>{{ model_config.get('mark_model', 'not set') }}</code> |
-                        Lisa = <code>{{ model_config.get('lisa_model', 'not set') }}</code> |
+                        Current: Mark = <code>{{ model_config.get('mark_model', 'not set') }}</code>
+                        {% set mark_s = health_map.get(model_config.get('mark_model',''), '') %}
+                        {% if mark_s == 'pass' %}<span class="badge badge-active" style="font-size:10px;padding:1px 5px;vertical-align:middle;">PASS</span>
+                        {% elif mark_s == 'fail' %}<span class="badge badge-disabled" style="font-size:10px;padding:1px 5px;vertical-align:middle;">FAIL</span>
+                        {% elif mark_s == 'not_connected' %}<span class="badge" style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">NOT CONNECTED</span>
+                        {% elif mark_s %}<span class="badge" style="background:#6b7280;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">UNKNOWN</span>
+                        {% endif %} |
+                        Lisa = <code>{{ model_config.get('lisa_model', 'not set') }}</code>
+                        {% set lisa_s = health_map.get(model_config.get('lisa_model',''), '') %}
+                        {% if lisa_s == 'pass' %}<span class="badge badge-active" style="font-size:10px;padding:1px 5px;vertical-align:middle;">PASS</span>
+                        {% elif lisa_s == 'fail' %}<span class="badge badge-disabled" style="font-size:10px;padding:1px 5px;vertical-align:middle;">FAIL</span>
+                        {% elif lisa_s == 'not_connected' %}<span class="badge" style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">NOT CONNECTED</span>
+                        {% elif lisa_s %}<span class="badge" style="background:#6b7280;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">UNKNOWN</span>
+                        {% endif %} |
                         Ben = <code>{{ model_config.get('ben_model', 'not set') }}</code>
+                        {% set ben_s = health_map.get(model_config.get('ben_model',''), '') %}
+                        {% if ben_s == 'pass' %}<span class="badge badge-active" style="font-size:10px;padding:1px 5px;vertical-align:middle;">PASS</span>
+                        {% elif ben_s == 'fail' %}<span class="badge badge-disabled" style="font-size:10px;padding:1px 5px;vertical-align:middle;">FAIL</span>
+                        {% elif ben_s == 'not_connected' %}<span class="badge" style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">NOT CONNECTED</span>
+                        {% elif ben_s %}<span class="badge" style="background:#6b7280;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">UNKNOWN</span>
+                        {% endif %}
                     </p>
                     <button type="submit" class="btn btn-success">Save Model Configuration</button>
                 </form>
@@ -3722,7 +3740,7 @@
                                 </form>
                                 <form action="/admin/delete-allowed-model/{{ am.id }}" method="POST" style="display: inline;">
                                     <input type="hidden" name="token" value="{{ token }}">
-                                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Remove this model?');">Remove</button>
+                                    <button type="submit" class="btn btn-danger btn-small" data-confirm="Remove this model?">Remove</button>
                                 </form>
                             </td>
                         </tr>
@@ -3945,7 +3963,7 @@
                                     <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px;">Pin</button>
                                     {% endif %}
                                 </form>
-                                <form action="/admin/delete-blog-post/{{ bp.id }}" method="POST" style="display:inline; margin-left: 6px;" onsubmit="return confirm('Are you sure? This will permanently delete the post.');">
+                                <form action="/admin/delete-blog-post/{{ bp.id }}" method="POST" style="display:inline; margin-left: 6px;" data-confirm="Are you sure? This will permanently delete the post.">
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px; background: #c0392b; color: #fff;">Delete</button>
                                 </form>
@@ -4008,6 +4026,8 @@
 </div>
 
 <script>
+    var _adminToken = '{{ token }}';
+
     function toggleAdminAcc(bodyId) {
         var body = document.getElementById(bodyId);
         var arrow = document.getElementById(bodyId + '-arrow');
@@ -4051,10 +4071,97 @@
         });
     }
 
-    (function() {
-        var rows = document.querySelectorAll('.dm-msg-row');
-        rows.forEach(function(row) {
-            row.addEventListener('click', function() {
+    function _refreshAccSection(accBodyId) {
+        fetch('/?token=' + encodeURIComponent(_adminToken))
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+            var parser = new DOMParser();
+            var doc = parser.parseFromString(html, 'text/html');
+            var fresh = doc.getElementById(accBodyId);
+            var current = document.getElementById(accBodyId);
+            if (fresh && current) {
+                current.innerHTML = fresh.innerHTML;
+                current.style.display = 'block';
+                var arrow = document.getElementById(accBodyId + '-arrow');
+                if (arrow) arrow.classList.add('open');
+                _bindAccForms(current);
+                _bindDmRows(current);
+                _bindAccLinks(current);
+            }
+        });
+    }
+
+    function _bindAccForms(scope) {
+        (scope || document).querySelectorAll('.admin-acc-body form').forEach(function(form) {
+            if (form.dataset.ajaxBound) return;
+            form.dataset.ajaxBound = '1';
+            form.addEventListener('submit', _handleAccSubmit);
+        });
+    }
+
+    function _handleAccSubmit(e) {
+        var form = e.target.closest('form');
+        if (!form) return;
+        var confirmMsg = form.dataset.confirm;
+        if (!confirmMsg) {
+            var btn = e.submitter || form.querySelector('button[type="submit"]');
+            if (btn) confirmMsg = btn.dataset.confirm;
+        }
+        if (confirmMsg && !confirm(confirmMsg)) { e.preventDefault(); return; }
+        e.preventDefault();
+        var accBody = form.closest('.admin-acc-body');
+        var accBodyId = accBody ? accBody.id : null;
+        var btn = form.querySelector('button[type="submit"]');
+        var origHTML = btn ? btn.innerHTML : '';
+        if (btn) { btn.innerHTML = '&#8987;'; btn.disabled = true; }
+        var fd = new FormData(form);
+        fetch(form.action, { method: form.method || 'POST', body: fd, redirect: 'follow' })
+        .then(function(resp) {
+            if (!resp.ok) return resp.text().then(function(t) { alert(t.replace(/<[^>]*>/g, '').substring(0, 200)); });
+            if (accBodyId) _refreshAccSection(accBodyId);
+        })
+        .catch(function() {
+            if (btn) { btn.innerHTML = origHTML; btn.disabled = false; }
+        });
+    }
+
+    function _bindAccLinks(scope) {
+        (scope || document).querySelectorAll('.admin-acc-body a[data-ajax-page]').forEach(function(a) {
+            if (a.dataset.ajaxLinkBound) return;
+            a.dataset.ajaxLinkBound = '1';
+            a.addEventListener('click', function(e) {
+                e.preventDefault();
+                var accBody = a.closest('.admin-acc-body');
+                var accBodyId = accBody ? accBody.id : null;
+                var url = a.href;
+                fetch(url, { redirect: 'follow' })
+                .then(function(r) { return r.text(); })
+                .then(function(html) {
+                    if (!accBodyId) return;
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(html, 'text/html');
+                    var fresh = doc.getElementById(accBodyId);
+                    var current = document.getElementById(accBodyId);
+                    if (fresh && current) {
+                        current.innerHTML = fresh.innerHTML;
+                        current.style.display = 'block';
+                        var arrow = document.getElementById(accBodyId + '-arrow');
+                        if (arrow) arrow.classList.add('open');
+                        _bindAccForms(current);
+                        _bindDmRows(current);
+                        _bindAccLinks(current);
+                    }
+                });
+            });
+        });
+    }
+
+    function _bindDmRows(scope) {
+        (scope || document).querySelectorAll('.dm-msg-row').forEach(function(row) {
+            if (row.dataset.clickBound) return;
+            row.dataset.clickBound = '1';
+            row.addEventListener('click', function(e) {
+                if (e.target.closest('button') || e.target.closest('form')) return;
                 var bodyRow = row.nextElementSibling;
                 if (bodyRow && bodyRow.classList.contains('dm-msg-body')) {
                     bodyRow.style.display = bodyRow.style.display === 'none' ? 'table-row' : 'none';
@@ -4062,7 +4169,7 @@
                         var msgId = row.dataset.msgId;
                         var fd = new FormData();
                         fd.append('msg_id', msgId);
-                        fd.append('token', '{{ token }}');
+                        fd.append('token', _adminToken);
                         fetch('/mark-message-read', {
                             method: 'POST',
                             headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -4077,6 +4184,12 @@
                 }
             });
         });
+    }
+
+    (function() {
+        _bindAccForms();
+        _bindDmRows();
+        _bindAccLinks();
 
         var composeForm = document.getElementById('dm-compose-form');
         if (composeForm) {

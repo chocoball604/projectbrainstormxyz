@@ -2167,6 +2167,7 @@ def index():
         allowed_models_list=allowed_models_list,
         persona_pool_list=persona_pool_list,
         health_status_list=health_status_list,
+        health_map={hs['model_id']: hs['status'] for hs in health_status_list},
         latest_weekly_report=latest_weekly_report,
         latest_health_check=latest_health_check,
         mark_recommendation=mark_recommendation,

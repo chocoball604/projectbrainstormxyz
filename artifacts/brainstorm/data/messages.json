@@ -39,7 +39,7 @@
     "subject": "Test cat",
     "body": "Testing category field",
     "category": "Help",
-    "read": false,
+    "read": true,
     "sender_type": "user",
     "sender_id": 6,
     "sender_name": "benji123",
