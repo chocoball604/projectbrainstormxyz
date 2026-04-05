@@ -97,6 +97,62 @@ def enforce_email_verification():
 DB_PATH = os.path.join(os.path.dirname(__file__), "brainstorm.db")
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+
+DM_FILE = os.path.join(os.path.dirname(__file__), "data", "messages.json")
+DM_PAGE_SIZE = 5
+
+
+def _load_dm_messages():
+    try:
+        with open(DM_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def _save_dm_messages(msgs):
+    os.makedirs(os.path.dirname(DM_FILE), exist_ok=True)
+    with open(DM_FILE, "w") as f:
+        json.dump(msgs, f, indent=2)
+
+
+def _dm_unread_count(user_id=None, is_admin=False):
+    msgs = _load_dm_messages()
+    if is_admin:
+        return sum(1 for m in msgs if m.get("recipient_type") == "admin" and not m.get("read"))
+    if user_id:
+        return sum(1 for m in msgs if m.get("recipient_user_id") == user_id and m.get("recipient_type") == "user" and not m.get("read"))
+    return 0
+
+
+def _dm_inbox(user_id=None, is_admin=False, page=1):
+    msgs = _load_dm_messages()
+    if is_admin:
+        filtered = [m for m in msgs if m.get("recipient_type") == "admin"]
+    elif user_id:
+        filtered = [m for m in msgs if m.get("recipient_user_id") == user_id and m.get("recipient_type") == "user"]
+    else:
+        filtered = []
+    filtered.sort(key=lambda m: m.get("timestamp", ""), reverse=True)
+    total = len(filtered)
+    total_pages = max(1, (total + DM_PAGE_SIZE - 1) // DM_PAGE_SIZE)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * DM_PAGE_SIZE
+    return filtered[start:start + DM_PAGE_SIZE], page, total_pages, total
+
+
+def _dm_latest_preview(user_id=None, is_admin=False):
+    msgs = _load_dm_messages()
+    if is_admin:
+        filtered = [m for m in msgs if m.get("recipient_type") == "admin"]
+    elif user_id:
+        filtered = [m for m in msgs if m.get("recipient_user_id") == user_id and m.get("recipient_type") == "user"]
+    else:
+        return None
+    filtered.sort(key=lambda m: m.get("timestamp", ""), reverse=True)
+    return filtered[0] if filtered else None
+
 
 VALID_STUDY_STATUSES = [
     "draft",
@@ -1620,6 +1676,14 @@ def index():
     user_storage_used = 0
     user_storage_cap_mb = UPLOAD_USER_STORAGE_CAP // (1024 * 1024)
 
+    dm_view = request.args.get("view") or ""
+    dm_messages_list = []
+    dm_page = 1
+    dm_total_pages = 1
+    dm_total = 0
+    dm_unread_count = 0
+    dm_latest_preview = None
+
     if is_admin:
         conn = get_db()
         pending_users = [
@@ -1675,6 +1739,12 @@ def index():
         ]
         conn.close()
 
+        dm_unread_count = _dm_unread_count(is_admin=True)
+        dm_latest_preview = _dm_latest_preview(is_admin=True)
+        if dm_view == "admin_messages":
+            _dm_pg = int(request.args.get("dm_page") or 1)
+            dm_messages_list, dm_page, dm_total_pages, dm_total = _dm_inbox(is_admin=True, page=_dm_pg)
+
         today_str = datetime.utcnow().strftime("%Y-%m-%d")
         conn2 = get_db()
         today_check = conn2.execute(
@@ -1728,6 +1798,12 @@ def index():
     usage_window_end = ""
 
     if user and user["state"] == "active":
+        dm_unread_count = _dm_unread_count(user_id=user["id"])
+        dm_latest_preview = _dm_latest_preview(user_id=user["id"])
+        if dm_view == "messages":
+            _dm_pg = int(request.args.get("dm_page") or 1)
+            dm_messages_list, dm_page, dm_total_pages, dm_total = _dm_inbox(user_id=user["id"], page=_dm_pg)
+
         conn = get_db()
 
         usage_count, usage_limit, usage_window_start, usage_window_end = (
@@ -2130,6 +2206,14 @@ def index():
         user_storage_cap_mb=user_storage_cap_mb,
         user_storage_cap=UPLOAD_USER_STORAGE_CAP,
         latest_blog_posts=get_latest_blog_posts(2),
+        dm_view=dm_view,
+        dm_messages_list=dm_messages_list,
+        dm_page=dm_page,
+        dm_total_pages=dm_total_pages,
+        dm_total=dm_total,
+        dm_unread_count=dm_unread_count,
+        dm_latest_preview=dm_latest_preview,
+        admin_email=ADMIN_EMAIL,
     )
 
 
@@ -2617,6 +2701,142 @@ def admin_disable(user_id):
     conn.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/send-message", methods=["POST"])
+def send_message():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    ajax = _is_ajax(request)
+
+    subject = (request.form.get("subject") or "").strip()
+    body = (request.form.get("body") or "").strip()
+
+    if not subject or len(subject) > 20:
+        err = "Subject is required (max 20 characters)."
+        if ajax:
+            return jsonify({"ok": False, "error": err}), 400
+        return render_error(err)
+    if not body or len(body) > 100:
+        err = "Body is required (max 100 characters)."
+        if ajax:
+            return jsonify({"ok": False, "error": err}), 400
+        return render_error(err)
+
+    msgs = _load_dm_messages()
+    new_msg = {
+        "id": secrets.token_hex(8),
+        "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "subject": subject,
+        "body": body,
+        "read": False,
+    }
+
+    if is_admin:
+        recipient_user_id = request.form.get("recipient_user_id")
+        if not recipient_user_id:
+            err = "Recipient user is required."
+            if ajax:
+                return jsonify({"ok": False, "error": err}), 400
+            return render_error(err)
+        new_msg["sender_type"] = "admin"
+        new_msg["sender_id"] = None
+        new_msg["recipient_type"] = "user"
+        new_msg["recipient_user_id"] = int(recipient_user_id)
+    elif user and user["state"] == "active":
+        new_msg["sender_type"] = "user"
+        new_msg["sender_id"] = user["id"]
+        new_msg["sender_name"] = user.get("username") or user.get("email") or f"User #{user['id']}"
+        new_msg["recipient_type"] = "admin"
+        new_msg["recipient_user_id"] = None
+    else:
+        err = "You must be logged in to send messages."
+        if ajax:
+            return jsonify({"ok": False, "error": err}), 403
+        return render_error(err)
+
+    msgs.append(new_msg)
+    _save_dm_messages(msgs)
+
+    if ajax:
+        return jsonify({"ok": True, "message": "Message sent.", "msg": new_msg})
+
+    if is_admin:
+        return redirect(url_for("index", token=token, view="admin_messages"))
+    return redirect(url_for("index", token=token, view="messages"))
+
+
+@app.route("/mark-message-read", methods=["POST"])
+def mark_message_read():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    ajax = _is_ajax(request)
+
+    msg_id = request.form.get("msg_id") or ""
+    if not msg_id:
+        if ajax:
+            return jsonify({"ok": False, "error": "Missing message ID."}), 400
+        return render_error("Missing message ID.")
+
+    msgs = _load_dm_messages()
+    found = False
+    for m in msgs:
+        if m.get("id") == msg_id:
+            if is_admin and m.get("recipient_type") == "admin":
+                m["read"] = True
+                found = True
+            elif user and m.get("recipient_user_id") == user["id"] and m.get("recipient_type") == "user":
+                m["read"] = True
+                found = True
+            break
+
+    if found:
+        _save_dm_messages(msgs)
+
+    if ajax:
+        return jsonify({"ok": True})
+
+    if is_admin:
+        return redirect(url_for("index", token=token, view="admin_messages"))
+    return redirect(url_for("index", token=token, view="messages"))
+
+
+@app.route("/admin/change-password", methods=["POST"])
+def admin_change_password():
+    global ADMIN_PASSWORD
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    current_pw = (request.form.get("current_password") or "").strip()
+    new_pw = (request.form.get("new_password") or "").strip()
+    confirm_pw = (request.form.get("confirm_password") or "").strip()
+
+    if current_pw != ADMIN_PASSWORD:
+        return render_error("Current password is incorrect.")
+    if not new_pw or len(new_pw) < 6:
+        return render_error("New password must be at least 6 characters.")
+    if new_pw != confirm_pw:
+        return render_error("New passwords do not match.")
+
+    ADMIN_PASSWORD = new_pw
+    os.environ["ADMIN_PASSWORD"] = new_pw
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/set-email", methods=["POST"])
+def admin_set_email():
+    global ADMIN_EMAIL
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    email = (request.form.get("admin_email") or "").strip()
+    ADMIN_EMAIL = email
+    os.environ["ADMIN_EMAIL"] = email
     return redirect(url_for("index", token=token))
 
 

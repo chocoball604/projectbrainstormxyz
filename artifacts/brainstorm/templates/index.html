@@ -204,6 +204,13 @@
     </a>
     <div class="header-right">
         {% if is_admin %}
+            <a href="/?token={{ token }}&view=admin_messages" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500; position: relative;">
+                &#9993; Messages
+                {% if dm_unread_count > 0 %}
+                <span style="position:absolute;top:-6px;right:-12px;background:#dc3545;color:#fff;font-size:10px;font-weight:700;border-radius:50%;min-width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px;">{{ dm_unread_count }}</span>
+                {% endif %}
+            </a>
+            <span style="color: var(--pb-text); font-size: 13px; opacity: 0.5;">|</span>
             <span>Admin Panel</span>
             <form action="/logout" method="POST" class="logout-form">
                 <input type="hidden" name="token" value="{{ token }}">
@@ -212,7 +219,12 @@
         {% elif user %}
             <a href="/blog" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500;">Blog / News</a>
             <span style="color: var(--pb-text); font-size: 13px; opacity: 0.5;">|</span>
-            <a href="/?token={{ token }}&view=messages" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500;">Messages</a>
+            <a href="/?token={{ token }}&view=messages" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500; position: relative;">
+                &#9993; Messages
+                {% if dm_unread_count > 0 %}
+                <span style="position:absolute;top:-6px;right:-12px;background:#dc3545;color:#fff;font-size:10px;font-weight:700;border-radius:50%;min-width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px;">{{ dm_unread_count }}</span>
+                {% endif %}
+            </a>
             <span style="color: var(--pb-text); font-size: 13px; opacity: 0.5;">|</span>
             <a href="/account?token={{ token }}" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500;">Account</a>
             <form action="/logout" method="POST" class="logout-form">
@@ -2672,6 +2684,79 @@
             {% endif %}
         </div>
 
+        {% if dm_view == 'messages' %}
+        <div class="card" id="inbox-view">
+            <div class="card-header">
+                <h2>&#9993; Inbox</h2>
+                <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
+            </div>
+
+            <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin-bottom:20px;">
+                <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 10px;">Compose Message</h3>
+                <form action="/send-message" method="POST" id="dm-compose-form">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:12px;color:#555;font-weight:600;">To:</label>
+                        <span style="font-size:13px;color:#1a1a2e;font-weight:600;margin-left:4px;">Admin</span>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Subject <span style="color:#999;">(max 20 chars)</span></label>
+                        <input type="text" name="subject" maxlength="20" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/20';if(c>20){this.style.borderColor='#dc3545'}else{this.style.borderColor='#ddd'}">
+                        <span class="char-count" style="font-size:11px;color:#999;">0/20</span>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Message <span style="color:#999;">(max 100 chars)</span></label>
+                        <textarea name="body" maxlength="100" required rows="2" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/100';if(c>100){this.style.borderColor='#dc3545'}else{this.style.borderColor='#ddd'}"></textarea>
+                        <span class="char-count" style="font-size:11px;color:#999;">0/100</span>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Send Message</button>
+                    <span id="dm-send-status" style="font-size:12px;color:#28a745;margin-left:8px;display:none;">Message sent!</span>
+                </form>
+            </div>
+
+            {% if dm_messages_list %}
+            <table style="font-size:13px;width:100%;">
+                <thead>
+                    <tr>
+                        <th style="width:20px;"></th>
+                        <th>Subject</th>
+                        <th>From</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in dm_messages_list %}
+                    <tr class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" style="cursor:pointer;{% if not m.read %}font-weight:600;background:#f0f9ff;{% endif %}">
+                        <td>{% if not m.read %}<span style="color:#dc3545;font-size:16px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:16px;">&#9675;</span>{% endif %}</td>
+                        <td>{{ m.subject }}</td>
+                        <td style="font-size:12px;color:#777;">{{ m.sender_type|default('system') }}</td>
+                        <td style="font-size:12px;color:#777;white-space:nowrap;">{{ m.timestamp }}</td>
+                    </tr>
+                    <tr class="dm-msg-body" style="display:none;">
+                        <td colspan="4" style="padding:8px 16px;background:#f8f9fa;border-left:3px solid #5C7E8F;">
+                            <p style="font-size:13px;color:#333;margin:0;">{{ m.body }}</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:#777;">
+                <span>{{ dm_total }} messages — Page {{ dm_page }} of {{ dm_total_pages }}</span>
+                <div style="display:flex;gap:6px;">
+                    {% if dm_page > 1 %}
+                    <a href="/?token={{ token }}&view=messages&dm_page={{ dm_page - 1 }}" class="btn btn-secondary btn-small">Prev</a>
+                    {% endif %}
+                    {% if dm_page < dm_total_pages %}
+                    <a href="/?token={{ token }}&view=messages&dm_page={{ dm_page + 1 }}" class="btn btn-secondary btn-small">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">No messages yet.</div>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <div class="card">
             <div class="card-header">
                 <h2>My Studies</h2>
@@ -2930,6 +3015,30 @@
             {% endif %}
         </div>
 
+        <div class="card">
+            <div class="card-header">
+                <h2>System Messages</h2>
+                <a href="/?token={{ token }}&view=messages" class="btn btn-secondary btn-small">Open Inbox</a>
+            </div>
+            {% if dm_latest_preview %}
+            <div style="background:#f8f9fa;border-radius:6px;padding:12px 16px;cursor:pointer;" onclick="window.location.href='/?token={{ token }}&view=messages'">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <span style="font-size:13px;font-weight:{% if not dm_latest_preview.read %}700{% else %}400{% endif %};color:#1a1a2e;">
+                        {% if not dm_latest_preview.read %}<span style="color:#dc3545;">&#9679;</span> {% endif %}
+                        {{ dm_latest_preview.subject }}
+                    </span>
+                    <span style="font-size:11px;color:#999;">{{ dm_latest_preview.timestamp }}</span>
+                </div>
+                <p style="font-size:12px;color:#666;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ dm_latest_preview.body }}</p>
+            </div>
+            {% if dm_unread_count > 0 %}
+            <p style="font-size:12px;color:#dc3545;margin:8px 0 0;font-weight:600;">{{ dm_unread_count }} unread message{{ 's' if dm_unread_count > 1 else '' }}</p>
+            {% endif %}
+            {% else %}
+            <p style="font-size:13px;color:#999;">No messages.</p>
+            {% endif %}
+        </div>
+
         {% if view_persona %}
         <div class="card" id="view-persona-section">
             <div class="card-header">
@@ -2993,6 +3102,134 @@
 
     {% if is_admin %}
     <div class="section visible" id="section-admin">
+        <div class="card">
+            <h2>Admin Management</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
+                    <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Change Admin Password</h3>
+                    <form action="/admin/change-password" method="POST">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Current Password</label>
+                            <input type="password" name="current_password" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">New Password (min 6 chars)</label>
+                            <input type="password" name="new_password" required minlength="6" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                        </div>
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Confirm New Password</label>
+                            <input type="password" name="confirm_password" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-small">Update Password</button>
+                    </form>
+                </div>
+                <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
+                    <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Admin Email</h3>
+                    <p style="font-size:12px;color:#777;margin-bottom:10px;">Set an email address for system messages and authentication.</p>
+                    <form action="/admin/set-email" method="POST">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Email Address</label>
+                            <input type="email" name="admin_email" value="{{ admin_email }}" placeholder="admin@example.com" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-small">Save Email</button>
+                        {% if admin_email %}
+                        <span style="font-size:12px;color:#28a745;margin-left:8px;">Current: {{ admin_email }}</span>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {% if dm_view == 'admin_messages' %}
+        <div class="card" id="admin-inbox-view">
+            <div class="card-header">
+                <h2>&#9993; Admin Inbox</h2>
+                <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back</a>
+            </div>
+
+            <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin-bottom:20px;">
+                <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 10px;">Send Message to User</h3>
+                <form action="/send-message" method="POST">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">To (select user):</label>
+                        <select name="recipient_user_id" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                            <option value="">-- Select recipient --</option>
+                            {% for u in all_users %}
+                            <option value="{{ u.id }}">{{ u.username }} ({{ u.email }}) — {{ u.state }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Subject <span style="color:#999;">(max 20 chars)</span></label>
+                        <input type="text" name="subject" maxlength="20" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/20';">
+                        <span class="char-count" style="font-size:11px;color:#999;">0/20</span>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Message <span style="color:#999;">(max 100 chars)</span></label>
+                        <textarea name="body" maxlength="100" required rows="2" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/100';"></textarea>
+                        <span class="char-count" style="font-size:11px;color:#999;">0/100</span>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Send Message</button>
+                </form>
+            </div>
+
+            {% if dm_messages_list %}
+            <h3 style="font-size:14px;color:#1a1a2e;margin-bottom:10px;">Received Messages</h3>
+            <table style="font-size:13px;width:100%;">
+                <thead>
+                    <tr>
+                        <th style="width:20px;"></th>
+                        <th>Subject</th>
+                        <th>From</th>
+                        <th>Date</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in dm_messages_list %}
+                    <tr class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" style="{% if not m.read %}font-weight:600;background:#f0f9ff;{% endif %}">
+                        <td>{% if not m.read %}<span style="color:#dc3545;font-size:16px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:16px;">&#9675;</span>{% endif %}</td>
+                        <td>{{ m.subject }}</td>
+                        <td style="font-size:12px;color:#777;">{{ m.get('sender_name', m.sender_type|default('system')) }}</td>
+                        <td style="font-size:12px;color:#777;white-space:nowrap;">{{ m.timestamp }}</td>
+                        <td>
+                            {% if not m.read %}
+                            <form action="/mark-message-read" method="POST" style="display:inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <input type="hidden" name="msg_id" value="{{ m.id }}">
+                                <button type="submit" class="btn btn-secondary btn-small" style="font-size:11px;padding:2px 8px;">Mark Read</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr class="dm-msg-body" style="display:none;">
+                        <td colspan="5" style="padding:8px 16px;background:#f8f9fa;border-left:3px solid #5C7E8F;">
+                            <p style="font-size:13px;color:#333;margin:0;">{{ m.body }}</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:#777;">
+                <span>{{ dm_total }} messages — Page {{ dm_page }} of {{ dm_total_pages }}</span>
+                <div style="display:flex;gap:6px;">
+                    {% if dm_page > 1 %}
+                    <a href="/?token={{ token }}&view=admin_messages&dm_page={{ dm_page - 1 }}" class="btn btn-secondary btn-small">Prev</a>
+                    {% endif %}
+                    {% if dm_page < dm_total_pages %}
+                    <a href="/?token={{ token }}&view=admin_messages&dm_page={{ dm_page + 1 }}" class="btn btn-secondary btn-small">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">No messages received yet.</div>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <div class="card">
             <h2>Pending Users</h2>
             {% if pending_users %}
@@ -3704,6 +3941,52 @@
             if (buttons[i]) buttons[i].classList.toggle('active', t === tab);
         });
     }
+
+    (function() {
+        var rows = document.querySelectorAll('.dm-msg-row');
+        rows.forEach(function(row) {
+            row.addEventListener('click', function() {
+                var bodyRow = row.nextElementSibling;
+                if (bodyRow && bodyRow.classList.contains('dm-msg-body')) {
+                    bodyRow.style.display = bodyRow.style.display === 'none' ? 'table-row' : 'none';
+                    if (bodyRow.style.display === 'table-row' && row.dataset.read === 'false') {
+                        var msgId = row.dataset.msgId;
+                        var fd = new FormData();
+                        fd.append('msg_id', msgId);
+                        fd.append('token', '{{ token }}');
+                        fetch('/mark-message-read', {
+                            method: 'POST',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                            body: fd
+                        });
+                        row.dataset.read = 'true';
+                        row.style.fontWeight = '400';
+                        row.style.background = '';
+                        var dot = row.querySelector('td:first-child span');
+                        if (dot) { dot.innerHTML = '&#9675;'; dot.style.color = '#ccc'; }
+                    }
+                }
+            });
+        });
+
+        var composeForm = document.getElementById('dm-compose-form');
+        if (composeForm) {
+            composeForm.addEventListener('submit', function(e) {
+                var subj = composeForm.querySelector('[name="subject"]');
+                var body = composeForm.querySelector('[name="body"]');
+                if (subj && subj.value.length > 20) {
+                    e.preventDefault();
+                    alert('Subject must be 20 characters or less.');
+                    return;
+                }
+                if (body && body.value.length > 100) {
+                    e.preventDefault();
+                    alert('Message must be 100 characters or less.');
+                    return;
+                }
+            });
+        }
+    })();
 </script>
 
 <div style="background: #1a1a2e; color: rgba(255,255,255,0.6); text-align: center; padding: 24px 20px; font-size: 11px; line-height: 1.6; margin-top: 40px;">

@@ -2,28 +2,35 @@
   {
     "id": "2f9ca841a1c82a8e",
     "sender_type": "system",
-    "recipient_user_id": 1,
-    "title": "Welcome to Project Brainstorm",
-    "body": "Your account has been set up.",
+    "sender_id": null,
+    "recipient_type": "admin",
+    "recipient_user_id": null,
+    "subject": "Welcome",
+    "body": "Project Brainstorm is ready.",
     "timestamp": "2026-04-04 03:55:45",
     "read": false
   },
   {
-    "id": "e63a02cc3fe2b6a5",
-    "sender_type": "admin",
-    "recipient_user_id": 1,
-    "title": "Platform Update",
-    "body": "New features added!",
-    "timestamp": "2026-04-04 03:55:45",
-    "read": false
-  },
-  {
-    "id": "ffb9c4458f12d72c",
+    "id": "126e6da6547b8292",
+    "timestamp": "2026-04-05 06:19:15",
+    "subject": "Test message",
+    "body": "Hello admin!",
+    "read": false,
     "sender_type": "user",
-    "recipient_user_id": 1,
-    "title": "My feedback",
-    "body": "Great platform!",
-    "timestamp": "2026-04-04 03:55:45",
-    "read": true
+    "sender_id": 6,
+    "sender_name": "benji123",
+    "recipient_type": "admin",
+    "recipient_user_id": null
+  },
+  {
+    "id": "31b81b7a2261ebc8",
+    "timestamp": "2026-04-05 06:19:49",
+    "subject": "Admin notice",
+    "body": "This is a test from admin",
+    "read": false,
+    "sender_type": "admin",
+    "sender_id": null,
+    "recipient_type": "user",
+    "recipient_user_id": 6
   }
 ]
