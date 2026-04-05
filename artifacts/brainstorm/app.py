@@ -126,20 +126,57 @@ def _dm_unread_count(user_id=None, is_admin=False):
     return 0
 
 
+def _normalize_subject(subj):
+    s = (subj or "").strip()
+    while s.lower().startswith("re: "):
+        s = s[4:].strip()
+    return s
+
+
 def _dm_inbox(user_id=None, is_admin=False, page=1):
     msgs = _load_dm_messages()
+    relevant = []
     if is_admin:
-        filtered = [m for m in msgs if m.get("recipient_type") == "admin"]
+        for m in msgs:
+            if m.get("recipient_type") == "admin" or m.get("sender_type") == "admin":
+                relevant.append(m)
     elif user_id:
-        filtered = [m for m in msgs if m.get("recipient_user_id") == user_id and m.get("recipient_type") == "user"]
-    else:
-        filtered = []
-    filtered.sort(key=lambda m: m.get("timestamp", ""), reverse=True)
-    total = len(filtered)
+        for m in msgs:
+            if (m.get("recipient_user_id") == user_id and m.get("recipient_type") == "user"):
+                relevant.append(m)
+            elif (m.get("sender_type") == "user" and m.get("sender_id") == user_id):
+                relevant.append(m)
+    threads = {}
+    for m in relevant:
+        norm = _normalize_subject(m.get("subject", "")).lower()
+        if is_admin:
+            tuser = m.get("sender_id") if m.get("sender_type") == "user" else m.get("recipient_user_id")
+            tkey = (norm, tuser)
+        else:
+            tkey = norm
+        if tkey not in threads:
+            threads[tkey] = {"subject": _normalize_subject(m.get("subject", "")) or "(no subject)", "messages": [], "latest_ts": "", "unread_count": 0, "user_name": "", "category": ""}
+        threads[tkey]["messages"].append(m)
+        ts = m.get("timestamp", "")
+        if ts > threads[tkey]["latest_ts"]:
+            threads[tkey]["latest_ts"] = ts
+        if not m.get("read", True):
+            if is_admin and m.get("recipient_type") == "admin":
+                threads[tkey]["unread_count"] += 1
+            elif not is_admin and m.get("recipient_type") == "user" and m.get("recipient_user_id") == user_id:
+                threads[tkey]["unread_count"] += 1
+        if m.get("sender_type") == "user" and m.get("sender_name"):
+            threads[tkey]["user_name"] = m["sender_name"]
+        if m.get("category") and not threads[tkey]["category"]:
+            threads[tkey]["category"] = m["category"]
+    for t in threads.values():
+        t["messages"].sort(key=lambda x: x.get("timestamp", ""))
+    thread_list = sorted(threads.values(), key=lambda t: t["latest_ts"], reverse=True)
+    total = len(thread_list)
     total_pages = max(1, (total + DM_PAGE_SIZE - 1) // DM_PAGE_SIZE)
     page = max(1, min(page, total_pages))
     start = (page - 1) * DM_PAGE_SIZE
-    return filtered[start:start + DM_PAGE_SIZE], page, total_pages, total
+    return thread_list[start:start + DM_PAGE_SIZE], page, total_pages, total
 
 
 def _dm_latest_preview(user_id=None, is_admin=False):
@@ -2715,13 +2752,13 @@ def send_message():
     body = (request.form.get("body") or "").strip()
     category = (request.form.get("category") or "").strip()
 
-    if not subject or len(subject) > 20:
-        err = "Subject is required (max 20 characters)."
+    if not subject or len(subject) > 30:
+        err = "Subject is required (max 30 characters)."
         if ajax:
             return jsonify({"ok": False, "error": err}), 400
         return render_error(err)
-    if not body or len(body) > 100:
-        err = "Body is required (max 100 characters)."
+    if not body or len(body) > 300:
+        err = "Body is required (max 300 characters)."
         if ajax:
             return jsonify({"ok": False, "error": err}), 400
         return render_error(err)
@@ -2766,8 +2803,8 @@ def send_message():
         return jsonify({"ok": True, "message": "Message sent.", "msg": new_msg})
 
     if is_admin:
-        return redirect(url_for("index", token=token))
-    return redirect(url_for("index", token=token, view="messages"))
+        return redirect(url_for("index", token=token, msg_sent="1"))
+    return redirect(url_for("index", token=token, view="messages", msg_sent="1"))
 
 
 @app.route("/mark-message-read", methods=["POST"])

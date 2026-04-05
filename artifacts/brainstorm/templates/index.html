@@ -2706,6 +2706,12 @@
                 <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
             </div>
 
+            {% if request.args.get('msg_sent') %}
+            <div style="background:#d4edda;border:1px solid #c3e6cb;border-radius:8px;padding:12px 16px;margin-bottom:16px;color:#155724;font-size:13px;">
+                &#10003; Message sent successfully!
+            </div>
+            {% endif %}
+
             <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin-bottom:20px;">
                 <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 10px;">Compose Message</h3>
                 <form action="/send-message" method="POST" id="dm-compose-form">
@@ -2725,48 +2731,48 @@
                         </select>
                     </div>
                     <div style="margin-bottom:8px;">
-                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Subject <span style="color:#999;">(max 20 chars)</span></label>
-                        <input type="text" name="subject" maxlength="20" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/20';if(c>20){this.style.borderColor='#dc3545'}else{this.style.borderColor='#ddd'}">
-                        <span class="char-count" style="font-size:11px;color:#999;">0/20</span>
+                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Subject <span style="color:#999;">(max 30 chars)</span></label>
+                        <input type="text" name="subject" maxlength="30" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/30';if(c>30){this.style.borderColor='#dc3545'}else{this.style.borderColor='#ddd'}">
+                        <span class="char-count" style="font-size:11px;color:#999;">0/30</span>
                     </div>
                     <div style="margin-bottom:10px;">
-                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Message <span style="color:#999;">(max 100 chars)</span></label>
-                        <textarea name="body" maxlength="100" required rows="2" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/100';if(c>100){this.style.borderColor='#dc3545'}else{this.style.borderColor='#ddd'}"></textarea>
-                        <span class="char-count" style="font-size:11px;color:#999;">0/100</span>
+                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Message <span style="color:#999;">(max 300 chars)</span></label>
+                        <textarea name="body" maxlength="300" required rows="3" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/300';if(c>300){this.style.borderColor='#dc3545'}else{this.style.borderColor='#ddd'}"></textarea>
+                        <span class="char-count" style="font-size:11px;color:#999;">0/300</span>
                     </div>
                     <button type="submit" class="btn btn-primary btn-small">Send Message</button>
-                    <span id="dm-send-status" style="font-size:12px;color:#28a745;margin-left:8px;display:none;">Message sent!</span>
                 </form>
             </div>
 
             {% if dm_messages_list %}
-            <table style="font-size:13px;width:100%;">
-                <thead>
-                    <tr>
-                        <th style="width:20px;"></th>
-                        <th>Subject</th>
-                        <th>From</th>
-                        <th>Date</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for m in dm_messages_list %}
-                    <tr class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" style="cursor:pointer;{% if not m.read %}font-weight:600;background:#f0f9ff;{% endif %}">
-                        <td>{% if not m.read %}<span style="color:#dc3545;font-size:16px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:16px;">&#9675;</span>{% endif %}</td>
-                        <td>{{ m.subject }}</td>
-                        <td style="font-size:12px;color:#777;">{{ m.sender_type|default('system') }}</td>
-                        <td style="font-size:12px;color:#777;white-space:nowrap;">{{ m.timestamp }}</td>
-                    </tr>
-                    <tr class="dm-msg-body" style="display:none;">
-                        <td colspan="4" style="padding:8px 16px;background:#f8f9fa;border-left:3px solid #5C7E8F;">
-                            <p style="font-size:13px;color:#333;margin:0;">{{ m.body }}</p>
-                        </td>
-                    </tr>
+            <h3 style="font-size:14px;color:#1a1a2e;margin-bottom:10px;">Conversations</h3>
+            {% for thread in dm_messages_list %}
+            <div style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:10px;overflow:hidden;">
+                <div class="dm-thread-header" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;{% if thread.unread_count > 0 %}background:#f0f9ff;font-weight:600;{% else %}background:#fff;{% endif %}" onclick="var b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        {% if thread.unread_count > 0 %}<span style="color:#dc3545;font-size:14px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:14px;">&#9675;</span>{% endif %}
+                        <span style="font-size:13px;">{{ thread.subject }}</span>
+                        <span style="font-size:11px;color:#999;background:#f1f5f9;padding:1px 6px;border-radius:8px;">{{ thread.messages|length }}</span>
+                    </div>
+                    <span style="font-size:11px;color:#999;white-space:nowrap;">{{ thread.latest_ts }}</span>
+                </div>
+                <div style="display:none;border-top:1px solid #e2e8f0;">
+                    {% for m in thread.messages %}
+                    <div class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" style="padding:10px 14px;border-bottom:1px solid #f1f5f9;{% if m.sender_type == 'admin' %}background:#f8f9fa;{% endif %}">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                            <span style="font-size:12px;font-weight:600;color:{% if m.sender_type == 'admin' %}#5C7E8F{% else %}#1a1a2e{% endif %};">
+                                {% if m.sender_type == 'admin' %}Admin{% elif m.sender_type == 'system' %}System{% else %}You{% endif %}
+                            </span>
+                            <span style="font-size:11px;color:#999;">{{ m.timestamp }}</span>
+                        </div>
+                        <p style="font-size:13px;color:#333;margin:0;">{{ m.body }}</p>
+                    </div>
                     {% endfor %}
-                </tbody>
-            </table>
+                </div>
+            </div>
+            {% endfor %}
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:#777;">
-                <span>{{ dm_total }} messages — Page {{ dm_page }} of {{ dm_total_pages }}</span>
+                <span>{{ dm_total }} threads — Page {{ dm_page }} of {{ dm_total_pages }}</span>
                 <div style="display:flex;gap:6px;">
                     {% if dm_page > 1 %}
                     <a href="/?token={{ token }}&view=messages&dm_page={{ dm_page - 1 }}" class="btn btn-secondary btn-small">Prev</a>
@@ -3133,6 +3139,9 @@
                 <span class="admin-acc-arrow" id="acc-messages-body-arrow">&#9654;</span>
             </div>
             <div class="admin-acc-body" id="acc-messages-body">
+                <div id="admin-msg-sent-banner" style="display:none;background:#d4edda;border:1px solid #c3e6cb;border-radius:8px;padding:10px 16px;margin-bottom:12px;color:#155724;font-size:13px;">
+                    &#10003; Message sent successfully!
+                </div>
                 <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin-bottom:20px;">
                     <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 10px;">Send Message to User</h3>
                     <form action="/send-message" method="POST" id="admin-compose-form">
@@ -3147,63 +3156,65 @@
                             </select>
                         </div>
                         <div style="margin-bottom:8px;">
-                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Subject <span style="color:#999;">(max 20 chars)</span></label>
-                            <input type="text" name="subject" id="admin-reply-subject" maxlength="20" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/20';">
-                            <span class="char-count" style="font-size:11px;color:#999;">0/20</span>
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Subject <span style="color:#999;">(max 30 chars)</span></label>
+                            <input type="text" name="subject" id="admin-reply-subject" maxlength="30" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/30';">
+                            <span class="char-count" style="font-size:11px;color:#999;">0/30</span>
                         </div>
                         <div style="margin-bottom:10px;">
-                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Message <span style="color:#999;">(max 100 chars)</span></label>
-                            <textarea name="body" maxlength="100" required rows="2" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/100';"></textarea>
-                            <span class="char-count" style="font-size:11px;color:#999;">0/100</span>
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Message <span style="color:#999;">(max 300 chars)</span></label>
+                            <textarea name="body" maxlength="300" required rows="3" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/300';"></textarea>
+                            <span class="char-count" style="font-size:11px;color:#999;">0/300</span>
                         </div>
                         <button type="submit" class="btn btn-primary btn-small">Send Message</button>
                     </form>
                 </div>
 
                 {% if dm_messages_list %}
-                <h3 style="font-size:14px;color:#1a1a2e;margin-bottom:10px;">Received Messages</h3>
-                <table style="font-size:13px;width:100%;">
-                    <thead>
-                        <tr>
-                            <th style="width:20px;"></th>
-                            <th>Category</th>
-                            <th>Subject</th>
-                            <th>From</th>
-                            <th>Date</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for m in dm_messages_list %}
-                        <tr class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" style="cursor:pointer;{% if not m.read %}font-weight:600;background:#f0f9ff;{% endif %}">
-                            <td>{% if not m.read %}<span style="color:#dc3545;font-size:16px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:16px;">&#9675;</span>{% endif %}</td>
-                            <td><span style="font-size:11px;padding:2px 6px;border-radius:4px;background:#e2e8f0;color:#475569;">{% if m.sender_type == 'system' %}System{% else %}{{ m.get('category', '—') }}{% endif %}</span></td>
-                            <td>{{ m.subject }}</td>
-                            <td style="font-size:12px;color:#777;">{% if m.sender_type == 'system' %}System{% else %}{{ m.get('sender_name', m.sender_type|default('system')) }}{% endif %}</td>
-                            <td style="font-size:12px;color:#777;white-space:nowrap;">{{ m.timestamp }}</td>
-                            <td>
-                                {% if not m.read %}
-                                <form action="/mark-message-read" method="POST" style="display:inline;">
-                                    <input type="hidden" name="token" value="{{ token }}">
-                                    <input type="hidden" name="msg_id" value="{{ m.id }}">
-                                    <button type="submit" class="btn btn-secondary btn-small" style="font-size:11px;padding:2px 8px;">Mark Read</button>
-                                </form>
-                                {% endif %}
-                                {% if m.sender_type == 'user' and m.sender_id %}
-                                <button type="button" class="btn btn-primary btn-small" style="font-size:11px;padding:2px 8px;" onclick="adminReply('{{ m.sender_id }}','{{ m.subject|truncate(14,True,'') }}')">Reply</button>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        <tr class="dm-msg-body" style="display:none;">
-                            <td colspan="6" style="padding:8px 16px;background:#f8f9fa;border-left:3px solid #5C7E8F;">
-                                <p style="font-size:13px;color:#333;margin:0;">{{ m.body }}</p>
-                            </td>
-                        </tr>
+                <h3 style="font-size:14px;color:#1a1a2e;margin-bottom:10px;">Message Threads</h3>
+                {% for thread in dm_messages_list %}
+                <div style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:10px;overflow:hidden;">
+                    <div class="dm-thread-header" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;{% if thread.unread_count > 0 %}background:#f0f9ff;font-weight:600;{% else %}background:#fff;{% endif %}" onclick="var b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            {% if thread.unread_count > 0 %}<span style="color:#dc3545;font-size:14px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:14px;">&#9675;</span>{% endif %}
+                            {% if thread.category %}<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:#e2e8f0;color:#475569;">{{ thread.category }}</span>{% endif %}
+                            <span style="font-size:13px;">{{ thread.subject }}</span>
+                            <span style="font-size:11px;color:#999;background:#f1f5f9;padding:1px 6px;border-radius:8px;">{{ thread.messages|length }}</span>
+                            {% if thread.user_name %}<span style="font-size:11px;color:#777;">— {{ thread.user_name }}</span>{% endif %}
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            {% set first_user_msg = thread.messages|selectattr('sender_type','equalto','user')|first %}
+                            {% if first_user_msg and first_user_msg.sender_id %}
+                            <button type="button" class="btn btn-primary btn-small" style="font-size:10px;padding:2px 6px;" onclick="event.stopPropagation();adminReply('{{ first_user_msg.sender_id }}','{{ thread.subject|truncate(24,True,'') }}')">Reply</button>
+                            {% endif %}
+                            <span style="font-size:11px;color:#999;white-space:nowrap;">{{ thread.latest_ts }}</span>
+                        </div>
+                    </div>
+                    <div style="display:none;border-top:1px solid #e2e8f0;">
+                        {% for m in thread.messages %}
+                        <div class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" style="padding:10px 14px;border-bottom:1px solid #f1f5f9;{% if m.sender_type == 'admin' %}background:#f8f9fa;{% endif %}">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                <span style="font-size:12px;font-weight:600;color:{% if m.sender_type == 'admin' %}#5C7E8F{% elif m.sender_type == 'system' %}#6b7280{% else %}#1a1a2e{% endif %};">
+                                    {% if m.sender_type == 'admin' %}Admin{% elif m.sender_type == 'system' %}System{% else %}{{ m.get('sender_name', 'User') }}{% endif %}
+                                </span>
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <span style="font-size:11px;color:#999;">{{ m.timestamp }}</span>
+                                    {% if not m.get('read', True) and m.recipient_type == 'admin' %}
+                                    <form action="/mark-message-read" method="POST" style="display:inline;">
+                                        <input type="hidden" name="token" value="{{ token }}">
+                                        <input type="hidden" name="msg_id" value="{{ m.id }}">
+                                        <button type="submit" class="btn btn-secondary btn-small" style="font-size:10px;padding:1px 5px;">Mark Read</button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <p style="font-size:13px;color:#333;margin:0;">{{ m.body }}</p>
+                        </div>
                         {% endfor %}
-                    </tbody>
-                </table>
+                    </div>
+                </div>
+                {% endfor %}
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:#777;">
-                    <span>{{ dm_total }} messages — Page {{ dm_page }} of {{ dm_total_pages }}</span>
+                    <span>{{ dm_total }} threads — Page {{ dm_page }} of {{ dm_total_pages }}</span>
                     <div style="display:flex;gap:6px;">
                         {% if dm_page > 1 %}
                         <a href="/?token={{ token }}&dm_page={{ dm_page - 1 }}#acc-messages" class="btn btn-secondary btn-small" data-ajax-page="1">Prev</a>
@@ -3214,7 +3225,7 @@
                     </div>
                 </div>
                 {% else %}
-                <div class="empty-state">No messages received yet.</div>
+                <div class="empty-state">No messages yet.</div>
                 {% endif %}
             </div>
         </div>
@@ -4051,9 +4062,9 @@
         }
         if (subj) {
             var re = 'Re: ' + origSubject;
-            subj.value = re.substring(0, 20);
+            subj.value = re.substring(0, 30);
             var cc = subj.parentNode.querySelector('.char-count');
-            if (cc) cc.textContent = subj.value.length + '/20';
+            if (cc) cc.textContent = subj.value.length + '/30';
         }
         var accBody = document.getElementById('acc-messages-body');
         if (accBody && accBody.style.display !== 'block') toggleAdminAcc('acc-messages-body');
@@ -4111,6 +4122,7 @@
         e.preventDefault();
         var accBody = form.closest('.admin-acc-body');
         var accBodyId = accBody ? accBody.id : null;
+        var isSendMsg = form.action && form.action.indexOf('/send-message') !== -1;
         var btn = form.querySelector('button[type="submit"]');
         var origHTML = btn ? btn.innerHTML : '';
         if (btn) { btn.innerHTML = '&#8987;'; btn.disabled = true; }
@@ -4118,7 +4130,15 @@
         fetch(form.action, { method: form.method || 'POST', body: fd, redirect: 'follow' })
         .then(function(resp) {
             if (!resp.ok) return resp.text().then(function(t) { alert(t.replace(/<[^>]*>/g, '').substring(0, 200)); });
-            if (accBodyId) _refreshAccSection(accBodyId);
+            if (accBodyId) {
+                _refreshAccSection(accBodyId);
+                if (isSendMsg) {
+                    setTimeout(function() {
+                        var banner = document.getElementById('admin-msg-sent-banner');
+                        if (banner) { banner.style.display = 'block'; setTimeout(function() { banner.style.display = 'none'; }, 4000); }
+                    }, 500);
+                }
+            }
         })
         .catch(function() {
             if (btn) { btn.innerHTML = origHTML; btn.disabled = false; }
@@ -4196,14 +4216,14 @@
             composeForm.addEventListener('submit', function(e) {
                 var subj = composeForm.querySelector('[name="subject"]');
                 var body = composeForm.querySelector('[name="body"]');
-                if (subj && subj.value.length > 20) {
+                if (subj && subj.value.length > 30) {
                     e.preventDefault();
-                    alert('Subject must be 20 characters or less.');
+                    alert('Subject must be 30 characters or less.');
                     return;
                 }
-                if (body && body.value.length > 100) {
+                if (body && body.value.length > 300) {
                     e.preventDefault();
-                    alert('Message must be 100 characters or less.');
+                    alert('Message must be 300 characters or less.');
                     return;
                 }
             });
