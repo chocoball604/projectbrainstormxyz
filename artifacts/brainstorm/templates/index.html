@@ -1198,40 +1198,6 @@
 
             {% endif %}
 
-            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-
-            <div id="run-study-section" data-study-id="{{ configure_study.id }}">
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Start Study</h3>
-            {% if configure_study.qa_status == 'precheck_passed' %}
-                <div style="background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
-                    <p style="font-size: 13px; color: #2e7d32; margin: 0 0 8px; font-weight: 600;">&#10003; All prechecks passed</p>
-                    <p style="font-size: 12px; color: #555; margin: 0 0 4px;">Before starting, review your persona setup above:</p>
-                    <ul style="font-size: 12px; color: #555; margin: 4px 0 0 16px; line-height: 1.8;">
-                        <li>Attach an existing persona from My Personas for reuse, or</li>
-                        <li>Proceed without attaching — Lisa will generate new personas automatically.</li>
-                    </ul>
-                </div>
-                <button type="button" class="btn btn-success" style="font-size: 15px; padding: 10px 28px;" id="start-study-btn">Start Study</button>
-            {% elif configure_study.qa_status == 'precheck_failed' %}
-                <p style="color: #e67e22; font-size: 13px; margin-bottom: 4px; font-weight: 600;">
-                    Precheck: {{ configure_study.precheck_failures|length }} item{{ 's' if configure_study.precheck_failures|length != 1 else '' }} remaining
-                </p>
-                <p style="font-size: 12px; color: #888; margin: 0 0 8px;">Precheck updates automatically as you fill in the brief.</p>
-                {% if configure_study.precheck_failures %}
-                <ul style="color: #856404; font-size: 13px; margin: 0 0 8px 20px; line-height: 1.8;">
-                    {% for note in configure_study.precheck_failures %}
-                    <li>{{ note }}</li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-                <p style="color: #888; font-size: 12px; margin: 0;">Cannot run yet. Please complete the remaining required items listed above.</p>
-            {% else %}
-                <p style="color: #888; font-size: 13px;">
-                    Set a study type to see precheck status.
-                </p>
-            {% endif %}
-            </div>
-
 
         </div>
 
@@ -1338,6 +1304,54 @@
                 </div>
             </div>
         </div>
+        </div>
+        </div>
+
+        <div id="exec-control-strip" data-study-id="{{ configure_study.id }}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 14px 24px; margin: 16px 0; display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+            {% if configure_study.study_type %}
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
+                <strong>Ben QA:</strong>
+                {% if configure_study.qa_status == 'precheck_passed' %}
+                <span style="color: #27ae60;">&#10003; Pass</span>
+                {% elif configure_study.qa_status == 'precheck_failed' %}
+                <span style="color: #e67e22;">&#9888; {{ configure_study.precheck_failures|length }} item{{ 's' if configure_study.precheck_failures|length != 1 else '' }} remaining</span>
+                {% else %}
+                <span style="color: #999;">&mdash; Not set</span>
+                {% endif %}
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
+                <strong>Personas:</strong>
+                {% if configure_study.study_type == 'synthetic_survey' %}
+                <span style="color: #999;">N/A (survey)</span>
+                {% elif persona_count_panel > 0 %}
+                <span style="color: #27ae60;">Reuse {{ persona_count_panel }}</span>
+                {% else %}
+                <span style="color: #5C7E8F;">Auto-generate</span>
+                {% endif %}
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
+                <strong>Status:</strong>
+                {% if configure_study.qa_status == 'precheck_passed' %}
+                <span style="color: #27ae60; font-weight: 600;">Ready</span>
+                {% else %}
+                <span style="color: #e67e22;">Not Ready</span>
+                {% endif %}
+            </div>
+            <div style="margin-left: auto;">
+                {% if configure_study.qa_status == 'precheck_passed' %}
+                <button type="button" class="btn btn-success" style="font-size: 15px; padding: 10px 28px;" id="start-study-btn">Start Study</button>
+                {% endif %}
+            </div>
+            {% else %}
+            <span style="font-size: 13px; color: #999;">Set a study type to see execution readiness.</span>
+            {% endif %}
+        </div>
+
+        <div id="exec-output-container" style="display: none;">
+            <div id="mode-indicator-results-dynamic" style="background: #2c3e50; border: 1px solid #1a252f; border-radius: 8px; padding: 10px 20px; margin-bottom: 16px; text-align: center;">
+                <span style="font-size: 14px; font-weight: 700; color: #ecf0f1; letter-spacing: 1.5px;">&#128202; STUDY RESULTS</span>
+            </div>
+            <div class="card" id="exec-output-body" style="padding: 32px;"></div>
         </div>
 
         <script>
@@ -1476,64 +1490,105 @@
             }
 
             function updateRunStudySection(data) {
-                var section = document.getElementById('run-study-section');
-                if (!section || _executionRunning) return;
-                var sid = section.getAttribute('data-study-id');
+                var strip = document.getElementById('exec-control-strip');
+                if (!strip || _executionRunning) return;
+                var sid = strip.getAttribute('data-study-id');
                 if (!sid) return;
-                var h = '<h3 style="font-size:16px;color:#1a1a2e;margin-bottom:12px;">Start Study</h3>';
+                var personaCount = 0;
+                var personaTable = document.getElementById('persona-attach-table');
+                if (personaTable) personaCount = personaTable.querySelectorAll('tr').length;
+                var studyType = '{{ configure_study.study_type or "" }}';
+                var h = '';
+                h += '<div style="display:flex;align-items:center;gap:6px;font-size:13px;"><strong>Ben QA:</strong> ';
                 if (data.qa_status === 'precheck_passed') {
-                    h += '<div style="background:#e8f5e9;border:1px solid #c8e6c9;border-radius:8px;padding:16px;margin-bottom:12px;">'
-                        + '<p style="font-size:13px;color:#2e7d32;margin:0 0 8px;font-weight:600;">&#10003; All prechecks passed</p>'
-                        + '<p style="font-size:12px;color:#555;margin:0 0 4px;">Before starting, review your persona setup above:</p>'
-                        + '<ul style="font-size:12px;color:#555;margin:4px 0 0 16px;line-height:1.8;">'
-                        + '<li>Attach an existing persona from My Personas for reuse, or</li>'
-                        + '<li>Proceed without attaching — Lisa will generate new personas automatically.</li>'
-                        + '</ul></div>'
-                        + '<button type="button" class="btn btn-success" style="font-size:15px;padding:10px 28px;" id="start-study-btn">Start Study</button>';
-                    setTimeout(function() { bindStartStudyBtn(); }, 0);
+                    h += '<span style="color:#27ae60;">&#10003; Pass</span>';
                 } else if (data.qa_status === 'precheck_failed') {
-                    var fails = data.qa_failures || [];
-                    var n = fails.length;
+                    var n = (data.qa_failures || []).length;
                     var s = n !== 1 ? 's' : '';
-                    h += '<p style="color:#e67e22;font-size:13px;margin-bottom:4px;font-weight:600;">Precheck: ' + n + ' item' + s + ' remaining</p>'
-                        + '<p style="font-size:12px;color:#888;margin:0 0 8px;">Precheck updates automatically as you fill in the brief.</p>';
-                    if (n > 0) {
-                        h += '<ul style="color:#856404;font-size:13px;margin:0 0 8px 20px;line-height:1.8;">';
-                        for (var i = 0; i < n; i++) {
-                            h += '<li>' + escHtml(fails[i]) + '</li>';
-                        }
-                        h += '</ul>';
-                    }
-                    h += '<p style="color:#888;font-size:12px;margin:0;">Cannot run yet. Please complete the remaining required items listed above.</p>';
+                    h += '<span style="color:#e67e22;">&#9888; ' + n + ' item' + s + ' remaining</span>';
+                } else {
+                    h += '<span style="color:#999;">&mdash; Not set</span>';
                 }
-                section.innerHTML = h;
+                h += '</div>';
+                h += '<div style="display:flex;align-items:center;gap:6px;font-size:13px;"><strong>Personas:</strong> ';
+                if (studyType === 'synthetic_survey') {
+                    h += '<span style="color:#999;">N/A (survey)</span>';
+                } else if (personaCount > 0) {
+                    h += '<span style="color:#27ae60;">Reuse ' + personaCount + '</span>';
+                } else {
+                    h += '<span style="color:#5C7E8F;">Auto-generate</span>';
+                }
+                h += '</div>';
+                h += '<div style="display:flex;align-items:center;gap:6px;font-size:13px;"><strong>Status:</strong> ';
+                if (data.qa_status === 'precheck_passed') {
+                    h += '<span style="color:#27ae60;font-weight:600;">Ready</span>';
+                } else {
+                    h += '<span style="color:#e67e22;">Not Ready</span>';
+                }
+                h += '</div>';
+                h += '<div style="margin-left:auto;">';
+                if (data.qa_status === 'precheck_passed') {
+                    h += '<button type="button" class="btn btn-success" style="font-size:15px;padding:10px 28px;" id="start-study-btn">Start Study</button>';
+                }
+                h += '</div>';
+                strip.innerHTML = h;
+                if (data.qa_status === 'precheck_passed') {
+                    setTimeout(function() { bindStartStudyBtn(); }, 0);
+                }
             }
 
             function bindStartStudyBtn() {
                 var btn = document.getElementById('start-study-btn');
                 if (!btn) return;
                 btn.addEventListener('click', function() {
-                    if (confirm('Start this study? Lisa will begin generating research output.')) {
-                        autoRunStudy();
-                    }
+                    autoRunStudy();
                 });
             }
             bindStartStudyBtn();
 
+            function hideSetupUI() {
+                var mi = document.getElementById('mode-indicator');
+                var mc = document.getElementById('mark-chat-tile');
+                var sb = document.getElementById('study-builder-right');
+                var sp = document.getElementById('side-panel-brief');
+                var strip = document.getElementById('exec-control-strip');
+                var twoTile = mc ? mc.parentElement : null;
+                if (mi) mi.style.display = 'none';
+                if (twoTile) twoTile.style.display = 'none';
+                if (sp) sp.style.display = 'none';
+                if (strip) strip.style.display = 'none';
+            }
+
+            function showSetupUI() {
+                var mi = document.getElementById('mode-indicator');
+                var mc = document.getElementById('mark-chat-tile');
+                var strip = document.getElementById('exec-control-strip');
+                var twoTile = mc ? mc.parentElement : null;
+                if (mi) mi.style.display = '';
+                if (twoTile) twoTile.style.display = '';
+                if (strip) strip.style.display = '';
+                var oc = document.getElementById('exec-output-container');
+                if (oc) oc.style.display = 'none';
+            }
+
             function autoRunStudy() {
                 if (_executionRunning) return;
                 _executionRunning = true;
-                var section = document.getElementById('run-study-section');
-                if (!section) { _executionRunning = false; return; }
-                var sid = section.getAttribute('data-study-id');
+                var strip = document.getElementById('exec-control-strip');
+                var sid = strip ? strip.getAttribute('data-study-id') : studyId;
                 if (!sid) { _executionRunning = false; return; }
 
-                section.innerHTML = '<h3 style="font-size:16px;color:#1a1a2e;margin-bottom:12px;">Start Study</h3>'
-                    + '<div style="background:#e8f4fd;border:1px solid #b8daff;border-radius:8px;padding:24px;text-align:center;">'
-                    + '<div style="display:inline-block;width:28px;height:28px;border:3px solid #5C7E8F;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px;"></div>'
-                    + '<p style="font-size:14px;color:#004085;font-weight:600;margin:0 0 4px;">Executing study\u2026</p>'
-                    + '<p style="font-size:12px;color:#666;margin:0;">Lisa is generating your research output. This may take a minute.</p>'
-                    + '</div>';
+                hideSetupUI();
+                var oc = document.getElementById('exec-output-container');
+                var ob = document.getElementById('exec-output-body');
+                if (oc) oc.style.display = '';
+                if (ob) {
+                    ob.innerHTML = '<div style="text-align:center;padding:24px;">'
+                        + '<div style="display:inline-block;width:28px;height:28px;border:3px solid #5C7E8F;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px;"></div>'
+                        + '<p style="font-size:14px;color:#004085;font-weight:600;margin:0 0 4px;">Executing study\u2026</p>'
+                        + '<p style="font-size:12px;color:#666;margin:0;">Lisa is generating your research output. This may take a minute.</p>'
+                        + '</div>';
+                }
 
                 var fd = new FormData();
                 fd.append('token', token);
@@ -1550,13 +1605,13 @@
                 })
                 .then(function(data) {
                     if (data.ok) {
-                        renderStudyOutput(section, data);
+                        renderStudyOutput(ob, data);
                     } else {
-                        renderExecError(section, sid, data.error || 'Execution failed.');
+                        renderExecError(ob, sid, data.error || 'Execution failed.');
                     }
                 })
                 .catch(function(err) {
-                    renderExecError(section, sid, 'Network error: ' + err.message);
+                    renderExecError(ob, sid, 'Network error: ' + err.message);
                 });
             }
 
@@ -1683,8 +1738,8 @@
 
             function renderExecError(section, sid, errorMsg) {
                 _executionRunning = false;
-                section.innerHTML = '<h3 style="font-size:16px;color:#1a1a2e;margin-bottom:12px;">Start Study</h3>'
-                    + '<div style="background:#f8d7da;border:1px solid #f5c6cb;border-radius:8px;padding:16px;margin-bottom:12px;">'
+                showSetupUI();
+                section.innerHTML = '<div style="background:#f8d7da;border:1px solid #f5c6cb;border-radius:8px;padding:16px;margin-bottom:12px;">'
                     + '<p style="font-size:14px;color:#721c24;font-weight:600;margin:0 0 8px;">Execution failed</p>'
                     + '<p style="font-size:13px;color:#721c24;margin:0;">' + escHtml(errorMsg) + '</p>'
                     + '</div>'
