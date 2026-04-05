@@ -1741,9 +1741,8 @@ def index():
 
         dm_unread_count = _dm_unread_count(is_admin=True)
         dm_latest_preview = _dm_latest_preview(is_admin=True)
-        if dm_view == "admin_messages":
-            _dm_pg = int(request.args.get("dm_page") or 1)
-            dm_messages_list, dm_page, dm_total_pages, dm_total = _dm_inbox(is_admin=True, page=_dm_pg)
+        _dm_pg = int(request.args.get("dm_page") or 1)
+        dm_messages_list, dm_page, dm_total_pages, dm_total = _dm_inbox(is_admin=True, page=_dm_pg)
 
         today_str = datetime.utcnow().strftime("%Y-%m-%d")
         conn2 = get_db()
@@ -2212,6 +2211,7 @@ def index():
         dm_total_pages=dm_total_pages,
         dm_total=dm_total,
         dm_unread_count=dm_unread_count,
+        dm_admin_unread=_dm_unread_count(is_admin=True) if is_admin else 0,
         dm_latest_preview=dm_latest_preview,
         admin_email=ADMIN_EMAIL,
     )
@@ -2712,6 +2712,7 @@ def send_message():
 
     subject = (request.form.get("subject") or "").strip()
     body = (request.form.get("body") or "").strip()
+    category = (request.form.get("category") or "").strip()
 
     if not subject or len(subject) > 20:
         err = "Subject is required (max 20 characters)."
@@ -2730,6 +2731,7 @@ def send_message():
         "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
         "subject": subject,
         "body": body,
+        "category": category if category else "",
         "read": False,
     }
 
@@ -2763,7 +2765,7 @@ def send_message():
         return jsonify({"ok": True, "message": "Message sent.", "msg": new_msg})
 
     if is_admin:
-        return redirect(url_for("index", token=token, view="admin_messages"))
+        return redirect(url_for("index", token=token))
     return redirect(url_for("index", token=token, view="messages"))
 
 
@@ -2798,7 +2800,7 @@ def mark_message_read():
         return jsonify({"ok": True})
 
     if is_admin:
-        return redirect(url_for("index", token=token, view="admin_messages"))
+        return redirect(url_for("index", token=token))
     return redirect(url_for("index", token=token, view="messages"))
 
 

@@ -176,6 +176,21 @@
         .badge-qa-downgrade { background: #fff3cd; color: #856404; }
         .section { display: none; }
         .section.visible { display: block; }
+        .admin-acc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 16px 20px;
+            margin: -32px -32px 0 -32px;
+            border-radius: 8px;
+            user-select: none;
+        }
+        .admin-acc-header:hover { background: #f0f2f4; }
+        .admin-acc-header h2 { margin-bottom: 0; font-size: 16px; }
+        .admin-acc-arrow { font-size: 12px; color: #999; transition: transform 0.2s; }
+        .admin-acc-arrow.open { transform: rotate(90deg); }
+        .admin-acc-body { display: none; margin-top: 20px; }
         .logout-form { display: inline; }
         .card-header {
             display: flex;
@@ -204,7 +219,7 @@
     </a>
     <div class="header-right">
         {% if is_admin %}
-            <a href="/?token={{ token }}&view=admin_messages" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500; position: relative;">
+            <a href="#acc-messages" onclick="toggleAdminAcc('acc-messages-body');document.getElementById('acc-messages').scrollIntoView({behavior:'smooth'});return false;" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500; position: relative; cursor:pointer;">
                 &#9993; Messages
                 {% if dm_unread_count > 0 %}
                 <span style="position:absolute;top:-6px;right:-12px;background:#dc3545;color:#fff;font-size:10px;font-weight:700;border-radius:50%;min-width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px;">{{ dm_unread_count }}</span>
@@ -2700,6 +2715,16 @@
                         <span style="font-size:13px;color:#1a1a2e;font-weight:600;margin-left:4px;">Admin</span>
                     </div>
                     <div style="margin-bottom:8px;">
+                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Category <span style="color:#c0392b;">*</span></label>
+                        <select name="category" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                            <option value="">-- Select category --</option>
+                            <option value="Help">Help</option>
+                            <option value="Feedback">Feedback</option>
+                            <option value="Account Mgmt">Account Mgmt</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:8px;">
                         <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Subject <span style="color:#999;">(max 20 chars)</span></label>
                         <input type="text" name="subject" maxlength="20" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/20';if(c>20){this.style.borderColor='#dc3545'}else{this.style.borderColor='#ddd'}">
                         <span class="char-count" style="font-size:11px;color:#999;">0/20</span>
@@ -3102,828 +3127,878 @@
 
     {% if is_admin %}
     <div class="section visible" id="section-admin">
-        {% if dm_view == 'admin_messages' %}
-        <div class="card" id="admin-inbox-view">
-            <div class="card-header">
-                <h2>&#9993; Admin Inbox</h2>
-                <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back</a>
+        <div class="card" id="acc-messages">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-messages-body')">
+                <h2>&#9993; Messages {% if dm_admin_unread > 0 %}<span style="background:#dc3545;color:#fff;font-size:11px;padding:2px 7px;border-radius:10px;margin-left:6px;">{{ dm_admin_unread }}</span>{% endif %}</h2>
+                <span class="admin-acc-arrow" id="acc-messages-body-arrow">&#9654;</span>
             </div>
-
-            <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin-bottom:20px;">
-                <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 10px;">Send Message to User</h3>
-                <form action="/send-message" method="POST">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <div style="margin-bottom:8px;">
-                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">To (select user):</label>
-                        <select name="recipient_user_id" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-                            <option value="">-- Select recipient --</option>
-                            {% for u in all_users %}
-                            <option value="{{ u.id }}">{{ u.username }} ({{ u.email }}) — {{ u.state }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div style="margin-bottom:8px;">
-                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Subject <span style="color:#999;">(max 20 chars)</span></label>
-                        <input type="text" name="subject" maxlength="20" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/20';">
-                        <span class="char-count" style="font-size:11px;color:#999;">0/20</span>
-                    </div>
-                    <div style="margin-bottom:10px;">
-                        <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Message <span style="color:#999;">(max 100 chars)</span></label>
-                        <textarea name="body" maxlength="100" required rows="2" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/100';"></textarea>
-                        <span class="char-count" style="font-size:11px;color:#999;">0/100</span>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-small">Send Message</button>
-                </form>
-            </div>
-
-            {% if dm_messages_list %}
-            <h3 style="font-size:14px;color:#1a1a2e;margin-bottom:10px;">Received Messages</h3>
-            <table style="font-size:13px;width:100%;">
-                <thead>
-                    <tr>
-                        <th style="width:20px;"></th>
-                        <th>Subject</th>
-                        <th>From</th>
-                        <th>Date</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for m in dm_messages_list %}
-                    <tr class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" style="{% if not m.read %}font-weight:600;background:#f0f9ff;{% endif %}">
-                        <td>{% if not m.read %}<span style="color:#dc3545;font-size:16px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:16px;">&#9675;</span>{% endif %}</td>
-                        <td>{{ m.subject }}</td>
-                        <td style="font-size:12px;color:#777;">{{ m.get('sender_name', m.sender_type|default('system')) }}</td>
-                        <td style="font-size:12px;color:#777;white-space:nowrap;">{{ m.timestamp }}</td>
-                        <td>
-                            {% if not m.read %}
-                            <form action="/mark-message-read" method="POST" style="display:inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <input type="hidden" name="msg_id" value="{{ m.id }}">
-                                <button type="submit" class="btn btn-secondary btn-small" style="font-size:11px;padding:2px 8px;">Mark Read</button>
-                            </form>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    <tr class="dm-msg-body" style="display:none;">
-                        <td colspan="5" style="padding:8px 16px;background:#f8f9fa;border-left:3px solid #5C7E8F;">
-                            <p style="font-size:13px;color:#333;margin:0;">{{ m.body }}</p>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:#777;">
-                <span>{{ dm_total }} messages — Page {{ dm_page }} of {{ dm_total_pages }}</span>
-                <div style="display:flex;gap:6px;">
-                    {% if dm_page > 1 %}
-                    <a href="/?token={{ token }}&view=admin_messages&dm_page={{ dm_page - 1 }}" class="btn btn-secondary btn-small">Prev</a>
-                    {% endif %}
-                    {% if dm_page < dm_total_pages %}
-                    <a href="/?token={{ token }}&view=admin_messages&dm_page={{ dm_page + 1 }}" class="btn btn-secondary btn-small">Next</a>
-                    {% endif %}
+            <div class="admin-acc-body" id="acc-messages-body">
+                <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin-bottom:20px;">
+                    <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 10px;">Send Message to User</h3>
+                    <form action="/send-message" method="POST" id="admin-compose-form">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">To (select user):</label>
+                            <select name="recipient_user_id" id="admin-reply-recipient" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                                <option value="">-- Select recipient --</option>
+                                {% for u in all_users %}
+                                <option value="{{ u.id }}">{{ u.username }} ({{ u.email }}) — {{ u.state }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Subject <span style="color:#999;">(max 20 chars)</span></label>
+                            <input type="text" name="subject" id="admin-reply-subject" maxlength="20" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/20';">
+                            <span class="char-count" style="font-size:11px;color:#999;">0/20</span>
+                        </div>
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Message <span style="color:#999;">(max 100 chars)</span></label>
+                            <textarea name="body" maxlength="100" required rows="2" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;" oninput="var c=this.value.length;var el=this.parentNode.querySelector('.char-count');if(el)el.textContent=c+'/100';"></textarea>
+                            <span class="char-count" style="font-size:11px;color:#999;">0/100</span>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-small">Send Message</button>
+                    </form>
                 </div>
-            </div>
-            {% else %}
-            <div class="empty-state">No messages received yet.</div>
-            {% endif %}
-        </div>
-        {% endif %}
 
-        <div class="card">
-            <h2>Pending Users</h2>
-            {% if pending_users %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Email</th>
-                        <th>Username</th>
-                        <th>Signed Up</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for u in pending_users %}
-                    <tr>
-                        <td>{{ u.email }}</td>
-                        <td>{{ u.username }}</td>
-                        <td>{{ u.created_at }}</td>
-                        <td>
-                            <form action="/admin/approve/{{ u.id }}" method="POST" style="display:inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-success btn-small">Approve</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p style="color: #777; font-size: 14px;">No pending users.</p>
-            {% endif %}
-        </div>
-
-        <div class="card">
-            <h2>All Users</h2>
-            {% if all_users %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Email</th>
-                        <th>Username</th>
-                        <th>State</th>
-                        <th>Signed Up</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for u in all_users %}
-                    <tr>
-                        <td>{{ u.email }}</td>
-                        <td>{{ u.username }}</td>
-                        <td><span class="badge badge-{{ u.state }}">{{ u.state }}</span></td>
-                        <td>{{ u.created_at }}</td>
-                        <td>
-                            {% if u.state == 'pending' %}
-                            <form action="/admin/approve/{{ u.id }}" method="POST" style="display:inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-success btn-small">Approve</button>
-                            </form>
-                            {% endif %}
-                            {% if u.state != 'disabled' %}
-                            <form action="/admin/disable/{{ u.id }}" method="POST" style="display:inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-danger btn-small">Disable</button>
-                            </form>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p style="color: #777; font-size: 14px;">No users yet.</p>
-            {% endif %}
-        </div>
-    </div>
-    {% endif %}
-
-    {% if is_admin %}
-    <div class="section visible" id="section-admin-sources">
-        <div class="card">
-            <h2>Admin-Directed Web Sources</h2>
-            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
-                Configure web sources for grounding trace. Active sources set admin_sources_configured and admin_sources_queried to true.
-            </p>
-
-            {% if admin_web_sources %}
-            <table style="margin-bottom: 20px;">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>URL</th>
-                        <th>City</th>
-                        <th>Country</th>
-                        <th>Language</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for src in admin_web_sources %}
-                    <tr>
-                        <td>{{ src.name }}</td>
-                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            <a href="{{ src.url }}" target="_blank" style="color: #3b82f6;">{{ src.url }}</a>
-                        </td>
-                        <td>{{ src.city or '—' }}</td>
-                        <td>{{ src.country or '—' }}</td>
-                        <td>{{ src.language }}</td>
-                        <td>
-                            <span class="badge badge-{{ 'active' if src.status == 'active' else 'disabled' }}">{{ src.status }}</span>
-                        </td>
-                        <td>
-                            <form action="/admin/toggle-source/{{ src.id }}" method="POST" style="display:inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-primary btn-small">
-                                    {{ 'Disable' if src.status == 'active' else 'Enable' }}
-                                </button>
-                            </form>
-                            <form action="/admin/delete-source/{{ src.id }}" method="POST" style="display:inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-danger btn-small">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No web sources configured.</p>
-            {% endif %}
-
-            <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add New Source</h3>
-            <form action="/admin/add-source" method="POST">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-                    <div>
-                        <label class="form-label">URL *</label>
-                        <input type="url" name="url" required class="form-input" placeholder="https://example.com">
-                    </div>
-                    <div>
-                        <label class="form-label">Source Name *</label>
-                        <input type="text" name="source_name" required class="form-input" placeholder="Source name">
-                    </div>
-                    <div>
-                        <label class="form-label">City (optional)</label>
-                        <input type="text" name="city" class="form-input" placeholder="City">
-                    </div>
-                    <div>
-                        <label class="form-label">Country (optional)</label>
-                        <input type="text" name="country" class="form-input" placeholder="Country">
-                    </div>
-                    <div>
-                        <label class="form-label">Language</label>
-                        <input type="text" name="language" class="form-input" value="en" placeholder="en">
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-success">Add Source</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>Blog / News Management</h2>
-            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">Create blog posts visible on the public blog page and landing page.</p>
-            <form action="/admin/create-blog-post" method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div class="form-group">
-                    <label for="blog-title">Post Title</label>
-                    <input type="text" id="blog-title" name="blog_title" required style="width: 100%;">
-                </div>
-                <div class="form-group">
-                    <label for="blog-body">Post Body</label>
-                    <textarea id="blog-body" name="blog_body" rows="8" required style="width: 100%; font-family: inherit; font-size: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 6px;"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="blog-image">Thumbnail Image (optional, PNG/JPG, max 300KB)</label>
-                    <input type="file" id="blog-image" name="blog_image" accept=".png,.jpg,.jpeg">
-                </div>
-                <div class="form-group">
-                    <label for="blog-status">Status</label>
-                    <select id="blog-status" name="blog_status" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px;">
-                        <option value="published">Published</option>
-                        <option value="draft">Draft</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label><input type="checkbox" name="blog_pin" value="1" id="blog-pin-checkbox" onchange="document.getElementById('blog-pin-rank-group').style.display=this.checked?'block':'none'"> Pin this post</label>
-                </div>
-                <div class="form-group" id="blog-pin-rank-group" style="display:none;">
-                    <label for="blog-pin-rank">Pin position</label>
-                    <select id="blog-pin-rank" name="blog_pin_rank" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px;">
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn btn-primary">Create Post</button>
-            </form>
-
-            {% if all_blog_posts %}
-            <h3 style="margin-top: 24px;">Existing Posts</h3>
-            <table style="font-size: 13px; width: 100%;">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Title</th>
-                        <th>Status</th>
-                        <th>Pinned</th>
-                        <th>Created</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for bp in all_blog_posts %}
-                    <tr>
-                        <td>{{ bp.id }}</td>
-                        <td>{{ bp.title[:50] }}</td>
-                        <td>{{ bp.status }}</td>
-                        <td>{% if bp.is_pinned %}📌 #{{ bp.pinned_rank }}{% else %}—{% endif %}</td>
-                        <td>{{ bp.created_at[:16] }}</td>
-                        <td>
-                            <form action="/admin/toggle-pin/{{ bp.id }}" method="POST" style="display:inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                {% if bp.is_pinned %}
-                                <input type="hidden" name="pin_action" value="unpin">
-                                <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px;">Unpin</button>
-                                {% else %}
-                                <input type="hidden" name="pin_action" value="pin">
-                                <select name="pin_rank" style="padding: 2px 6px; font-size: 12px;">
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="3">3</option>
-                                </select>
-                                <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px;">Pin</button>
-                                {% endif %}
-                            </form>
-                            <form action="/admin/delete-blog-post/{{ bp.id }}" method="POST" style="display:inline; margin-left: 6px;" onsubmit="return confirm('Are you sure? This will permanently delete the post.');">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px; background: #c0392b; color: #fff;">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% endif %}
-        </div>
-
-        <div class="card">
-            <h2>Global Documents (Admin Uploads)</h2>
-            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
-                Upload global grounding documents. Active documents are included in all study reports. Allowed: {{ upload_allowed_extensions }}. Max {{ upload_max_file_size_mb }}MB per file.
-            </p>
-
-            {% if admin_uploads_list %}
-            <table style="margin-bottom: 20px; font-size: 13px;">
-                <thead>
-                    <tr>
-                        <th>Filename</th>
-                        <th>Type</th>
-                        <th>Size</th>
-                        <th>Uploaded</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for au in admin_uploads_list %}
-                    <tr>
-                        <td>{{ au.filename }}</td>
-                        <td><code>{{ au.file_type }}</code></td>
-                        <td>{{ (au.file_size_bytes / 1024)|round(1) }} KB</td>
-                        <td style="font-size: 12px;">{{ au.uploaded_at }}</td>
-                        <td>
-                            <span class="badge badge-{{ 'active' if au.status == 'active' else 'disabled' }}">{{ au.status }}</span>
-                        </td>
-                        <td>
-                            <form action="/admin/toggle-upload/{{ au.id }}" method="POST" style="display: inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-primary btn-small">
-                                    {{ 'Disable' if au.status == 'active' else 'Enable' }}
-                                </button>
-                            </form>
-                            <form action="/admin/delete-upload/{{ au.id }}" method="POST" style="display: inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Delete this upload?');">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No global documents uploaded yet.</p>
-            {% endif %}
-
-            <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Upload New Document</h3>
-            <form action="/admin/upload-document" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
-                <input type="hidden" name="token" value="{{ token }}">
-                <input type="file" name="file" required style="font-size: 13px;">
-                <button type="submit" class="btn btn-success">Upload</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>Model Configuration (Mark / Lisa / Ben)</h2>
-            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
-                Set which model each agent uses. Only active models from the Allowed Models list can be selected.
-            </p>
-            <form action="/admin/set-model-config" method="POST">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
-                    <div>
-                        <label class="form-label">Mark (Discovery) Model</label>
-                        <select name="mark_model" class="form-input" style="width: 100%;">
-                            {% for am in allowed_models_list %}
-                            {% if am.status == 'active' %}
-                            <option value="{{ am.model_id }}" {% if model_config.get('mark_model') == am.model_id %}selected{% endif %}>{{ am.model_id }}</option>
-                            {% endif %}
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="form-label">Lisa (Analysis) Model</label>
-                        <select name="lisa_model" class="form-input" style="width: 100%;">
-                            {% for am in allowed_models_list %}
-                            {% if am.status == 'active' %}
-                            <option value="{{ am.model_id }}" {% if model_config.get('lisa_model') == am.model_id %}selected{% endif %}>{{ am.model_id }}</option>
-                            {% endif %}
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="form-label">Ben (QA) Model</label>
-                        <select name="ben_model" class="form-input" style="width: 100%;">
-                            {% for am in allowed_models_list %}
-                            {% if am.status == 'active' %}
-                            <option value="{{ am.model_id }}" {% if model_config.get('ben_model') == am.model_id %}selected{% endif %}>{{ am.model_id }}</option>
-                            {% endif %}
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <p style="font-size: 12px; color: #999; margin-bottom: 8px;">
-                    Current: Mark = <code>{{ model_config.get('mark_model', 'not set') }}</code> |
-                    Lisa = <code>{{ model_config.get('lisa_model', 'not set') }}</code> |
-                    Ben = <code>{{ model_config.get('ben_model', 'not set') }}</code>
-                </p>
-                <button type="submit" class="btn btn-success">Save Model Configuration</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>Allowed Models</h2>
-            <p style="font-size: 13px; color: #777; margin-bottom: 8px;">
-                Models available for Mark/Lisa/Ben selection and persona pool. Only active models can be assigned.
-            </p>
-            <p style="font-size: 12px; color: #666; margin-bottom: 16px;">
-                <a href="https://docs.replit.com/category/ai-integrations" target="_blank" style="color: #3b82f6;">Replit AI Integrations docs</a> |
-                <a href="https://openrouter.ai/models" target="_blank" style="color: #3b82f6;">OpenRouter Models catalog</a>
-            </p>
-
-            {% if allowed_models_list %}
-            <table style="margin-bottom: 20px; font-size: 13px;">
-                <thead>
-                    <tr>
-                        <th>Model ID</th>
-                        <th>Source</th>
-                        <th>Status</th>
-                        <th>Added</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for am in allowed_models_list %}
-                    <tr>
-                        <td><code>{{ am.model_id }}</code></td>
-                        <td>{{ am.source }}</td>
-                        <td><span class="badge badge-{{ 'active' if am.status == 'active' else 'disabled' }}">{{ am.status }}</span></td>
-                        <td style="font-size: 12px;">{{ am.added_at }}</td>
-                        <td>
-                            <form action="/admin/toggle-allowed-model/{{ am.id }}" method="POST" style="display: inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-primary btn-small">{{ 'Disable' if am.status == 'active' else 'Enable' }}</button>
-                            </form>
-                            <form action="/admin/delete-allowed-model/{{ am.id }}" method="POST" style="display: inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Remove this model?');">Remove</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No allowed models configured.</p>
-            {% endif %}
-
-            <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add New Model</h3>
-            <form action="/admin/add-allowed-model" method="POST" style="display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px;">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div style="flex: 1;">
-                    <label class="form-label">Model ID</label>
-                    <input type="text" name="model_id" required class="form-input" placeholder="e.g. openai/gpt-5.4-mini">
-                </div>
-                <div>
-                    <label class="form-label">Source</label>
-                    <input type="text" name="source" class="form-input" value="replit_openrouter" placeholder="replit_openrouter">
-                </div>
-                <button type="submit" class="btn btn-success">Add Model</button>
-            </form>
-
-            <form action="/admin/import-openrouter-models" method="POST" style="display: inline;">
-                <input type="hidden" name="token" value="{{ token }}">
-                <button type="submit" class="btn btn-primary btn-small">Import from OpenRouter API</button>
-            </form>
-            <span style="font-size: 12px; color: #999; margin-left: 8px;">Fetches model IDs from OpenRouter /api/v1/models endpoint</span>
-        </div>
-
-        <div class="card">
-            <h2>Persona Model Pool</h2>
-            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
-                When a user creates a persona, one model is randomly selected from the active pool entries. Models must first be in the Allowed Models list.
-            </p>
-
-            {% if persona_pool_list %}
-            <table style="margin-bottom: 20px; font-size: 13px;">
-                <thead>
-                    <tr>
-                        <th>Model ID</th>
-                        <th>Status</th>
-                        <th>Added</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for pm in persona_pool_list %}
-                    <tr>
-                        <td><code>{{ pm.model_id }}</code></td>
-                        <td><span class="badge badge-{{ 'active' if pm.status == 'active' else 'disabled' }}">{{ pm.status }}</span></td>
-                        <td style="font-size: 12px;">{{ pm.added_at }}</td>
-                        <td>
-                            <form action="/admin/toggle-pool-model/{{ pm.id }}" method="POST" style="display: inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-primary btn-small">{{ 'Disable' if pm.status == 'active' else 'Enable' }}</button>
-                            </form>
-                            <form action="/admin/remove-pool-model/{{ pm.id }}" method="POST" style="display: inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-danger btn-small">Remove</button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p style="color: #f59e0b; font-size: 13px; margin-bottom: 16px;">⚠ No models in persona pool. Users cannot create personas until at least one active model is added.</p>
-            {% endif %}
-
-            <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add Model to Pool</h3>
-            <form action="/admin/add-pool-model" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div style="flex: 1;">
-                    <label class="form-label">Select Active Model</label>
-                    <select name="model_id" required class="form-input" style="width: 100%;">
-                        <option value="">-- Select a model --</option>
-                        {% for am in allowed_models_list %}
-                        {% if am.status == 'active' %}
-                        <option value="{{ am.model_id }}">{{ am.model_id }}</option>
-                        {% endif %}
-                        {% endfor %}
-                    </select>
-                </div>
-                <button type="submit" class="btn btn-success">Add to Pool</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>Model Health</h2>
-            <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
-                Per-model health status. Auto-checked daily on admin dashboard load.
-            </p>
-
-            {% if latest_health_check %}
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 18px; margin-bottom: 18px;">
-                <h3 style="font-size: 14px; color: #1a1a2e; margin: 0 0 8px 0;">Last Health Check Run</h3>
-                <table style="font-size: 13px; margin: 0;">
-                    <tr>
-                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Status:</td>
-                        <td>
-                            {% if latest_health_check.summary_status == 'pass' %}
-                            <span class="badge badge-active">PASS</span>
-                            {% elif latest_health_check.summary_status == 'fail' %}
-                            <span class="badge badge-disabled">FAIL</span>
-                            {% else %}
-                            <span class="badge" style="background: #6b7280; color: #fff;">{{ latest_health_check.summary_status|upper }}</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Run ID:</td>
-                        <td style="font-family: monospace; font-size: 12px;">{{ latest_health_check.run_id }}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Type:</td>
-                        <td>{{ latest_health_check.run_type }}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Started:</td>
-                        <td style="font-family: monospace; font-size: 12px;">{{ latest_health_check.started_at }}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Finished:</td>
-                        <td style="font-family: monospace; font-size: 12px;">{{ latest_health_check.finished_at }}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 2px 12px 2px 0; font-weight: 600;">Integration:</td>
-                        <td>{{ latest_health_check.integration_mode }}</td>
-                    </tr>
-                </table>
-            </div>
-            {% else %}
-            <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No health checks run yet.</p>
-            {% endif %}
-
-            {% set active_pool_ids = [] %}
-            {% for pm in persona_pool_list %}
-                {% if pm.status == 'active' %}
-                    {% set _ = active_pool_ids.append(pm.model_id) %}
-                {% endif %}
-            {% endfor %}
-            {% set fail_pool_models = [] %}
-            {% for hs in health_status_list %}
-                {% if hs.status == 'fail' and hs.model_id in active_pool_ids %}
-                    {% set _ = fail_pool_models.append(hs.model_id) %}
-                {% endif %}
-            {% endfor %}
-            {% if fail_pool_models %}
-            <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:12px 16px;margin-bottom:16px;">
-                <strong style="color:#856404;">⚠ Warning:</strong>
-                <span style="color:#856404;">
-                    {{ fail_pool_models|length }} model(s) have FAIL status:
-                    {% for fm in fail_pool_models %}<code>{{ fm }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
-                    These models will be excluded from persona generation. Please investigate or remove them from the pool.
-                </span>
-            </div>
-            {% endif %}
-
-            {% if health_status_list %}
-            <table style="margin-bottom: 20px; font-size: 13px;">
-                <thead>
-                    <tr>
-                        <th>Model ID</th>
-                        <th>Status</th>
-                        <th>Last Tested</th>
-                        <th>Last Error</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for hs in health_status_list %}
-                    <tr>
-                        <td><code>{{ hs.model_id }}</code></td>
-                        <td>
-                            {% if hs.status == 'pass' %}
-                            <span class="badge badge-active">PASS</span>
-                            {% elif hs.status == 'fail' %}
-                            <span class="badge badge-disabled">FAIL</span>
-                            {% elif hs.status == 'not_connected' %}
-                            <span class="badge" style="background: #f59e0b; color: #fff;">NOT CONNECTED</span>
-                            {% else %}
-                            <span class="badge" style="background: #6b7280; color: #fff;">UNKNOWN</span>
-                            {% endif %}
-                        </td>
-                        <td style="font-size: 12px; font-family: monospace;">{{ hs.last_tested_at or '—' }}</td>
-                        <td style="font-size: 12px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ hs.last_error or '—' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% endif %}
-
-            <div style="display: flex; gap: 12px; align-items: center;">
-                <form action="/admin/model-health/run" method="POST" style="display: inline;">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <button type="submit" class="btn btn-primary">Run Health Check Now</button>
-                </form>
-            </div>
-
-            {% if latest_weekly_report %}
-            <div style="margin-top: 20px;">
-                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px;">Weekly QA Report</h3>
-                <pre style="background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto;">{{ latest_weekly_report.report_text }}</pre>
-                <p style="font-size: 11px; color: #999; margin-top: 4px;">Week: {{ latest_weekly_report.week_start_date }} | Generated: {{ latest_weekly_report.created_at }}</p>
-            </div>
-            {% else %}
-            <p style="color: #999; font-size: 13px; margin-top: 16px;">No weekly QA report yet.</p>
-            {% endif %}
-        </div>
-
-        <div class="card">
-            <h2>Grounding Traces (Recent 50)</h2>
-            {% if grounding_traces %}
-            <div style="overflow-x: auto;">
-                <table style="font-size: 12px;">
+                {% if dm_messages_list %}
+                <h3 style="font-size:14px;color:#1a1a2e;margin-bottom:10px;">Received Messages</h3>
+                <table style="font-size:13px;width:100%;">
                     <thead>
                         <tr>
-                            <th style="white-space: nowrap;">Trace ID</th>
-                            <th>Timestamp (UTC)</th>
-                            <th>Trigger</th>
-                            <th>Study ID</th>
-                            <th>Persona ID</th>
-                            <th style="white-space: nowrap;">Sources Configured</th>
-                            <th>Queried</th>
-                            <th>Matched</th>
-                            <th style="white-space: nowrap;">Used in Output</th>
-                            <th>Reason Code</th>
+                            <th style="width:20px;"></th>
+                            <th>Category</th>
+                            <th>Subject</th>
+                            <th>From</th>
+                            <th>Date</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for gt in grounding_traces %}
-                        <tr>
-                            <td style="font-weight: 600; color: #1a1a2e;">#{{ gt.id }}</td>
-                            <td style="white-space: nowrap; font-family: monospace; font-size: 11px;">{{ gt.timestamp_utc }}</td>
-                            <td><code>{{ gt.trigger_event }}</code></td>
-                            <td>{{ gt.study_id or '—' }}</td>
-                            <td>{{ gt.persona_id or '—' }}</td>
-                            <td>{{ 'Yes' if gt.admin_sources_configured else 'No' }}</td>
-                            <td>{{ 'Yes' if gt.admin_sources_queried else 'No' }}</td>
-                            <td>{{ 'Yes' if gt.admin_sources_matched else 'No' }}</td>
-                            <td>{{ 'Yes' if gt.admin_sources_used_in_output else 'No' }}</td>
-                            <td><code style="color: #c0392b;">{{ gt.admin_source_reason_code or '—' }}</code></td>
+                        {% for m in dm_messages_list %}
+                        <tr class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" style="cursor:pointer;{% if not m.read %}font-weight:600;background:#f0f9ff;{% endif %}">
+                            <td>{% if not m.read %}<span style="color:#dc3545;font-size:16px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:16px;">&#9675;</span>{% endif %}</td>
+                            <td><span style="font-size:11px;padding:2px 6px;border-radius:4px;background:#e2e8f0;color:#475569;">{{ m.get('category', '—') }}</span></td>
+                            <td>{{ m.subject }}</td>
+                            <td style="font-size:12px;color:#777;">{{ m.get('sender_name', m.sender_type|default('system')) }}</td>
+                            <td style="font-size:12px;color:#777;white-space:nowrap;">{{ m.timestamp }}</td>
+                            <td>
+                                {% if not m.read %}
+                                <form action="/mark-message-read" method="POST" style="display:inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <input type="hidden" name="msg_id" value="{{ m.id }}">
+                                    <button type="submit" class="btn btn-secondary btn-small" style="font-size:11px;padding:2px 8px;">Mark Read</button>
+                                </form>
+                                {% endif %}
+                                {% if m.sender_type == 'user' and m.sender_id %}
+                                <button type="button" class="btn btn-primary btn-small" style="font-size:11px;padding:2px 8px;" onclick="adminReply('{{ m.sender_id }}','{{ m.subject|truncate(14,True,'') }}')">Reply</button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr class="dm-msg-body" style="display:none;">
+                            <td colspan="6" style="padding:8px 16px;background:#f8f9fa;border-left:3px solid #5C7E8F;">
+                                <p style="font-size:13px;color:#333;margin:0;">{{ m.body }}</p>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:#777;">
+                    <span>{{ dm_total }} messages — Page {{ dm_page }} of {{ dm_total_pages }}</span>
+                    <div style="display:flex;gap:6px;">
+                        {% if dm_page > 1 %}
+                        <a href="/?token={{ token }}&dm_page={{ dm_page - 1 }}#acc-messages" class="btn btn-secondary btn-small" onclick="setTimeout(function(){toggleAdminAcc('acc-messages-body')},100)">Prev</a>
+                        {% endif %}
+                        {% if dm_page < dm_total_pages %}
+                        <a href="/?token={{ token }}&dm_page={{ dm_page + 1 }}#acc-messages" class="btn btn-secondary btn-small" onclick="setTimeout(function(){toggleAdminAcc('acc-messages-body')},100)">Next</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="empty-state">No messages received yet.</div>
+                {% endif %}
             </div>
-            {% else %}
-            <p style="color: #999; font-size: 13px;">No grounding traces recorded yet.</p>
-            {% endif %}
         </div>
 
-        <div class="card">
-            <h2>Recent Cost Telemetry (Last 50)</h2>
-            {% if cost_telemetry_rows %}
-            <div style="overflow-x: auto;">
-                <table style="font-size: 12px;">
+        <div class="card" id="acc-pending">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-pending-body')">
+                <h2>Pending Users {% if pending_users %}<span style="background:#f59e0b;color:#fff;font-size:11px;padding:2px 7px;border-radius:10px;margin-left:6px;">{{ pending_users|length }}</span>{% endif %}</h2>
+                <span class="admin-acc-arrow" id="acc-pending-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-pending-body">
+                {% if pending_users %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Username</th>
+                            <th>Signed Up</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in pending_users %}
+                        <tr>
+                            <td>{{ u.email }}</td>
+                            <td>{{ u.username }}</td>
+                            <td>{{ u.created_at }}</td>
+                            <td>
+                                <form action="/admin/approve/{{ u.id }}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-success btn-small">Approve</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color: #777; font-size: 14px;">No pending users.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card" id="acc-allusers">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-allusers-body')">
+                <h2>All Users</h2>
+                <span class="admin-acc-arrow" id="acc-allusers-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-allusers-body">
+                {% if all_users %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Username</th>
+                            <th>State</th>
+                            <th>Signed Up</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in all_users %}
+                        <tr>
+                            <td>{{ u.email }}</td>
+                            <td>{{ u.username }}</td>
+                            <td><span class="badge badge-{{ u.state }}">{{ u.state }}</span></td>
+                            <td>{{ u.created_at }}</td>
+                            <td>
+                                {% if u.state == 'pending' %}
+                                <form action="/admin/approve/{{ u.id }}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-success btn-small">Approve</button>
+                                </form>
+                                {% endif %}
+                                {% if u.state != 'disabled' %}
+                                <form action="/admin/disable/{{ u.id }}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-danger btn-small">Disable</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color: #777; font-size: 14px;">No users yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card" id="acc-websources">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-websources-body')">
+                <h2>Admin-Directed Web Sources</h2>
+                <span class="admin-acc-arrow" id="acc-websources-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-websources-body">
+                <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
+                    Configure web sources for grounding trace. Active sources set admin_sources_configured and admin_sources_queried to true.
+                </p>
+                {% if admin_web_sources %}
+                <table style="margin-bottom: 20px;">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>URL</th>
+                            <th>City</th>
+                            <th>Country</th>
+                            <th>Language</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for src in admin_web_sources %}
+                        <tr>
+                            <td>{{ src.name }}</td>
+                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <a href="{{ src.url }}" target="_blank" style="color: #3b82f6;">{{ src.url }}</a>
+                            </td>
+                            <td>{{ src.city or '—' }}</td>
+                            <td>{{ src.country or '—' }}</td>
+                            <td>{{ src.language }}</td>
+                            <td>
+                                <span class="badge badge-{{ 'active' if src.status == 'active' else 'disabled' }}">{{ src.status }}</span>
+                            </td>
+                            <td>
+                                <form action="/admin/toggle-source/{{ src.id }}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-primary btn-small">
+                                        {{ 'Disable' if src.status == 'active' else 'Enable' }}
+                                    </button>
+                                </form>
+                                <form action="/admin/delete-source/{{ src.id }}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-danger btn-small">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No web sources configured.</p>
+                {% endif %}
+                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add New Source</h3>
+                <form action="/admin/add-source" method="POST">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                        <div>
+                            <label class="form-label">URL *</label>
+                            <input type="url" name="url" required class="form-input" placeholder="https://example.com">
+                        </div>
+                        <div>
+                            <label class="form-label">Source Name *</label>
+                            <input type="text" name="source_name" required class="form-input" placeholder="Source name">
+                        </div>
+                        <div>
+                            <label class="form-label">City (optional)</label>
+                            <input type="text" name="city" class="form-input" placeholder="City">
+                        </div>
+                        <div>
+                            <label class="form-label">Country (optional)</label>
+                            <input type="text" name="country" class="form-input" placeholder="Country">
+                        </div>
+                        <div>
+                            <label class="form-label">Language</label>
+                            <input type="text" name="language" class="form-input" value="en" placeholder="en">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success">Add Source</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card" id="acc-globaldocs">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-globaldocs-body')">
+                <h2>Global Documents</h2>
+                <span class="admin-acc-arrow" id="acc-globaldocs-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-globaldocs-body">
+                <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
+                    Upload global grounding documents. Active documents are included in all study reports. Allowed: {{ upload_allowed_extensions }}. Max {{ upload_max_file_size_mb }}MB per file.
+                </p>
+                {% if admin_uploads_list %}
+                <table style="margin-bottom: 20px; font-size: 13px;">
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Type</th>
+                            <th>Size</th>
+                            <th>Uploaded</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for au in admin_uploads_list %}
+                        <tr>
+                            <td>{{ au.filename }}</td>
+                            <td><code>{{ au.file_type }}</code></td>
+                            <td>{{ (au.file_size_bytes / 1024)|round(1) }} KB</td>
+                            <td style="font-size: 12px;">{{ au.uploaded_at }}</td>
+                            <td>
+                                <span class="badge badge-{{ 'active' if au.status == 'active' else 'disabled' }}">{{ au.status }}</span>
+                            </td>
+                            <td>
+                                <form action="/admin/toggle-upload/{{ au.id }}" method="POST" style="display: inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-primary btn-small">
+                                        {{ 'Disable' if au.status == 'active' else 'Enable' }}
+                                    </button>
+                                </form>
+                                <form action="/admin/delete-upload/{{ au.id }}" method="POST" style="display: inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Delete this upload?');">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No global documents uploaded yet.</p>
+                {% endif %}
+                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Upload New Document</h3>
+                <form action="/admin/upload-document" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="file" name="file" required style="font-size: 13px;">
+                    <button type="submit" class="btn btn-success">Upload</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card" id="acc-modelconfig">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-modelconfig-body')">
+                <h2>Model Config (Mark / Lisa / Ben)</h2>
+                <span class="admin-acc-arrow" id="acc-modelconfig-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-modelconfig-body">
+                <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
+                    Set which model each agent uses. Only active models from the Allowed Models list can be selected.
+                </p>
+                <form action="/admin/set-model-config" method="POST">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <div>
+                            <label class="form-label">Mark (Discovery) Model</label>
+                            <select name="mark_model" class="form-input" style="width: 100%;">
+                                {% for am in allowed_models_list %}
+                                {% if am.status == 'active' %}
+                                <option value="{{ am.model_id }}" {% if model_config.get('mark_model') == am.model_id %}selected{% endif %}>{{ am.model_id }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label">Lisa (Analysis) Model</label>
+                            <select name="lisa_model" class="form-input" style="width: 100%;">
+                                {% for am in allowed_models_list %}
+                                {% if am.status == 'active' %}
+                                <option value="{{ am.model_id }}" {% if model_config.get('lisa_model') == am.model_id %}selected{% endif %}>{{ am.model_id }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label">Ben (QA) Model</label>
+                            <select name="ben_model" class="form-input" style="width: 100%;">
+                                {% for am in allowed_models_list %}
+                                {% if am.status == 'active' %}
+                                <option value="{{ am.model_id }}" {% if model_config.get('ben_model') == am.model_id %}selected{% endif %}>{{ am.model_id }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <p style="font-size: 12px; color: #999; margin-bottom: 8px;">
+                        Current: Mark = <code>{{ model_config.get('mark_model', 'not set') }}</code> |
+                        Lisa = <code>{{ model_config.get('lisa_model', 'not set') }}</code> |
+                        Ben = <code>{{ model_config.get('ben_model', 'not set') }}</code>
+                    </p>
+                    <button type="submit" class="btn btn-success">Save Model Configuration</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card" id="acc-personapool">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-personapool-body')">
+                <h2>Persona Model Pool</h2>
+                <span class="admin-acc-arrow" id="acc-personapool-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-personapool-body">
+                <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
+                    When a user creates a persona, one model is randomly selected from the active pool entries. Models must first be in the Allowed Models list.
+                </p>
+                {% if persona_pool_list %}
+                <table style="margin-bottom: 20px; font-size: 13px;">
+                    <thead>
+                        <tr>
+                            <th>Model ID</th>
+                            <th>Status</th>
+                            <th>Added</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pm in persona_pool_list %}
+                        <tr>
+                            <td><code>{{ pm.model_id }}</code></td>
+                            <td><span class="badge badge-{{ 'active' if pm.status == 'active' else 'disabled' }}">{{ pm.status }}</span></td>
+                            <td style="font-size: 12px;">{{ pm.added_at }}</td>
+                            <td>
+                                <form action="/admin/toggle-pool-model/{{ pm.id }}" method="POST" style="display: inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-primary btn-small">{{ 'Disable' if pm.status == 'active' else 'Enable' }}</button>
+                                </form>
+                                <form action="/admin/remove-pool-model/{{ pm.id }}" method="POST" style="display: inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-danger btn-small">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color: #f59e0b; font-size: 13px; margin-bottom: 16px;">&#9888; No models in persona pool. Users cannot create personas until at least one active model is added.</p>
+                {% endif %}
+                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add Model to Pool</h3>
+                <form action="/admin/add-pool-model" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div style="flex: 1;">
+                        <label class="form-label">Select Active Model</label>
+                        <select name="model_id" required class="form-input" style="width: 100%;">
+                            <option value="">-- Select a model --</option>
+                            {% for am in allowed_models_list %}
+                            {% if am.status == 'active' %}
+                            <option value="{{ am.model_id }}">{{ am.model_id }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success">Add to Pool</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card" id="acc-modelhealth">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-modelhealth-body')">
+                <h2>Model Health</h2>
+                <span class="admin-acc-arrow" id="acc-modelhealth-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-modelhealth-body">
+                <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
+                    Per-model health status. Auto-checked daily on admin dashboard load.
+                </p>
+                {% if latest_health_check %}
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 18px; margin-bottom: 18px;">
+                    <h3 style="font-size: 14px; color: #1a1a2e; margin: 0 0 8px 0;">Last Health Check Run</h3>
+                    <table style="font-size: 13px; margin: 0;">
+                        <tr>
+                            <td style="padding: 2px 12px 2px 0; font-weight: 600;">Status:</td>
+                            <td>
+                                {% if latest_health_check.summary_status == 'pass' %}
+                                <span class="badge badge-active">PASS</span>
+                                {% elif latest_health_check.summary_status == 'fail' %}
+                                <span class="badge badge-disabled">FAIL</span>
+                                {% else %}
+                                <span class="badge" style="background: #6b7280; color: #fff;">{{ latest_health_check.summary_status|upper }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 2px 12px 2px 0; font-weight: 600;">Run ID:</td>
+                            <td style="font-family: monospace; font-size: 12px;">{{ latest_health_check.run_id }}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 2px 12px 2px 0; font-weight: 600;">Type:</td>
+                            <td>{{ latest_health_check.run_type }}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 2px 12px 2px 0; font-weight: 600;">Started:</td>
+                            <td style="font-family: monospace; font-size: 12px;">{{ latest_health_check.started_at }}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 2px 12px 2px 0; font-weight: 600;">Finished:</td>
+                            <td style="font-family: monospace; font-size: 12px;">{{ latest_health_check.finished_at }}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 2px 12px 2px 0; font-weight: 600;">Integration:</td>
+                            <td>{{ latest_health_check.integration_mode }}</td>
+                        </tr>
+                    </table>
+                </div>
+                {% else %}
+                <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No health checks run yet.</p>
+                {% endif %}
+                {% set active_pool_ids = [] %}
+                {% for pm in persona_pool_list %}
+                    {% if pm.status == 'active' %}
+                        {% set _ = active_pool_ids.append(pm.model_id) %}
+                    {% endif %}
+                {% endfor %}
+                {% set fail_pool_models = [] %}
+                {% for hs in health_status_list %}
+                    {% if hs.status == 'fail' and hs.model_id in active_pool_ids %}
+                        {% set _ = fail_pool_models.append(hs.model_id) %}
+                    {% endif %}
+                {% endfor %}
+                {% if fail_pool_models %}
+                <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:12px 16px;margin-bottom:16px;">
+                    <strong style="color:#856404;">&#9888; Warning:</strong>
+                    <span style="color:#856404;">
+                        {{ fail_pool_models|length }} model(s) have FAIL status:
+                        {% for fm in fail_pool_models %}<code>{{ fm }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+                        These models will be excluded from persona generation. Please investigate or remove them from the pool.
+                    </span>
+                </div>
+                {% endif %}
+                {% if health_status_list %}
+                <table style="margin-bottom: 20px; font-size: 13px;">
+                    <thead>
+                        <tr>
+                            <th>Model ID</th>
+                            <th>Status</th>
+                            <th>Last Tested</th>
+                            <th>Last Error</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for hs in health_status_list %}
+                        <tr>
+                            <td><code>{{ hs.model_id }}</code></td>
+                            <td>
+                                {% if hs.status == 'pass' %}
+                                <span class="badge badge-active">PASS</span>
+                                {% elif hs.status == 'fail' %}
+                                <span class="badge badge-disabled">FAIL</span>
+                                {% elif hs.status == 'not_connected' %}
+                                <span class="badge" style="background: #f59e0b; color: #fff;">NOT CONNECTED</span>
+                                {% else %}
+                                <span class="badge" style="background: #6b7280; color: #fff;">UNKNOWN</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-size: 12px; font-family: monospace;">{{ hs.last_tested_at or '—' }}</td>
+                            <td style="font-size: 12px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ hs.last_error or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% endif %}
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <form action="/admin/model-health/run" method="POST" style="display: inline;">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <button type="submit" class="btn btn-primary">Run Health Check Now</button>
+                    </form>
+                </div>
+                {% if latest_weekly_report %}
+                <div style="margin-top: 20px;">
+                    <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px;">Weekly QA Report</h3>
+                    <pre style="background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto;">{{ latest_weekly_report.report_text }}</pre>
+                    <p style="font-size: 11px; color: #999; margin-top: 4px;">Week: {{ latest_weekly_report.week_start_date }} | Generated: {{ latest_weekly_report.created_at }}</p>
+                </div>
+                {% else %}
+                <p style="color: #999; font-size: 13px; margin-top: 16px;">No weekly QA report yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card" id="acc-allowedmodels">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-allowedmodels-body')">
+                <h2>Allowed Models</h2>
+                <span class="admin-acc-arrow" id="acc-allowedmodels-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-allowedmodels-body">
+                <p style="font-size: 13px; color: #777; margin-bottom: 8px;">
+                    Models available for Mark/Lisa/Ben selection and persona pool. Only active models can be assigned.
+                </p>
+                <p style="font-size: 12px; color: #666; margin-bottom: 16px;">
+                    <a href="https://docs.replit.com/category/ai-integrations" target="_blank" style="color: #3b82f6;">Replit AI Integrations docs</a> |
+                    <a href="https://openrouter.ai/models" target="_blank" style="color: #3b82f6;">OpenRouter Models catalog</a>
+                </p>
+                {% if allowed_models_list %}
+                <table style="margin-bottom: 20px; font-size: 13px;">
+                    <thead>
+                        <tr>
+                            <th>Model ID</th>
+                            <th>Source</th>
+                            <th>Status</th>
+                            <th>Added</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for am in allowed_models_list %}
+                        <tr>
+                            <td><code>{{ am.model_id }}</code></td>
+                            <td>{{ am.source }}</td>
+                            <td><span class="badge badge-{{ 'active' if am.status == 'active' else 'disabled' }}">{{ am.status }}</span></td>
+                            <td style="font-size: 12px;">{{ am.added_at }}</td>
+                            <td>
+                                <form action="/admin/toggle-allowed-model/{{ am.id }}" method="POST" style="display: inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-primary btn-small">{{ 'Disable' if am.status == 'active' else 'Enable' }}</button>
+                                </form>
+                                <form action="/admin/delete-allowed-model/{{ am.id }}" method="POST" style="display: inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Remove this model?');">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No allowed models configured.</p>
+                {% endif %}
+                <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add New Model</h3>
+                <form action="/admin/add-allowed-model" method="POST" style="display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div style="flex: 1;">
+                        <label class="form-label">Model ID</label>
+                        <input type="text" name="model_id" required class="form-input" placeholder="e.g. openai/gpt-5.4-mini">
+                    </div>
+                    <div>
+                        <label class="form-label">Source</label>
+                        <input type="text" name="source" class="form-input" value="replit_openrouter" placeholder="replit_openrouter">
+                    </div>
+                    <button type="submit" class="btn btn-success">Add Model</button>
+                </form>
+                <form action="/admin/import-openrouter-models" method="POST" style="display: inline;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <button type="submit" class="btn btn-primary btn-small">Import from OpenRouter API</button>
+                </form>
+                <span style="font-size: 12px; color: #999; margin-left: 8px;">Fetches model IDs from OpenRouter /api/v1/models endpoint</span>
+            </div>
+        </div>
+
+        <div class="card" id="acc-grounding">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-grounding-body')">
+                <h2>Grounding Traces</h2>
+                <span class="admin-acc-arrow" id="acc-grounding-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-grounding-body">
+                {% if grounding_traces %}
+                <div style="overflow-x: auto;">
+                    <table style="font-size: 12px;">
+                        <thead>
+                            <tr>
+                                <th style="white-space: nowrap;">Trace ID</th>
+                                <th>Timestamp (UTC)</th>
+                                <th>Trigger</th>
+                                <th>Study ID</th>
+                                <th>Persona ID</th>
+                                <th style="white-space: nowrap;">Sources Configured</th>
+                                <th>Queried</th>
+                                <th>Matched</th>
+                                <th style="white-space: nowrap;">Used in Output</th>
+                                <th>Reason Code</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for gt in grounding_traces %}
+                            <tr>
+                                <td style="font-weight: 600; color: #1a1a2e;">#{{ gt.id }}</td>
+                                <td style="white-space: nowrap; font-family: monospace; font-size: 11px;">{{ gt.timestamp_utc }}</td>
+                                <td><code>{{ gt.trigger_event }}</code></td>
+                                <td>{{ gt.study_id or '—' }}</td>
+                                <td>{{ gt.persona_id or '—' }}</td>
+                                <td>{{ 'Yes' if gt.admin_sources_configured else 'No' }}</td>
+                                <td>{{ 'Yes' if gt.admin_sources_queried else 'No' }}</td>
+                                <td>{{ 'Yes' if gt.admin_sources_matched else 'No' }}</td>
+                                <td>{{ 'Yes' if gt.admin_sources_used_in_output else 'No' }}</td>
+                                <td><code style="color: #c0392b;">{{ gt.admin_source_reason_code or '—' }}</code></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p style="color: #999; font-size: 13px;">No grounding traces recorded yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card" id="acc-costtelemetry">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-costtelemetry-body')">
+                <h2>Recent Cost Telemetry</h2>
+                <span class="admin-acc-arrow" id="acc-costtelemetry-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-costtelemetry-body">
+                {% if cost_telemetry_rows %}
+                <div style="overflow-x: auto;">
+                    <table style="font-size: 12px;">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Study ID</th>
+                                <th>Type</th>
+                                <th>Tokens Total</th>
+                                <th>Mark</th>
+                                <th>Lisa</th>
+                                <th>Ben</th>
+                                <th>Model Calls</th>
+                                <th>QA Retries</th>
+                                <th>Status</th>
+                                <th>Termination</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ct in cost_telemetry_rows %}
+                            <tr>
+                                <td style="font-weight: 600;">#{{ ct.id }}</td>
+                                <td>{{ ct.study_id }}</td>
+                                <td>{{ ct.study_type or '—' }}</td>
+                                <td style="font-weight: 600;">{{ ct.tokens_total }}</td>
+                                <td>{{ ct.tokens_mark }}</td>
+                                <td>{{ ct.tokens_lisa }}</td>
+                                <td>{{ ct.tokens_ben }}</td>
+                                <td>{{ ct.model_call_count }}</td>
+                                <td>{{ ct.qa_retry_count }}</td>
+                                <td><span class="badge badge-{{ ct.status }}">{{ ct.status }}</span></td>
+                                <td><code style="color: #c0392b;">{{ ct.termination_reason or '—' }}</code></td>
+                                <td style="white-space: nowrap; font-family: monospace; font-size: 11px;">{{ ct.timestamp_utc }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p style="color: #999; font-size: 13px;">No cost telemetry records yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card" id="acc-export">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-export-body')">
+                <h2>Export Data (CSV)</h2>
+                <span class="admin-acc-arrow" id="acc-export-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-export-body">
+                <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Download full database tables as CSV files.</p>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <a href="/admin/export/users.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Users CSV</a>
+                    <a href="/admin/export/studies.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Studies CSV</a>
+                    <a href="/admin/export/cost_telemetry.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Cost Telemetry CSV</a>
+                    <a href="/admin/export/grounding_traces.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Grounding Traces CSV</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="acc-blog">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-blog-body')">
+                <h2>Blog / News Management</h2>
+                <span class="admin-acc-arrow" id="acc-blog-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-blog-body">
+                <p style="font-size: 13px; color: #777; margin-bottom: 16px;">Create blog posts visible on the public blog page and landing page.</p>
+                <form action="/admin/create-blog-post" method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div class="form-group">
+                        <label for="blog-title">Post Title</label>
+                        <input type="text" id="blog-title" name="blog_title" required style="width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label for="blog-body">Post Body</label>
+                        <textarea id="blog-body" name="blog_body" rows="8" required style="width: 100%; font-family: inherit; font-size: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 6px;"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="blog-image">Thumbnail Image (optional, PNG/JPG, max 300KB)</label>
+                        <input type="file" id="blog-image" name="blog_image" accept=".png,.jpg,.jpeg">
+                    </div>
+                    <div class="form-group">
+                        <label for="blog-status">Status</label>
+                        <select id="blog-status" name="blog_status" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px;">
+                            <option value="published">Published</option>
+                            <option value="draft">Draft</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label><input type="checkbox" name="blog_pin" value="1" id="blog-pin-checkbox" onchange="document.getElementById('blog-pin-rank-group').style.display=this.checked?'block':'none'"> Pin this post</label>
+                    </div>
+                    <div class="form-group" id="blog-pin-rank-group" style="display:none;">
+                        <label for="blog-pin-rank">Pin position</label>
+                        <select id="blog-pin-rank" name="blog_pin_rank" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px;">
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create Post</button>
+                </form>
+                {% if all_blog_posts %}
+                <h3 style="margin-top: 24px;">Existing Posts</h3>
+                <table style="font-size: 13px; width: 100%;">
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Study ID</th>
-                            <th>Type</th>
-                            <th>Tokens Total</th>
-                            <th>Mark</th>
-                            <th>Lisa</th>
-                            <th>Ben</th>
-                            <th>Model Calls</th>
-                            <th>QA Retries</th>
+                            <th>Title</th>
                             <th>Status</th>
-                            <th>Termination</th>
-                            <th>Timestamp</th>
+                            <th>Pinned</th>
+                            <th>Created</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for ct in cost_telemetry_rows %}
+                        {% for bp in all_blog_posts %}
                         <tr>
-                            <td style="font-weight: 600;">#{{ ct.id }}</td>
-                            <td>{{ ct.study_id }}</td>
-                            <td>{{ ct.study_type or '—' }}</td>
-                            <td style="font-weight: 600;">{{ ct.tokens_total }}</td>
-                            <td>{{ ct.tokens_mark }}</td>
-                            <td>{{ ct.tokens_lisa }}</td>
-                            <td>{{ ct.tokens_ben }}</td>
-                            <td>{{ ct.model_call_count }}</td>
-                            <td>{{ ct.qa_retry_count }}</td>
-                            <td><span class="badge badge-{{ ct.status }}">{{ ct.status }}</span></td>
-                            <td><code style="color: #c0392b;">{{ ct.termination_reason or '—' }}</code></td>
-                            <td style="white-space: nowrap; font-family: monospace; font-size: 11px;">{{ ct.timestamp_utc }}</td>
+                            <td>{{ bp.id }}</td>
+                            <td>{{ bp.title[:50] }}</td>
+                            <td>{{ bp.status }}</td>
+                            <td>{% if bp.is_pinned %}&#128204; #{{ bp.pinned_rank }}{% else %}—{% endif %}</td>
+                            <td>{{ bp.created_at[:16] }}</td>
+                            <td>
+                                <form action="/admin/toggle-pin/{{ bp.id }}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    {% if bp.is_pinned %}
+                                    <input type="hidden" name="pin_action" value="unpin">
+                                    <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px;">Unpin</button>
+                                    {% else %}
+                                    <input type="hidden" name="pin_action" value="pin">
+                                    <select name="pin_rank" style="padding: 2px 6px; font-size: 12px;">
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                    </select>
+                                    <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px;">Pin</button>
+                                    {% endif %}
+                                </form>
+                                <form action="/admin/delete-blog-post/{{ bp.id }}" method="POST" style="display:inline; margin-left: 6px;" onsubmit="return confirm('Are you sure? This will permanently delete the post.');">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px; background: #c0392b; color: #fff;">Delete</button>
+                                </form>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-            </div>
-            {% else %}
-            <p style="color: #999; font-size: 13px;">No cost telemetry records yet.</p>
-            {% endif %}
-        </div>
-
-        <div class="card">
-            <h2>Export Data (CSV)</h2>
-            <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Download full database tables as CSV files.</p>
-            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                <a href="/admin/export/users.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Users CSV</a>
-                <a href="/admin/export/studies.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Studies CSV</a>
-                <a href="/admin/export/cost_telemetry.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Cost Telemetry CSV</a>
-                <a href="/admin/export/grounding_traces.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Grounding Traces CSV</a>
+                {% endif %}
             </div>
         </div>
 
-        <div class="card">
-            <h2>Admin Management</h2>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-                <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
-                    <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Change Admin Password</h3>
-                    <form action="/admin/change-password" method="POST">
-                        <input type="hidden" name="token" value="{{ token }}">
-                        <div style="margin-bottom:8px;">
-                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Current Password</label>
-                            <input type="password" name="current_password" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-                        </div>
-                        <div style="margin-bottom:8px;">
-                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">New Password (min 6 chars)</label>
-                            <input type="password" name="new_password" required minlength="6" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-                        </div>
-                        <div style="margin-bottom:10px;">
-                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Confirm New Password</label>
-                            <input type="password" name="confirm_password" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-small">Update Password</button>
-                    </form>
-                </div>
-                <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
-                    <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Admin Email</h3>
-                    <p style="font-size:12px;color:#777;margin-bottom:10px;">Set an email address for system messages and authentication.</p>
-                    <form action="/admin/set-email" method="POST">
-                        <input type="hidden" name="token" value="{{ token }}">
-                        <div style="margin-bottom:10px;">
-                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Email Address</label>
-                            <input type="email" name="admin_email" value="{{ admin_email }}" placeholder="admin@example.com" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-small">Save Email</button>
-                        {% if admin_email %}
-                        <span style="font-size:12px;color:#28a745;margin-left:8px;">Current: {{ admin_email }}</span>
-                        {% endif %}
-                    </form>
+        <div class="card" id="acc-adminmgmt">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-adminmgmt-body')">
+                <h2>Admin Management</h2>
+                <span class="admin-acc-arrow" id="acc-adminmgmt-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-adminmgmt-body">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                    <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
+                        <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Change Admin Password</h3>
+                        <form action="/admin/change-password" method="POST">
+                            <input type="hidden" name="token" value="{{ token }}">
+                            <div style="margin-bottom:8px;">
+                                <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Current Password</label>
+                                <input type="password" name="current_password" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                            </div>
+                            <div style="margin-bottom:8px;">
+                                <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">New Password (min 6 chars)</label>
+                                <input type="password" name="new_password" required minlength="6" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                            </div>
+                            <div style="margin-bottom:10px;">
+                                <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Confirm New Password</label>
+                                <input type="password" name="confirm_password" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-small">Update Password</button>
+                        </form>
+                    </div>
+                    <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
+                        <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Admin Email</h3>
+                        <p style="font-size:12px;color:#777;margin-bottom:10px;">Set an email address for system messages and authentication.</p>
+                        <form action="/admin/set-email" method="POST">
+                            <input type="hidden" name="token" value="{{ token }}">
+                            <div style="margin-bottom:10px;">
+                                <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Email Address</label>
+                                <input type="email" name="admin_email" value="{{ admin_email }}" placeholder="admin@example.com" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-small">Save Email</button>
+                            {% if admin_email %}
+                            <span style="font-size:12px;color:#28a745;margin-left:8px;">Current: {{ admin_email }}</span>
+                            {% endif %}
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
@@ -3933,6 +4008,39 @@
 </div>
 
 <script>
+    function toggleAdminAcc(bodyId) {
+        var body = document.getElementById(bodyId);
+        var arrow = document.getElementById(bodyId + '-arrow');
+        if (!body) return;
+        if (body.style.display === 'block') {
+            body.style.display = 'none';
+            if (arrow) arrow.classList.remove('open');
+        } else {
+            body.style.display = 'block';
+            if (arrow) arrow.classList.add('open');
+        }
+    }
+
+    function adminReply(senderId, origSubject) {
+        var sel = document.getElementById('admin-reply-recipient');
+        var subj = document.getElementById('admin-reply-subject');
+        if (sel) {
+            for (var i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === String(senderId)) { sel.selectedIndex = i; break; }
+            }
+        }
+        if (subj) {
+            var re = 'Re: ' + origSubject;
+            subj.value = re.substring(0, 20);
+            var cc = subj.parentNode.querySelector('.char-count');
+            if (cc) cc.textContent = subj.value.length + '/20';
+        }
+        var accBody = document.getElementById('acc-messages-body');
+        if (accBody && accBody.style.display !== 'block') toggleAdminAcc('acc-messages-body');
+        var form = document.getElementById('admin-compose-form');
+        if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
     function switchAuthTab(tab) {
         var tabs = ['login', 'signup', 'admin'];
         var buttons = document.querySelectorAll('.tabs .tab');
@@ -3986,6 +4094,15 @@
                     return;
                 }
             });
+        }
+    })();
+
+    (function() {
+        if (window.location.hash === '#acc-messages' || new URLSearchParams(window.location.search).get('dm_page')) {
+            var accBody = document.getElementById('acc-messages-body');
+            if (accBody) { accBody.style.display = 'block'; var arrow = document.getElementById('acc-messages-body-arrow'); if (arrow) arrow.classList.add('open'); }
+            var el = document.getElementById('acc-messages');
+            if (el) setTimeout(function() { el.scrollIntoView({ behavior: 'smooth' }); }, 200);
         }
     })();
 </script>
