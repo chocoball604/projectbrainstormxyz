@@ -56,7 +56,7 @@
         .header-right { display: flex; align-items: center; gap: 12px; }
         .header-right span { font-size: 14px; opacity: 0.8; }
         .container {
-            max-width: 800px;
+            max-width: 1100px;
             margin: 40px auto;
             padding: 0 20px;
         }
@@ -312,134 +312,6 @@
     {% if user and user.state == 'active' %}
     <div class="section visible" id="section-dashboard">
 
-        {% if not configure_study and not view_study_output %}
-        <div style="background: #f0f4ff; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; border: 1px solid #d0d9f5;">
-            <h3 style="margin: 0 0 8px; font-size: 15px; color: #1a1a2e;">How It Works</h3>
-            <div style="display: flex; gap: 24px; font-size: 13px; color: #555;">
-                <div style="flex: 1;">
-                    <strong style="color: #5C7E8F;">Step 1:</strong> Click "New Research" to create a draft study with a title and study type.
-                </div>
-                <div style="flex: 1;">
-                    <strong style="color: #5C7E8F;">Step 2:</strong> Open the draft study to complete setup, configure details, and run your research.
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        <div class="card" style="margin-bottom: 16px; padding: 14px 18px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span style="font-size: 13px; font-weight: 600; color: #1a1a2e;">Studies used this month: {{ usage_count }} of {{ usage_limit }}</span>
-                {% if usage_limit_reached %}
-                <span style="font-size: 12px; color: #dc3545; font-weight: 600;">Limit reached</span>
-                {% endif %}
-            </div>
-            <div style="background: #e9ecef; border-radius: 6px; height: 10px; overflow: hidden;">
-                {% set pct = ((usage_count / usage_limit) * 100) if usage_limit > 0 else 0 %}
-                {% set bar_color = '#dc3545' if usage_limit_reached else ('#ffc107' if pct >= 75 else '#5C7E8F') %}
-                <div style="width: {{ [pct, 100]|min }}%; height: 100%; background: {{ bar_color }}; border-radius: 6px; transition: width 0.3s;"></div>
-            </div>
-            {% if usage_window_start and usage_window_end %}
-            <div style="margin-top: 4px; font-size: 11px; color: #999;">
-                Usage window: {{ usage_window_start }} to {{ usage_window_end }} (calendar month)
-            </div>
-            {% endif %}
-            {% if usage_limit_reached %}
-            <div style="margin-top: 4px; font-size: 12px; color: #dc3545;">
-                You have reached your monthly limit of {{ usage_limit }} studies. New studies will be available next month.
-            </div>
-            {% endif %}
-        </div>
-
-
-        <div class="card">
-            <div class="card-header">
-                <h2>My Studies</h2>
-                {% if usage_limit_reached %}
-                <span class="btn btn-primary" style="opacity: 0.5; cursor: not-allowed; pointer-events: none;">New Research</span>
-                {% else %}
-                <a href="/?token={{ token }}&new_research=1" class="btn btn-primary">New Research</a>
-                {% endif %}
-            </div>
-
-            <form method="GET" action="/" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div style="flex: 1;">
-                    <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by title</label>
-                    <input type="text" name="studies_q" value="{{ studies_q }}" placeholder="Search studies..." style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
-                </div>
-                <button type="submit" class="btn btn-primary btn-small" style="height: 34px;">Search</button>
-                {% if studies_q %}
-                <a href="/?token={{ token }}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
-                {% endif %}
-            </form>
-
-            {% if studies %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Title</th>
-                        <th>Type</th>
-                        <th>Status</th>
-                        <th>Created</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for s in studies %}
-                    <tr>
-                        <td>{{ s.title }}</td>
-                        <td>{{ s.study_type or '—' }}</td>
-                        <td>
-                            <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
-                            {% if s.qa_status == 'precheck_passed' %}
-                            <span class="badge badge-qa-precheck_passed" style="margin-left: 4px;">Ready</span>
-                            {% elif s.qa_status == 'precheck_failed' %}
-                            <span class="badge badge-qa-precheck_failed" style="margin-left: 4px;">Items remaining</span>
-                            {% elif s.qa_status == 'pass' %}
-                            <span class="badge badge-qa-pass" style="margin-left: 4px;">QA: Pass</span>
-                            {% elif s.qa_status == 'fail' %}
-                            <span class="badge badge-qa-fail" style="margin-left: 4px;">QA: Needs review</span>
-                            {% elif s.qa_status == 'downgrade' %}
-                            <span class="badge badge-qa-downgrade" style="margin-left: 4px;">QA: Downgrade</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ s.created_at }}</td>
-                        <td>
-                            {% if s.status == 'draft' %}
-                            <a href="/?token={{ token }}&configure={{ s.id }}" class="btn btn-primary btn-small">Open Study</a>
-                            {% endif %}
-                            {% if s.status == 'qa_blocked' %}
-                            <a href="/?token={{ token }}&view_output={{ s.id }}" class="btn btn-small" style="background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">View QA Report</a>
-                            {% elif s.status != 'draft' and s.study_output %}
-                            <a href="/?token={{ token }}&view_output={{ s.id }}" class="btn btn-primary btn-small">View Output</a>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: #777;">
-                <span>{{ studies_total }} studies total — Page {{ studies_page }} of {{ studies_total_pages }}</span>
-                <div style="display: flex; gap: 6px;">
-                    {% if studies_page > 1 %}
-                    <a href="/?token={{ token }}&studies_page={{ studies_page - 1 }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}" class="btn btn-secondary btn-small">Prev</a>
-                    {% endif %}
-                    {% if studies_page < studies_total_pages %}
-                    <a href="/?token={{ token }}&studies_page={{ studies_page + 1 }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}" class="btn btn-secondary btn-small">Next</a>
-                    {% endif %}
-                </div>
-            </div>
-            {% else %}
-            <div class="empty-state">
-                {% if studies_q %}
-                No studies matching "{{ studies_q }}". <a href="/?token={{ token }}">Clear search</a>
-                {% else %}
-                No studies yet. Click "New Research" to create your first draft study.
-                {% endif %}
-            </div>
-            {% endif %}
-        </div>
 
         {% if configure_study %}
         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -477,6 +349,46 @@
             {% set checklist_complete = false %}
         {% endif %}
 
+        <div id="exec-control-strip" data-study-id="{{ configure_study.id }}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 14px 24px; margin-bottom: 16px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+            {% if configure_study.study_type %}
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
+                <strong>Ben QA:</strong>
+                {% if configure_study.qa_status == 'precheck_passed' %}
+                <span style="color: #27ae60;">&#10003; Pass</span>
+                {% elif configure_study.qa_status == 'precheck_failed' %}
+                <span style="color: #e67e22;">&#9888; {{ configure_study.precheck_failures|length }} item{{ 's' if configure_study.precheck_failures|length != 1 else '' }} remaining</span>
+                {% else %}
+                <span style="color: #999;">&mdash; Not set</span>
+                {% endif %}
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
+                <strong>Personas:</strong>
+                {% if configure_study.study_type == 'synthetic_survey' %}
+                <span style="color: #999;">N/A (survey)</span>
+                {% elif persona_count_panel > 0 %}
+                <span style="color: #27ae60;">Reuse {{ persona_count_panel }}</span>
+                {% else %}
+                <span style="color: #5C7E8F;">Auto-generate</span>
+                {% endif %}
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
+                <strong>Status:</strong>
+                {% if configure_study.qa_status == 'precheck_passed' %}
+                <span style="color: #27ae60; font-weight: 600;">Ready</span>
+                {% else %}
+                <span style="color: #e67e22;">Not Ready</span>
+                {% endif %}
+            </div>
+            <div style="margin-left: auto;">
+                {% if configure_study.qa_status == 'precheck_passed' %}
+                <button type="button" class="btn btn-success" style="font-size: 15px; padding: 10px 28px;" id="start-study-btn">Start Study</button>
+                {% endif %}
+            </div>
+            {% else %}
+            <span style="font-size: 13px; color: #999;">Set a study type to see execution readiness.</span>
+            {% endif %}
+        </div>
+
         <div style="display: flex; gap: 20px; align-items: flex-start;">
 
         <div id="mark-chat-tile" style="width: 340px; flex-shrink: 0; position: sticky; top: 80px;">
@@ -484,7 +396,7 @@
                 <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px; border-bottom: 2px solid #5C7E8F; padding-bottom: 8px;">Mark &mdash; Research Guide</h3>
                 <p style="font-size: 12px; color: #888; margin: 0 0 12px;">Mark can help you decide what to fill in next.</p>
 
-                <div id="chat-thread" style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; max-height: 400px; overflow-y: auto; margin-bottom: 12px;">
+                <div id="chat-thread" style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; max-height: 800px; overflow-y: auto; margin-bottom: 12px;">
                     {% if chat_messages %}
                         {% for msg in chat_messages %}
                         <div style="margin-bottom: 12px; display: flex; flex-direction: column; align-items: {{ 'flex-end' if msg.sender == 'user' else 'flex-start' }};">
@@ -533,7 +445,7 @@
                 </div>
 
                 <form id="chat-form" style="display: flex; gap: 8px;">
-                    <input type="text" id="chat-input" name="message_text" required placeholder="Type your message to Mark..." style="flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    <textarea id="chat-input" name="message_text" required placeholder="Type your message to Mark..." rows="1" style="flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; resize: none; max-height: 66px; overflow-y: auto; line-height: 1.4; font-family: inherit;"></textarea>
                     <button type="submit" class="btn btn-primary" id="chat-send-btn" style="white-space: nowrap;">Send</button>
                 </form>
 
@@ -610,6 +522,7 @@
                         chatThread.appendChild(makeBubble('user', msg));
                         chatThread.scrollTop = chatThread.scrollHeight;
                         chatInput.value = '';
+                        chatInput.style.height = 'auto';
                         sendBtn.disabled = true;
                         sendBtn.textContent = 'Sending...';
 
@@ -628,6 +541,18 @@
                             });
                     });
 
+                    chatInput.addEventListener('input', function() {
+                        this.style.height = 'auto';
+                        this.style.height = Math.min(this.scrollHeight, 66) + 'px';
+                    });
+
+                    chatInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            chatForm.dispatchEvent(new Event('submit'));
+                        }
+                    });
+
                     var hasThinking = chatThread.textContent.indexOf('Mark is thinking') !== -1;
                     if (hasThinking) {
                         sendBtn.disabled = true;
@@ -643,7 +568,7 @@
         <div class="card" id="configure-study-section">
 
             <div style="margin-bottom: 20px;">
-                <h3 style="font-size: 17px; color: #1a1a2e; margin: 0 0 8px;">Study Identity</h3>
+                <h3 style="font-size: 17px; color: #1a1a2e; margin: 0 0 8px;">1. Study Identity</h3>
                 <div style="font-size: 14px; color: #333; margin-bottom: 6px;">
                     <strong>Title:</strong> {{ configure_study.title }}
                 </div>
@@ -760,7 +685,7 @@
             {% endif %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Research Brief</h3>
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">2. Research Brief</h3>
             {% if all_anchors_complete %}
             <div style="background: #e8f5e9; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
                 <p style="margin: 0; font-weight: 600; color: #27ae60;">Research Brief Complete
@@ -856,7 +781,7 @@
             {% endif %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Grounding Documents</h3>
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">3. Grounding Documents</h3>
             <p style="font-size: 12px; color: #888; margin-bottom: 10px;">
                 Upload documents to ground the study and persona generation. These inform Mark, Ben QA, and Lisa's outputs.
             </p>
@@ -929,10 +854,18 @@
             {% endif %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Personas for this Study</h3>
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">4. Personas</h3>
             {% if configure_study.study_type == 'synthetic_survey' %}
             <p style="font-size: 13px; color: #999; margin-bottom: 12px; font-style: italic;">Personas — Not applicable for surveys</p>
             {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
+            <div style="background: #f0f4ff; border-radius: 6px; padding: 14px; margin-bottom: 16px; border: 1px solid #d0d9f5; font-size: 13px; color: #555;">
+                <strong style="font-size: 14px; color: #1a1a2e;">Persona Rules</strong><br>
+                {% if configure_study.study_type == 'synthetic_idi' %}
+                IDI requires exactly 1 persona. If none is selected for reuse below, Lisa will generate one automatically when the study starts.
+                {% else %}
+                Focus Group requires 4–6 personas. If fewer are selected for reuse below, Lisa will generate additional personas to reach the minimum when the study starts.
+                {% endif %}
+            </div>
             <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
                 You can reuse existing personas, or continue without selecting — Lisa will generate new ones.
             </p>
@@ -1150,21 +1083,12 @@
                 </div>
             </div>
 
-            {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 8px;">Persona Rules</h3>
-            <div style="background: #f0f4ff; border-radius: 6px; padding: 14px; margin-bottom: 16px; border: 1px solid #d0d9f5; font-size: 13px; color: #555;">
-                {% if configure_study.study_type == 'synthetic_idi' %}
-                IDI requires exactly 1 persona. If none is selected for reuse above, Lisa will generate one automatically when the study starts.
-                {% else %}
-                Focus Group requires 4–6 personas. If fewer are selected for reuse above, Lisa will generate additional personas to reach the minimum when the study starts.
-                {% endif %}
-            </div>
             {% endif %}
 
             {% set oc_data = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <div id="optional-context-section">
-                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 12px;">Optional Context <span style="font-weight: 400; font-size: 12px; color: #999;">(does not affect readiness)</span></h3>
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 12px;">5. Optional Context <span style="font-weight: 400; font-size: 12px; color: #999;">(does not affect readiness)</span></h3>
                 <div>
                     {% set oc_fields_list = [
                         ('competitive_context', 'Competitive context', 'Key competitors, market positioning, competitive dynamics...'),
@@ -1305,46 +1229,6 @@
             </div>
         </div>
         </div>
-        </div>
-
-        <div id="exec-control-strip" data-study-id="{{ configure_study.id }}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 14px 24px; margin: 16px 0; display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
-            {% if configure_study.study_type %}
-            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
-                <strong>Ben QA:</strong>
-                {% if configure_study.qa_status == 'precheck_passed' %}
-                <span style="color: #27ae60;">&#10003; Pass</span>
-                {% elif configure_study.qa_status == 'precheck_failed' %}
-                <span style="color: #e67e22;">&#9888; {{ configure_study.precheck_failures|length }} item{{ 's' if configure_study.precheck_failures|length != 1 else '' }} remaining</span>
-                {% else %}
-                <span style="color: #999;">&mdash; Not set</span>
-                {% endif %}
-            </div>
-            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
-                <strong>Personas:</strong>
-                {% if configure_study.study_type == 'synthetic_survey' %}
-                <span style="color: #999;">N/A (survey)</span>
-                {% elif persona_count_panel > 0 %}
-                <span style="color: #27ae60;">Reuse {{ persona_count_panel }}</span>
-                {% else %}
-                <span style="color: #5C7E8F;">Auto-generate</span>
-                {% endif %}
-            </div>
-            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
-                <strong>Status:</strong>
-                {% if configure_study.qa_status == 'precheck_passed' %}
-                <span style="color: #27ae60; font-weight: 600;">Ready</span>
-                {% else %}
-                <span style="color: #e67e22;">Not Ready</span>
-                {% endif %}
-            </div>
-            <div style="margin-left: auto;">
-                {% if configure_study.qa_status == 'precheck_passed' %}
-                <button type="button" class="btn btn-success" style="font-size: 15px; padding: 10px 28px;" id="start-study-btn">Start Study</button>
-                {% endif %}
-            </div>
-            {% else %}
-            <span style="font-size: 13px; color: #999;">Set a study type to see execution readiness.</span>
-            {% endif %}
         </div>
 
         <div id="exec-output-container" style="display: none;">
@@ -2539,14 +2423,14 @@
             </div>
             <div class="form-group">
                 <label>Study Type Selection</label>
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 2px solid #5C7E8F; border-radius: 8px; cursor: pointer; background: #f0f4ff; font-weight: 500;">
+                <div style="display: flex; gap: 12px;">
+                    <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 16px; border: 2px solid #5C7E8F; border-radius: 8px; cursor: pointer; background: #f0f4ff; font-weight: 500; text-align: center;" id="nr-label-recommend">
                         <input type="radio" name="nr_mode" value="mark_recommend" checked id="nr-mode-recommend">
-                        Let Mark recommend <span style="font-size: 12px; color: #5C7E8F; font-weight: 600;">(recommended)</span>
+                        Let Mark recommend
                     </label>
-                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; font-weight: 500;">
+                    <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 16px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; font-weight: 500; text-align: center;" id="nr-label-choose">
                         <input type="radio" name="nr_mode" value="choose_myself" id="nr-mode-choose">
-                        I already know the study type
+                        I already know
                     </label>
                 </div>
             </div>
@@ -2570,7 +2454,7 @@
                 </div>
             </div>
             <div style="display: flex; gap: 12px; margin-top: 8px;">
-                <button type="button" class="btn btn-primary" id="nr-continue-btn">Continue</button>
+                <button type="button" class="btn btn-primary" id="nr-continue-btn" style="background: #28a745; border-color: #28a745;">Continue</button>
                 <a href="/?token={{ token }}" class="btn btn-secondary">Cancel</a>
             </div>
             <script>
@@ -2762,6 +2646,120 @@
             </form>
         </div>
         {% endif %}
+
+        <div class="card" style="margin-bottom: 16px; padding: 14px 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 13px; font-weight: 600; color: #1a1a2e;">Studies used this month: {{ usage_count }} of {{ usage_limit }}</span>
+                {% if usage_limit_reached %}
+                <span style="font-size: 12px; color: #dc3545; font-weight: 600;">Limit reached</span>
+                {% endif %}
+            </div>
+            <div style="background: #e9ecef; border-radius: 6px; height: 10px; overflow: hidden;">
+                {% set pct = ((usage_count / usage_limit) * 100) if usage_limit > 0 else 0 %}
+                {% set bar_color = '#dc3545' if usage_limit_reached else ('#ffc107' if pct >= 75 else '#5C7E8F') %}
+                <div style="width: {{ [pct, 100]|min }}%; height: 100%; background: {{ bar_color }}; border-radius: 6px; transition: width 0.3s;"></div>
+            </div>
+            {% if usage_window_start and usage_window_end %}
+            <div style="margin-top: 4px; font-size: 11px; color: #999;">
+                Usage window: {{ usage_window_start }} to {{ usage_window_end }} (calendar month)
+            </div>
+            {% endif %}
+            {% if usage_limit_reached %}
+            <div style="margin-top: 4px; font-size: 12px; color: #dc3545;">
+                You have reached your monthly limit of {{ usage_limit }} studies. New studies will be available next month.
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>My Studies</h2>
+                {% if usage_limit_reached %}
+                <span class="btn btn-primary" style="opacity: 0.5; cursor: not-allowed; pointer-events: none; background: #28a745; border-color: #28a745;">New Research</span>
+                {% else %}
+                <a href="/?token={{ token }}&new_research=1" class="btn btn-primary" style="background: #28a745; border-color: #28a745;">New Research</a>
+                {% endif %}
+            </div>
+
+            <form method="GET" action="/" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="flex: 1;">
+                    <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by title</label>
+                    <input type="text" name="studies_q" value="{{ studies_q }}" placeholder="Search studies..." style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+                </div>
+                <button type="submit" class="btn btn-primary btn-small" style="height: 34px;">Search</button>
+                {% if studies_q %}
+                <a href="/?token={{ token }}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
+                {% endif %}
+            </form>
+
+            {% if studies %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in studies %}
+                    <tr>
+                        <td>{{ s.title }}</td>
+                        <td>{{ s.study_type or '—' }}</td>
+                        <td>
+                            <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
+                            {% if s.qa_status == 'precheck_passed' %}
+                            <span class="badge badge-qa-precheck_passed" style="margin-left: 4px;">Ready</span>
+                            {% elif s.qa_status == 'precheck_failed' %}
+                            <span class="badge badge-qa-precheck_failed" style="margin-left: 4px;">Items remaining</span>
+                            {% elif s.qa_status == 'pass' %}
+                            <span class="badge badge-qa-pass" style="margin-left: 4px;">QA: Pass</span>
+                            {% elif s.qa_status == 'fail' %}
+                            <span class="badge badge-qa-fail" style="margin-left: 4px;">QA: Needs review</span>
+                            {% elif s.qa_status == 'downgrade' %}
+                            <span class="badge badge-qa-downgrade" style="margin-left: 4px;">QA: Downgrade</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ s.created_at }}</td>
+                        <td>
+                            {% if s.status == 'draft' %}
+                            <a href="/?token={{ token }}&configure={{ s.id }}" class="btn btn-primary btn-small">Open Study</a>
+                            {% endif %}
+                            {% if s.status == 'qa_blocked' %}
+                            <a href="/?token={{ token }}&view_output={{ s.id }}" class="btn btn-small" style="background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">View QA Report</a>
+                            {% elif s.status != 'draft' and s.study_output %}
+                            <a href="/?token={{ token }}&view_output={{ s.id }}" class="btn btn-primary btn-small">View Output</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: #777;">
+                <span>{{ studies_total }} studies total — Page {{ studies_page }} of {{ studies_total_pages }}</span>
+                <div style="display: flex; gap: 6px;">
+                    {% if studies_page > 1 %}
+                    <a href="/?token={{ token }}&studies_page={{ studies_page - 1 }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}" class="btn btn-secondary btn-small">Prev</a>
+                    {% endif %}
+                    {% if studies_page < studies_total_pages %}
+                    <a href="/?token={{ token }}&studies_page={{ studies_page + 1 }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}" class="btn btn-secondary btn-small">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                {% if studies_q %}
+                No studies matching "{{ studies_q }}". <a href="/?token={{ token }}">Clear search</a>
+                {% else %}
+                No studies yet. Click "New Research" to create your first draft study.
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
 
         <div class="card">
             <div class="card-header">
