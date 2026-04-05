@@ -1164,11 +1164,8 @@
             {% set oc_data = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <div id="optional-context-section">
-                <div style="display: flex; align-items: center; cursor: pointer; user-select: none;" id="oc-toggle-header">
-                    <span id="oc-toggle-icon" style="font-size: 14px; margin-right: 8px; transition: transform 0.2s;">&#9654;</span>
-                    <h3 style="font-size: 16px; color: #1a1a2e; margin: 0;">Optional Context <span style="font-weight: 400; font-size: 12px; color: #999;">(does not affect readiness)</span></h3>
-                </div>
-                <div id="oc-toggle-body" style="display: none; margin-top: 12px;">
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 12px;">Optional Context <span style="font-weight: 400; font-size: 12px; color: #999;">(does not affect readiness)</span></h3>
+                <div>
                     {% set oc_fields_list = [
                         ('competitive_context', 'Competitive context', 'Key competitors, market positioning, competitive dynamics...'),
                         ('cultural_sensitivities', 'Cultural sensitivities', 'Cultural factors, local norms, sensitivities to consider...'),
@@ -1348,19 +1345,6 @@
             var token = '{{ token }}';
             var studyId = {{ configure_study.id if configure_study else 0 }};
             if (!studyId) return;
-
-            var ocHeader = document.getElementById('oc-toggle-header');
-            if (ocHeader) {
-                ocHeader.addEventListener('click', function() {
-                    var body = document.getElementById('oc-toggle-body');
-                    var icon = document.getElementById('oc-toggle-icon');
-                    if (body && icon) {
-                        var isOpen = body.style.display !== 'none';
-                        body.style.display = isOpen ? 'none' : 'block';
-                        icon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
-                    }
-                });
-            }
 
             var anchorLabels = {
                 'market_geography': '3. Market / Geography',
