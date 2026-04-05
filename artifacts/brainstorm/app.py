@@ -7493,6 +7493,9 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         dm_total_pages=1,
         dm_total=0,
         dm_view=None,
+        dm_admin_unread=0,
+        dm_latest_preview=None,
+        admin_email=ADMIN_EMAIL,
     )
 
 

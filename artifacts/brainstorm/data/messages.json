@@ -89,11 +89,23 @@
     "subject": "TestThread",
     "body": "Hello admin, this is a test",
     "category": "Help",
-    "read": false,
+    "read": true,
     "sender_type": "user",
     "sender_id": 6,
     "sender_name": "benji123",
     "recipient_type": "admin",
     "recipient_user_id": null
+  },
+  {
+    "id": "27a70aabe6210337",
+    "timestamp": "2026-04-05 15:00:18",
+    "subject": "Re: TestThread",
+    "body": "Hi Ben, this is a reply to your testthread.",
+    "category": "",
+    "read": false,
+    "sender_type": "admin",
+    "sender_id": null,
+    "recipient_type": "user",
+    "recipient_user_id": 6
   }
 ]
