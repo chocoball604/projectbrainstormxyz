@@ -350,6 +350,7 @@
         {% endif %}
 
         <div id="exec-control-strip" data-study-id="{{ configure_study.id }}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 14px 24px; margin-bottom: 16px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+            <strong style="font-size: 14px; color: #1a1a2e;">Mission Control</strong>
             {% if configure_study.study_type %}
             <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
                 <strong>Ben QA:</strong>
@@ -1382,7 +1383,7 @@
                 var personaTable = document.getElementById('persona-attach-table');
                 if (personaTable) personaCount = personaTable.querySelectorAll('tr').length;
                 var studyType = '{{ configure_study.study_type or "" }}';
-                var h = '';
+                var h = '<strong style="font-size:14px;color:#1a1a2e;">Mission Control</strong>';
                 h += '<div style="display:flex;align-items:center;gap:6px;font-size:13px;"><strong>Ben QA:</strong> ';
                 if (data.qa_status === 'precheck_passed') {
                     h += '<span style="color:#27ae60;">&#10003; Pass</span>';
