@@ -8,14 +8,14 @@
     "subject": "Welcome",
     "body": "Project Brainstorm is ready.",
     "timestamp": "2026-04-04 03:55:45",
-    "read": false
+    "read": true
   },
   {
     "id": "126e6da6547b8292",
     "timestamp": "2026-04-05 06:19:15",
     "subject": "Test message",
     "body": "Hello admin!",
-    "read": false,
+    "read": true,
     "sender_type": "user",
     "sender_id": 6,
     "sender_name": "benji123",

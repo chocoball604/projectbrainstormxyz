@@ -3102,46 +3102,6 @@
 
     {% if is_admin %}
     <div class="section visible" id="section-admin">
-        <div class="card">
-            <h2>Admin Management</h2>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-                <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
-                    <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Change Admin Password</h3>
-                    <form action="/admin/change-password" method="POST">
-                        <input type="hidden" name="token" value="{{ token }}">
-                        <div style="margin-bottom:8px;">
-                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Current Password</label>
-                            <input type="password" name="current_password" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-                        </div>
-                        <div style="margin-bottom:8px;">
-                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">New Password (min 6 chars)</label>
-                            <input type="password" name="new_password" required minlength="6" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-                        </div>
-                        <div style="margin-bottom:10px;">
-                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Confirm New Password</label>
-                            <input type="password" name="confirm_password" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-small">Update Password</button>
-                    </form>
-                </div>
-                <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
-                    <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Admin Email</h3>
-                    <p style="font-size:12px;color:#777;margin-bottom:10px;">Set an email address for system messages and authentication.</p>
-                    <form action="/admin/set-email" method="POST">
-                        <input type="hidden" name="token" value="{{ token }}">
-                        <div style="margin-bottom:10px;">
-                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Email Address</label>
-                            <input type="email" name="admin_email" value="{{ admin_email }}" placeholder="admin@example.com" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-small">Save Email</button>
-                        {% if admin_email %}
-                        <span style="font-size:12px;color:#28a745;margin-left:8px;">Current: {{ admin_email }}</span>
-                        {% endif %}
-                    </form>
-                </div>
-            </div>
-        </div>
-
         {% if dm_view == 'admin_messages' %}
         <div class="card" id="admin-inbox-view">
             <div class="card-header">
@@ -3921,9 +3881,50 @@
             <h2>Export Data (CSV)</h2>
             <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Download full database tables as CSV files.</p>
             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <a href="/admin/export/users.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Users CSV</a>
                 <a href="/admin/export/studies.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Studies CSV</a>
                 <a href="/admin/export/cost_telemetry.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Cost Telemetry CSV</a>
                 <a href="/admin/export/grounding_traces.csv?token={{ token }}" class="btn" style="text-decoration: none; display: inline-block;">Download Grounding Traces CSV</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Admin Management</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
+                    <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Change Admin Password</h3>
+                    <form action="/admin/change-password" method="POST">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Current Password</label>
+                            <input type="password" name="current_password" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">New Password (min 6 chars)</label>
+                            <input type="password" name="new_password" required minlength="6" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                        </div>
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Confirm New Password</label>
+                            <input type="password" name="confirm_password" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-small">Update Password</button>
+                    </form>
+                </div>
+                <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
+                    <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Admin Email</h3>
+                    <p style="font-size:12px;color:#777;margin-bottom:10px;">Set an email address for system messages and authentication.</p>
+                    <form action="/admin/set-email" method="POST">
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Email Address</label>
+                            <input type="email" name="admin_email" value="{{ admin_email }}" placeholder="admin@example.com" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-small">Save Email</button>
+                        {% if admin_email %}
+                        <span style="font-size:12px;color:#28a745;margin-left:8px;">Current: {{ admin_email }}</span>
+                        {% endif %}
+                    </form>
+                </div>
             </div>
         </div>
     </div>

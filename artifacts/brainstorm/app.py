@@ -7650,6 +7650,29 @@ def admin_dev_cjk_pdf_test():
     )
 
 
+@app.route("/admin/export/users.csv")
+def admin_export_users_csv():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    if not is_admin:
+        return "Admin access required.", 403
+    import csv, io
+
+    conn = get_db()
+    rows = conn.execute("SELECT id, email, username, state, created_at, name, company, role, location FROM users ORDER BY id").fetchall()
+    conn.close()
+    cols = ["id", "email", "username", "state", "created_at", "name", "company", "role", "location"]
+    si = io.StringIO()
+    w = csv.writer(si)
+    w.writerow(cols)
+    for r in rows:
+        w.writerow([r[c] for c in cols])
+    resp = app.make_response(si.getvalue())
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = "attachment; filename=users.csv"
+    return resp
+
+
 @app.route("/admin/export/studies.csv")
 def admin_export_studies_csv():
     token = get_token()
