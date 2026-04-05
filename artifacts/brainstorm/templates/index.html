@@ -1490,7 +1490,7 @@
                 })
                 .then(function(data) {
                     if (data.ok) {
-                        renderStudyOutput(ob, data);
+                        window.location.href = '/?token=' + encodeURIComponent(token) + '&view_output=' + sid;
                     } else {
                         renderExecError(ob, sid, data.error || 'Execution failed.');
                     }

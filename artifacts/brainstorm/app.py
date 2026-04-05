@@ -1769,6 +1769,13 @@ def index():
 
         configure_id = request.args.get("configure")
         if configure_id:
+            _any_study = conn.execute(
+                "SELECT id, status FROM studies WHERE id = ? AND user_id = ?",
+                (configure_id, user["id"]),
+            ).fetchone()
+            if _any_study and _any_study["status"] != "draft":
+                conn.close()
+                return redirect(url_for("index", token=token, view_output=configure_id))
             row = conn.execute(
                 "SELECT * FROM studies WHERE id = ? AND user_id = ? AND status = 'draft'",
                 (configure_id, user["id"]),
