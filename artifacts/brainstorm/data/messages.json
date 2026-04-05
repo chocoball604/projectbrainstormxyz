@@ -27,7 +27,7 @@
     "timestamp": "2026-04-05 06:19:49",
     "subject": "Admin notice",
     "body": "This is a test from admin",
-    "read": false,
+    "read": true,
     "sender_type": "admin",
     "sender_id": null,
     "recipient_type": "user",
@@ -107,5 +107,42 @@
     "sender_id": null,
     "recipient_type": "user",
     "recipient_user_id": 6
+  },
+  {
+    "id": "15905ef0a5fdb8c9",
+    "timestamp": "2026-04-05 15:04:13",
+    "subject": "testing 222222",
+    "body": "testing 222222",
+    "category": "",
+    "read": false,
+    "sender_type": "admin",
+    "sender_id": null,
+    "recipient_type": "user",
+    "recipient_user_id": 7
+  },
+  {
+    "id": "c1e9d9903e4249b1",
+    "timestamp": "2026-04-05 15:05:18",
+    "subject": "this is soooo dumb",
+    "body": "this is soooo dumbthis is soooo dumbthis is soooo dumbthis is soooo dumb",
+    "category": "Feedback",
+    "read": true,
+    "sender_type": "user",
+    "sender_id": 7,
+    "sender_name": "georgia123",
+    "recipient_type": "admin",
+    "recipient_user_id": null
+  },
+  {
+    "id": "b8aa15fd3cdf53c2",
+    "timestamp": "2026-04-05 15:06:24",
+    "subject": "Re: this is soooo dumb",
+    "body": "No that's only because you are dumb",
+    "category": "",
+    "read": false,
+    "sender_type": "admin",
+    "sender_id": null,
+    "recipient_type": "user",
+    "recipient_user_id": 7
   }
 ]

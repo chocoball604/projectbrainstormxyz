@@ -2747,18 +2747,21 @@
             {% if dm_messages_list %}
             <h3 style="font-size:14px;color:#1a1a2e;margin-bottom:10px;">Conversations</h3>
             {% for thread in dm_messages_list %}
-            <div style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:10px;overflow:hidden;">
-                <div class="dm-thread-header" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;{% if thread.unread_count > 0 %}background:#f0f9ff;font-weight:600;{% else %}background:#fff;{% endif %}" onclick="var b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';">
+            <div style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:10px;overflow:hidden;" data-thread-box>
+                <div class="dm-thread-header" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;{% if thread.unread_count > 0 %}background:#f0f9ff;font-weight:600;{% else %}background:#fff;{% endif %}" onclick="toggleThread(this)">
                     <div style="display:flex;align-items:center;gap:8px;">
-                        {% if thread.unread_count > 0 %}<span style="color:#dc3545;font-size:14px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:14px;">&#9675;</span>{% endif %}
+                        {% if thread.unread_count > 0 %}<span class="thread-dot" style="color:#dc3545;font-size:14px;">&#9679;</span>{% else %}<span class="thread-dot" style="color:#ccc;font-size:14px;">&#9675;</span>{% endif %}
                         <span style="font-size:13px;">{{ thread.subject }}</span>
                         <span style="font-size:11px;color:#999;background:#f1f5f9;padding:1px 6px;border-radius:8px;">{{ thread.messages|length }}</span>
                     </div>
-                    <span style="font-size:11px;color:#999;white-space:nowrap;">{{ thread.latest_ts }}</span>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <button type="button" class="btn btn-primary btn-small" style="font-size:10px;padding:2px 6px;" onclick="event.stopPropagation();userReply('{{ thread.subject|truncate(24,True,'') }}')">Reply</button>
+                        <span style="font-size:11px;color:#999;white-space:nowrap;">{{ thread.latest_ts }}</span>
+                    </div>
                 </div>
                 <div style="display:none;border-top:1px solid #e2e8f0;">
                     {% for m in thread.messages %}
-                    <div class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" style="padding:10px 14px;border-bottom:1px solid #f1f5f9;{% if m.sender_type == 'admin' %}background:#f8f9fa;{% endif %}">
+                    <div class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" data-recipient-type="{{ m.recipient_type }}" style="padding:10px 14px;border-bottom:1px solid #f1f5f9;{% if m.sender_type == 'admin' %}background:#f8f9fa;{% endif %}">
                         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                             <span style="font-size:12px;font-weight:600;color:{% if m.sender_type == 'admin' %}#5C7E8F{% else %}#1a1a2e{% endif %};">
                                 {% if m.sender_type == 'admin' %}Admin{% elif m.sender_type == 'system' %}System{% else %}You{% endif %}
@@ -3172,10 +3175,10 @@
                 {% if dm_messages_list %}
                 <h3 style="font-size:14px;color:#1a1a2e;margin-bottom:10px;">Message Threads</h3>
                 {% for thread in dm_messages_list %}
-                <div style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:10px;overflow:hidden;">
-                    <div class="dm-thread-header" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;{% if thread.unread_count > 0 %}background:#f0f9ff;font-weight:600;{% else %}background:#fff;{% endif %}" onclick="var b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';">
+                <div style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:10px;overflow:hidden;" data-thread-box>
+                    <div class="dm-thread-header" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;{% if thread.unread_count > 0 %}background:#f0f9ff;font-weight:600;{% else %}background:#fff;{% endif %}" onclick="toggleThread(this)">
                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            {% if thread.unread_count > 0 %}<span style="color:#dc3545;font-size:14px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:14px;">&#9675;</span>{% endif %}
+                            {% if thread.unread_count > 0 %}<span class="thread-dot" style="color:#dc3545;font-size:14px;">&#9679;</span>{% else %}<span class="thread-dot" style="color:#ccc;font-size:14px;">&#9675;</span>{% endif %}
                             {% if thread.category %}<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:#e2e8f0;color:#475569;">{{ thread.category }}</span>{% endif %}
                             <span style="font-size:13px;">{{ thread.subject }}</span>
                             <span style="font-size:11px;color:#999;background:#f1f5f9;padding:1px 6px;border-radius:8px;">{{ thread.messages|length }}</span>
@@ -3191,21 +3194,12 @@
                     </div>
                     <div style="display:none;border-top:1px solid #e2e8f0;">
                         {% for m in thread.messages %}
-                        <div class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" style="padding:10px 14px;border-bottom:1px solid #f1f5f9;{% if m.sender_type == 'admin' %}background:#f8f9fa;{% endif %}">
+                        <div class="dm-msg-row" data-msg-id="{{ m.id }}" data-read="{{ 'true' if m.read else 'false' }}" data-recipient-type="{{ m.recipient_type }}" style="padding:10px 14px;border-bottom:1px solid #f1f5f9;{% if m.sender_type == 'admin' %}background:#f8f9fa;{% endif %}">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                                 <span style="font-size:12px;font-weight:600;color:{% if m.sender_type == 'admin' %}#5C7E8F{% elif m.sender_type == 'system' %}#6b7280{% else %}#1a1a2e{% endif %};">
                                     {% if m.sender_type == 'admin' %}Admin{% elif m.sender_type == 'system' %}System{% else %}{{ m.get('sender_name', 'User') }}{% endif %}
                                 </span>
-                                <div style="display:flex;align-items:center;gap:6px;">
-                                    <span style="font-size:11px;color:#999;">{{ m.timestamp }}</span>
-                                    {% if not m.get('read', True) and m.recipient_type == 'admin' %}
-                                    <form action="/mark-message-read" method="POST" style="display:inline;">
-                                        <input type="hidden" name="token" value="{{ token }}">
-                                        <input type="hidden" name="msg_id" value="{{ m.id }}">
-                                        <button type="submit" class="btn btn-secondary btn-small" style="font-size:10px;padding:1px 5px;">Mark Read</button>
-                                    </form>
-                                    {% endif %}
-                                </div>
+                                <span style="font-size:11px;color:#999;">{{ m.timestamp }}</span>
                             </div>
                             <p style="font-size:13px;color:#333;margin:0;">{{ m.body }}</p>
                         </div>
@@ -4050,6 +4044,47 @@
             body.style.display = 'block';
             if (arrow) arrow.classList.add('open');
         }
+    }
+
+    function toggleThread(headerEl) {
+        var body = headerEl.nextElementSibling;
+        if (!body) return;
+        var opening = body.style.display === 'none';
+        body.style.display = opening ? 'block' : 'none';
+        if (opening) {
+            var unreadRows = body.querySelectorAll('.dm-msg-row[data-read="false"]');
+            unreadRows.forEach(function(row) {
+                var recipType = row.dataset.recipientType;
+                var isAdminView = !!headerEl.closest('.admin-acc-body');
+                var shouldMark = (isAdminView && recipType === 'admin') || (!isAdminView && recipType === 'user');
+                if (shouldMark) {
+                    var msgId = row.dataset.msgId;
+                    var fd = new FormData();
+                    fd.append('msg_id', msgId);
+                    fd.append('token', _adminToken);
+                    fetch('/mark-message-read', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd });
+                    row.dataset.read = 'true';
+                }
+            });
+            var dot = headerEl.querySelector('.thread-dot');
+            if (dot) { dot.innerHTML = '&#9675;'; dot.style.color = '#ccc'; }
+            headerEl.style.fontWeight = '400';
+            headerEl.style.background = '#fff';
+        }
+    }
+
+    function userReply(origSubject) {
+        var subj = document.querySelector('#dm-compose-form [name="subject"]');
+        if (subj) {
+            var re = 'Re: ' + origSubject;
+            subj.value = re.substring(0, 30);
+            var cc = subj.parentNode.querySelector('.char-count');
+            if (cc) cc.textContent = subj.value.length + '/30';
+        }
+        var form = document.getElementById('dm-compose-form');
+        if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        var bodyField = document.querySelector('#dm-compose-form [name="body"]');
+        if (bodyField) bodyField.focus();
     }
 
     function adminReply(senderId, origSubject) {
