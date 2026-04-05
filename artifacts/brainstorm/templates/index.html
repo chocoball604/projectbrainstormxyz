@@ -642,9 +642,15 @@
         <div id="study-builder-right" style="flex: 1; min-width: 0;">
         <div class="card" id="configure-study-section">
 
-            <div class="info-msg" style="margin-bottom: 16px;">
-                Type: <strong>{{ configure_study.study_type or 'Not set' }}</strong>
-                &middot; Status: <span class="badge badge-{{ configure_study.status }}">{{ configure_study.status }}</span>
+            <div style="margin-bottom: 20px;">
+                <h3 style="font-size: 17px; color: #1a1a2e; margin: 0 0 8px;">Study Identity</h3>
+                <div style="font-size: 14px; color: #333; margin-bottom: 6px;">
+                    <strong>Title:</strong> {{ configure_study.title }}
+                </div>
+                <div style="font-size: 14px; color: #555;">
+                    <strong>Type:</strong> {{ configure_study.study_type or 'Not set' }}
+                    &middot; <span class="badge badge-{{ configure_study.status }}">{{ configure_study.status }}</span>
+                </div>
             </div>
 
             {% if not configure_study.study_type %}
@@ -739,7 +745,7 @@
 
             {% endif %}
 
-            {% if configure_study.study_type == 'synthetic_survey' %}
+            {% if configure_study.study_type %}
 
             {% set has_bp = configure_study.business_problem and configure_study.business_problem|trim|length > 0 %}
             {% set has_ds = configure_study.decision_to_support and configure_study.decision_to_support|trim|length > 0 %}
@@ -747,12 +753,19 @@
             {% set has_pc = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
             {% set has_ta = configure_study.target_audience and configure_study.target_audience|trim|length > 0 %}
             {% set has_dui = configure_study.definition_useful_insight and configure_study.definition_useful_insight|trim|length > 0 %}
-            {% set all_anchors_complete = has_bp and has_ds and has_mg and has_pc and has_ta %}
+            {% if configure_study.study_type == 'synthetic_survey' %}
+                {% set all_anchors_complete = has_bp and has_ds and has_mg and has_pc and has_ta %}
+            {% else %}
+                {% set all_anchors_complete = has_bp and has_ds and has_mg and has_pc and has_ta and has_dui %}
+            {% endif %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Research Brief</h3>
             {% if all_anchors_complete %}
             <div style="background: #e8f5e9; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
-                <p style="margin: 0; font-weight: 600; color: #27ae60;">Research Brief Complete (5 required anchors filled{% if has_dui %} + optional insight{% endif %})</p>
+                <p style="margin: 0; font-weight: 600; color: #27ae60;">Research Brief Complete
+                    {% if configure_study.study_type == 'synthetic_survey' %}(5 required anchors filled{% if has_dui %} + optional insight{% endif %}){% else %}(all 6 anchors filled){% endif %}
+                </p>
                 <ul style="margin: 8px 0 0 20px; line-height: 1.6;">
                     <li><strong>Business Problem:</strong> {{ configure_study.business_problem }}</li>
                     <li><strong>Decision to Support:</strong> {{ configure_study.decision_to_support }}</li>
@@ -764,7 +777,6 @@
             </div>
             {% else %}
             <div style="background: #fff3cd; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ffc107;">
-                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Required to run this study</h3>
                 <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
                     Business Problem and Decision to Support were collected during discovery. Save each remaining anchor individually below.
                 </p>
@@ -844,6 +856,150 @@
             {% endif %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Grounding Documents</h3>
+            <p style="font-size: 12px; color: #888; margin-bottom: 10px;">
+                Upload documents to ground the study and persona generation. These inform Mark, Ben QA, and Lisa's outputs.
+            </p>
+
+            {% if study_uploads %}
+            <table style="margin-bottom: 12px; font-size: 13px;">
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Type</th>
+                        <th>Size</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for up in study_uploads %}
+                    <tr>
+                        <td>{{ up.filename }}</td>
+                        <td><code>{{ up.file_type }}</code></td>
+                        <td>{{ (up.file_size_bytes / 1024)|round(1) }} KB</td>
+                        <td>
+                            {% if up.status == 'deleted' %}
+                            <span style="color: #dc3545; font-size: 11px;">Deleted (retained for audit)</span>
+                            {% else %}
+                            <span style="color: #27ae60; font-size: 11px;">Active</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if configure_study.status == 'draft' and up.status == 'active' %}
+                            <form action="/detach-doc-from-study/{{ up.attachment_id }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <button type="submit" class="btn btn-secondary btn-small" onclick="return confirm('Detach this document from the study? (It stays in your library.)');">Remove</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p style="font-size: 12px; color: #888; margin-bottom: 8px;">
+                {{ study_uploads|length }} of {{ upload_max_files }} attached &middot; {{ (study_uploads_total_size / 1024)|round(1) }} KB of {{ upload_max_total_mb }} MB
+            </p>
+            {% else %}
+            <p style="font-size: 13px; color: #999; margin-bottom: 8px;">No documents attached yet.</p>
+            {% endif %}
+
+            {% if configure_study.status == 'draft' and study_uploads|length < upload_max_files %}
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px;">
+                <form action="/upload-study-file/{{ configure_study.id }}" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <input type="file" name="file" required style="font-size: 13px;">
+                    <button type="submit" class="btn btn-primary btn-small">Upload New</button>
+                </form>
+                {% if study_attachable_docs %}
+                <form action="/attach-doc-to-study/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <select name="doc_id" required style="font-size: 13px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px;">
+                        <option value="">-- Attach from My Documents --</option>
+                        {% for d in study_attachable_docs %}
+                        <option value="{{ d.id }}">D-{{ d.id }}: {{ d.filename }} ({{ (d.file_size_bytes / 1024)|round(1) }} KB)</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-success btn-small">Attach</button>
+                </form>
+                {% endif %}
+            </div>
+            {% elif study_uploads|length >= upload_max_files %}
+            <p style="font-size: 12px; color: #dc3545; font-weight: 600;">Attachment limit reached ({{ upload_max_files }} docs).</p>
+            {% endif %}
+
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Personas for this Study</h3>
+            {% if configure_study.study_type == 'synthetic_survey' %}
+            <p style="font-size: 13px; color: #999; margin-bottom: 12px; font-style: italic;">Personas — Not applicable for surveys</p>
+            {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
+            <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
+                You can reuse existing personas, or continue without selecting — Lisa will generate new ones.
+            </p>
+            <p style="font-size: 12px; color: #888; margin-bottom: 12px;">
+                {% if configure_study.study_type == 'synthetic_idi' %}Exactly 1 persona will be used{% else %}4–6 personas will be used{% endif %}
+            </p>
+
+            <div id="persona-table-area">
+            {% if configure_study_personas %}
+            {% set persona_count = configure_study_personas|length %}
+            <p style="font-size: 13px; color: #27ae60; margin-bottom: 8px; font-weight: 600;">{{ persona_count }} persona{{ 's' if persona_count != 1 else '' }} selected for reuse</p>
+            <table style="margin-bottom: 16px;">
+                <thead>
+                    <tr>
+                        <th>Persona</th>
+                        <th>Persona ID</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="persona-tbody">
+                    {% for cp in configure_study_personas %}
+                    <tr data-persona-id="{{ cp.id }}">
+                        <td>{{ cp.name }}</td>
+                        <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ cp.id }}</code></td>
+                        <td>
+                            <form class="detach-form" action="/detach-persona/{{ configure_study.id }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <input type="hidden" name="persona_instance_id" value="{{ cp.id }}">
+                                <button type="submit" class="btn btn-danger btn-small">Remove</button>
+                            </form>
+                            <a href="/?token={{ token }}&view_persona={{ cp.id }}" class="btn btn-primary btn-small">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p id="no-personas-msg" style="color: #999; font-size: 13px; margin-bottom: 12px;">No personas selected — Lisa will generate new ones</p>
+            {% endif %}
+            </div>
+
+            <div id="attach-persona-area">
+            {% if available_personas %}
+            <form id="attach-form" action="/attach-persona/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="flex: 1;">
+                    <label style="font-size: 13px; font-weight: 500; color: #555; display: block; margin-bottom: 4px;">Select persona to attach</label>
+                    <select name="persona_instance_id" required style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff;">
+                        <option value="">— Choose —</option>
+                        {% for p in available_personas %}
+                        <option value="{{ p.persona_instance_id }}">{{ p.name }} ({{ p.persona_instance_id }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-success btn-small" style="white-space: nowrap;">Attach</button>
+            </form>
+            {% elif personas_list %}
+            <p style="color: #999; font-size: 13px;">All personas are already attached.</p>
+            {% else %}
+            <p style="color: #999; font-size: 13px;">No personas available for reuse. Lisa will create personas when the study runs.</p>
+            {% endif %}
+            </div>
+            {% endif %}
+
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+
+            {% if configure_study.study_type == 'synthetic_survey' %}
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Survey Setup</h3>
             <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
                 Configure respondent and question counts, then build your survey instrument question by question.
@@ -994,325 +1150,55 @@
                 </div>
             </div>
 
-            {% set oc_survey = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
-            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Optional context <span style="font-weight: 400; font-size: 12px; color: #999;">(optional — does not affect Precheck)</span></h3>
-            <p style="font-size: 12px; color: #999; margin-bottom: 12px;">Optional context to enrich Mark/Lisa's work. These fields never block execution and do not change Precheck.</p>
-            {% set oc_fields = [
-                ('competitive_context', 'Competitive context', 'Key competitors, market positioning, competitive dynamics...'),
-                ('cultural_sensitivities', 'Cultural sensitivities', 'Cultural factors, local norms, sensitivities to consider...'),
-                ('adoption_barriers', 'Adoption barriers', 'Known barriers to adoption, switching costs, resistance factors...'),
-                ('risk_tolerance', 'Risk tolerance', 'Risk appetite of the target audience or business context...')
-            ] %}
-            {% for fk, fl, fp in oc_fields %}
-            {% set fv = oc_survey.get(fk, '') if oc_survey else '' %}
-            <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
-                {% if fv and fv|trim|length > 0 %}
-                <div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;">
-                    <strong style="color:#27ae60;">&#10003; {{ fl }}:</strong> {{ fv }}
-                    <a href="#" class="oc-edit-link" data-field="{{ fk }}" data-label="{{ fl }}" data-placeholder="{{ fp }}" data-value="{{ fv }}" data-action="/save-optional-context-field/{{ configure_study.id }}" style="margin-left:8px;font-size:12px;color:#5C7E8F;">Edit</a>
-                </div>
-                {% else %}
-                <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <input type="hidden" name="field_key" value="{{ fk }}">
-                    <div class="form-group" style="margin-bottom:4px;">
-                        <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                        <textarea name="field_value" rows="2" placeholder="{{ fp }}"></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">Save</button>
-                </form>
-                {% endif %}
-            </div>
-            {% endfor %}
-
             {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
-
-            {% set has_bp = configure_study.business_problem and configure_study.business_problem|trim|length > 0 %}
-            {% set has_ds = configure_study.decision_to_support and configure_study.decision_to_support|trim|length > 0 %}
-            {% set has_mg = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
-            {% set has_pc = configure_study.known_vs_unknown and configure_study.known_vs_unknown|trim|length > 0 %}
-            {% set has_ta = configure_study.target_audience and configure_study.target_audience|trim|length > 0 %}
-            {% set has_dui = configure_study.definition_useful_insight and configure_study.definition_useful_insight|trim|length > 0 %}
-            {% set all_anchors_complete = has_bp and has_ds and has_mg and has_pc and has_ta and has_dui %}
-
-            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-            {% if all_anchors_complete %}
-            <div style="background: #e8f5e9; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
-                <p style="margin: 0; font-weight: 600; color: #27ae60;">Research Brief Complete (all 6 anchors filled)</p>
-                <ul style="margin: 8px 0 0 20px; line-height: 1.6;">
-                    <li><strong>Business Problem:</strong> {{ configure_study.business_problem }}</li>
-                    <li><strong>Decision to Support:</strong> {{ configure_study.decision_to_support }}</li>
-                    <li><strong>Market / Geography:</strong> {{ configure_study.study_fit }}</li>
-                    <li><strong>Product / Concept:</strong> {{ configure_study.known_vs_unknown }}</li>
-                    <li><strong>Target Audience:</strong> {{ configure_study.target_audience }}</li>
-                    <li><strong>Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}</li>
-                </ul>
-            </div>
-            {% else %}
-            <div style="background: #fff3cd; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ffc107;">
-                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Required to run this study</h3>
-                <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
-                    Business Problem and Decision to Support were collected during discovery. Save each remaining anchor individually below.
-                </p>
-
-                <div id="anchor-slot-market_geography">
-                {% if has_mg %}
-                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
-                    <strong style="color: #27ae60;">✓ 3. Market / Geography:</strong> {{ configure_study.study_fit }}
-                </div>
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 8px;">Persona Rules</h3>
+            <div style="background: #f0f4ff; border-radius: 6px; padding: 14px; margin-bottom: 16px; border: 1px solid #d0d9f5; font-size: 13px; color: #555;">
+                {% if configure_study.study_type == 'synthetic_idi' %}
+                IDI requires exactly 1 persona. If none is selected for reuse above, Lisa will generate one automatically when the study starts.
                 {% else %}
-                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="market_geography">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <input type="hidden" name="anchor_key" value="market_geography">
-                    <div class="form-group" style="margin-bottom: 6px;">
-                        <label>3. Market / Geography</label>
-                        <textarea name="anchor_value" rows="2" required placeholder="What market or geography does this study focus on?"></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-small">Save Market / Geography</button>
-                </form>
+                Focus Group requires 4–6 personas. If fewer are selected for reuse above, Lisa will generate additional personas to reach the minimum when the study starts.
                 {% endif %}
-                </div>
-
-                <div id="anchor-slot-product_concept">
-                {% if has_pc %}
-                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
-                    <strong style="color: #27ae60;">✓ 4. Product / Concept:</strong> {{ configure_study.known_vs_unknown }}
-                </div>
-                {% else %}
-                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="product_concept">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <input type="hidden" name="anchor_key" value="product_concept">
-                    <div class="form-group" style="margin-bottom: 6px;">
-                        <label>4. Product / Concept</label>
-                        <textarea name="anchor_value" rows="2" required placeholder="What product, service, or concept is being researched?"></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-small">Save Product / Concept</button>
-                </form>
-                {% endif %}
-                </div>
-
-                <div id="anchor-slot-target_audience">
-                {% if has_ta %}
-                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
-                    <strong style="color: #27ae60;">✓ 5. Target Audience:</strong> {{ configure_study.target_audience }}
-                </div>
-                {% else %}
-                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="target_audience">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <input type="hidden" name="anchor_key" value="target_audience">
-                    <div class="form-group" style="margin-bottom: 6px;">
-                        <label>5. Target Audience</label>
-                        <textarea name="anchor_value" rows="2" required placeholder="Who is the target audience for this research?"></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-small">Save Target Audience</button>
-                </form>
-                {% endif %}
-                </div>
-
-                <div id="anchor-slot-definition_useful_insight">
-                {% if has_dui %}
-                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
-                    <strong style="color: #27ae60;">✓ 6. Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}
-                </div>
-                {% else %}
-                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="definition_useful_insight">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <input type="hidden" name="anchor_key" value="definition_useful_insight">
-                    <div class="form-group" style="margin-bottom: 6px;">
-                        <label>6. Definition of Useful Insight</label>
-                        <textarea name="anchor_value" rows="2" required placeholder="What would a useful insight look like for this study?"></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-small">Save Definition of Useful Insight</button>
-                </form>
-                {% endif %}
-                </div>
             </div>
             {% endif %}
 
-            {% set oc = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
+            {% set oc_data = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">Optional context <span style="font-weight: 400; font-size: 12px; color: #999;">(optional — does not affect Precheck)</span></h3>
-            <p style="font-size: 12px; color: #999; margin-bottom: 12px;">Optional context to enrich Mark/Lisa's work. These fields never block execution and do not change Precheck.</p>
-            {% set oc_fields_idi = [
-                ('competitive_context', 'Competitive context', 'Key competitors, market positioning, competitive dynamics...'),
-                ('cultural_sensitivities', 'Cultural sensitivities', 'Cultural factors, local norms, sensitivities to consider...'),
-                ('adoption_barriers', 'Adoption barriers', 'Known barriers to adoption, switching costs, resistance factors...'),
-                ('risk_tolerance', 'Risk tolerance', 'Risk appetite of the target audience or business context...')
-            ] %}
-            {% for fk, fl, fp in oc_fields_idi %}
-            {% set fv = oc.get(fk, '') if oc else '' %}
-            <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
-                {% if fv and fv|trim|length > 0 %}
-                <div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;">
-                    <strong style="color:#27ae60;">&#10003; {{ fl }}:</strong> {{ fv }}
-                    <a href="#" class="oc-edit-link" data-field="{{ fk }}" data-label="{{ fl }}" data-placeholder="{{ fp }}" data-value="{{ fv }}" data-action="/save-optional-context-field/{{ configure_study.id }}" style="margin-left:8px;font-size:12px;color:#5C7E8F;">Edit</a>
+            <div id="optional-context-section">
+                <div style="display: flex; align-items: center; cursor: pointer; user-select: none;" id="oc-toggle-header">
+                    <span id="oc-toggle-icon" style="font-size: 14px; margin-right: 8px; transition: transform 0.2s;">&#9654;</span>
+                    <h3 style="font-size: 16px; color: #1a1a2e; margin: 0;">Optional Context <span style="font-weight: 400; font-size: 12px; color: #999;">(does not affect readiness)</span></h3>
                 </div>
-                {% else %}
-                <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <input type="hidden" name="field_key" value="{{ fk }}">
-                    <div class="form-group" style="margin-bottom:4px;">
-                        <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                        <textarea name="field_value" rows="2" placeholder="{{ fp }}"></textarea>
+                <div id="oc-toggle-body" style="display: none; margin-top: 12px;">
+                    {% set oc_fields_list = [
+                        ('competitive_context', 'Competitive context', 'Key competitors, market positioning, competitive dynamics...'),
+                        ('cultural_sensitivities', 'Cultural sensitivities', 'Cultural factors, local norms, sensitivities to consider...'),
+                        ('adoption_barriers', 'Adoption barriers', 'Known barriers to adoption, switching costs, resistance factors...'),
+                        ('risk_tolerance', 'Risk tolerance', 'Risk appetite of the target audience or business context...')
+                    ] %}
+                    {% for fk, fl, fp in oc_fields_list %}
+                    {% set fv = oc_data.get(fk, '') if oc_data else '' %}
+                    <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
+                        {% if fv and fv|trim|length > 0 %}
+                        <div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;">
+                            <strong style="color:#27ae60;">&#10003; {{ fl }}:</strong> {{ fv }}
+                            <a href="#" class="oc-edit-link" data-field="{{ fk }}" data-label="{{ fl }}" data-placeholder="{{ fp }}" data-value="{{ fv }}" data-action="/save-optional-context-field/{{ configure_study.id }}" style="margin-left:8px;font-size:12px;color:#5C7E8F;">Edit</a>
+                        </div>
+                        {% else %}
+                        <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
+                            <input type="hidden" name="token" value="{{ token }}">
+                            <input type="hidden" name="field_key" value="{{ fk }}">
+                            <div class="form-group" style="margin-bottom:4px;">
+                                <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span></label>
+                                <textarea name="field_value" rows="2" placeholder="{{ fp }}"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">Save</button>
+                        </form>
+                        {% endif %}
                     </div>
-                    <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">Save</button>
-                </form>
-                {% endif %}
-            </div>
-            {% endfor %}
-
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Personas</h3>
-            {% if configure_study.study_type == 'synthetic_idi' %}
-            <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                IDI requires exactly 1 persona. Currently attached: <strong>{{ configure_study_personas|length }}</strong>. Lisa will create the persona if none is selected for reuse.
-            </p>
-            {% else %}
-            <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                Focus Group requires 4–6 personas. Currently attached: <strong>{{ configure_study_personas|length }}</strong>. Lisa will create any additional personas needed to reach the minimum.
-            </p>
-            {% endif %}
-
-            <div id="persona-table-area">
-            {% if configure_study_personas %}
-            <table style="margin-bottom: 16px;">
-                <thead>
-                    <tr>
-                        <th>Persona</th>
-                        <th>Persona ID</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody id="persona-tbody">
-                    {% for cp in configure_study_personas %}
-                    <tr data-persona-id="{{ cp.id }}">
-                        <td>{{ cp.name }}</td>
-                        <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ cp.id }}</code></td>
-                        <td>
-                            <form class="detach-form" action="/detach-persona/{{ configure_study.id }}" method="POST" style="display:inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <input type="hidden" name="persona_instance_id" value="{{ cp.id }}">
-                                <button type="submit" class="btn btn-danger btn-small">Remove</button>
-                            </form>
-                            <a href="/?token={{ token }}&view_persona={{ cp.id }}" class="btn btn-primary btn-small">View</a>
-                        </td>
-                    </tr>
                     {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p id="no-personas-msg" style="color: #999; font-size: 13px; margin-bottom: 16px;">No personas attached yet.</p>
-            {% endif %}
-            </div>
-
-            <div id="attach-persona-area">
-            {% if available_personas %}
-            <form id="attach-form" action="/attach-persona/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div style="flex: 1;">
-                    <label style="font-size: 13px; font-weight: 500; color: #555; display: block; margin-bottom: 4px;">Select persona to attach</label>
-                    <select name="persona_instance_id" required style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff;">
-                        <option value="">— Choose —</option>
-                        {% for p in available_personas %}
-                        <option value="{{ p.persona_instance_id }}">{{ p.name }} ({{ p.persona_instance_id }})</option>
-                        {% endfor %}
-                    </select>
                 </div>
-                <button type="submit" class="btn btn-success btn-small" style="white-space: nowrap;">Attach</button>
-            </form>
-            {% elif personas_list %}
-            <p style="color: #999; font-size: 13px;">All personas are already attached.</p>
-            {% else %}
-            <p style="color: #999; font-size: 13px;">No personas available for reuse. Lisa will create personas when the study runs.</p>
-            {% endif %}
             </div>
 
-            {% set persona_count = configure_study_personas|length %}
-            {% if configure_study.study_type == 'synthetic_idi' %}
-                {% set personas_valid = persona_count >= 0 and persona_count <= 1 %}
-            {% else %}
-                {% set personas_valid = persona_count >= 4 and persona_count <= 6 %}
-            {% endif %}
-
-            {% else %}
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Personas</h3>
-            <p style="font-size: 13px; color: #999;">Select a study type above to configure personas or survey settings.</p>
-            {% endif %}
-
-            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Attached Documents (Grounding)</h3>
-            <p style="font-size: 12px; color: #888; margin-bottom: 10px;">
-                Attach documents to improve grounding. Max {{ upload_max_files }} docs, {{ upload_max_total_mb }}MB total per study. Upload adds to your library and auto-attaches.
-            </p>
-
-            {% if study_uploads %}
-            <table style="margin-bottom: 12px; font-size: 13px;">
-                <thead>
-                    <tr>
-                        <th>Doc ID</th>
-                        <th>Filename</th>
-                        <th>Type</th>
-                        <th>Size</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for up in study_uploads %}
-                    <tr>
-                        <td><code style="font-size: 11px;">D-{{ up.id }}</code></td>
-                        <td>{{ up.filename }}</td>
-                        <td><code>{{ up.file_type }}</code></td>
-                        <td>{{ (up.file_size_bytes / 1024)|round(1) }} KB</td>
-                        <td>
-                            {% if up.status == 'deleted' %}
-                            <span style="color: #dc3545; font-size: 11px;">Deleted (retained for audit)</span>
-                            {% else %}
-                            <span style="color: #27ae60; font-size: 11px;">Active</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if configure_study.status == 'draft' and up.status == 'active' %}
-                            <form action="/detach-doc-from-study/{{ up.attachment_id }}" method="POST" style="display: inline;">
-                                <input type="hidden" name="token" value="{{ token }}">
-                                <button type="submit" class="btn btn-secondary btn-small" onclick="return confirm('Detach this document from the study? (It stays in your library.)');">Detach</button>
-                            </form>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            <p style="font-size: 12px; color: #888; margin-bottom: 8px;">
-                {{ study_uploads|length }} of {{ upload_max_files }} attached &middot; {{ (study_uploads_total_size / 1024)|round(1) }} KB of {{ upload_max_total_mb }} MB
-            </p>
-            {% else %}
-            <p style="font-size: 13px; color: #999; margin-bottom: 8px;">No documents attached yet.</p>
-            {% endif %}
-
-            {% if configure_study.status == 'draft' and study_uploads|length < upload_max_files %}
-            <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px;">
-                <form action="/upload-study-file/{{ configure_study.id }}" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <input type="file" name="file" required style="font-size: 13px;">
-                    <button type="submit" class="btn btn-primary btn-small">Upload New</button>
-                </form>
-                {% if study_attachable_docs %}
-                <form action="/attach-doc-to-study/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
-                    <input type="hidden" name="token" value="{{ token }}">
-                    <select name="doc_id" required style="font-size: 13px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px;">
-                        <option value="">-- Attach from My Documents --</option>
-                        {% for d in study_attachable_docs %}
-                        <option value="{{ d.id }}">D-{{ d.id }}: {{ d.filename }} ({{ (d.file_size_bytes / 1024)|round(1) }} KB)</option>
-                        {% endfor %}
-                    </select>
-                    <button type="submit" class="btn btn-success btn-small">Attach</button>
-                </form>
-                {% endif %}
-            </div>
-            {% elif study_uploads|length >= upload_max_files %}
-            <p style="font-size: 12px; color: #dc3545; font-weight: 600;">Attachment limit reached ({{ upload_max_files }} docs).</p>
             {% endif %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
@@ -1462,6 +1348,19 @@
             var token = '{{ token }}';
             var studyId = {{ configure_study.id if configure_study else 0 }};
             if (!studyId) return;
+
+            var ocHeader = document.getElementById('oc-toggle-header');
+            if (ocHeader) {
+                ocHeader.addEventListener('click', function() {
+                    var body = document.getElementById('oc-toggle-body');
+                    var icon = document.getElementById('oc-toggle-icon');
+                    if (body && icon) {
+                        var isOpen = body.style.display !== 'none';
+                        body.style.display = isOpen ? 'none' : 'block';
+                        icon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+                    }
+                });
+            }
 
             var anchorLabels = {
                 'market_geography': '3. Market / Geography',
