@@ -7411,6 +7411,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         allowed_models_list=allowed_models_list,
         persona_pool_list=persona_pool_list,
         health_status_list=[],
+        health_map={},
         latest_weekly_report=None,
         latest_health_check=None,
         mark_recommendation="",
@@ -7449,6 +7450,12 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         user_storage_cap_mb=UPLOAD_USER_STORAGE_CAP // (1024 * 1024),
         user_storage_cap=UPLOAD_USER_STORAGE_CAP,
         latest_blog_posts=get_latest_blog_posts(2),
+        dm_unread_count=0,
+        dm_messages_list=[],
+        dm_page=1,
+        dm_total_pages=1,
+        dm_total=0,
+        dm_view=None,
     )
 
 

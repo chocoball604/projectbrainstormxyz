@@ -45,5 +45,18 @@
     "sender_name": "benji123",
     "recipient_type": "admin",
     "recipient_user_id": null
+  },
+  {
+    "id": "7a4fdfd47a070eb8",
+    "timestamp": "2026-04-05 14:46:54",
+    "subject": "Test",
+    "body": "Hello",
+    "category": "Other",
+    "read": false,
+    "sender_type": "user",
+    "sender_id": 6,
+    "sender_name": "benji123",
+    "recipient_type": "admin",
+    "recipient_user_id": null
   }
 ]
