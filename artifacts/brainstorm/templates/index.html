@@ -3179,7 +3179,7 @@
                             <td>{% if not m.read %}<span style="color:#dc3545;font-size:16px;">&#9679;</span>{% else %}<span style="color:#ccc;font-size:16px;">&#9675;</span>{% endif %}</td>
                             <td><span style="font-size:11px;padding:2px 6px;border-radius:4px;background:#e2e8f0;color:#475569;">{{ m.get('category', '—') }}</span></td>
                             <td>{{ m.subject }}</td>
-                            <td style="font-size:12px;color:#777;">{{ m.get('sender_name', m.sender_type|default('system')) }}</td>
+                            <td style="font-size:12px;color:#777;">{% if m.sender_type == 'system' %}System{% else %}{{ m.get('sender_name', m.sender_type|default('system')) }}{% endif %}</td>
                             <td style="font-size:12px;color:#777;white-space:nowrap;">{{ m.timestamp }}</td>
                             <td>
                                 {% if not m.read %}
