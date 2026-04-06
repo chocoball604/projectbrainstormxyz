@@ -79,6 +79,8 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             padding: 32px;
             margin-bottom: 24px;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
         }
         .card h2 {
             margin-bottom: 20px;
@@ -1964,7 +1966,7 @@
                                 var label = discoveryLabels[field] || field;
                                 slot.innerHTML = '<label style="font-weight:600;font-size:14px;display:block;margin-bottom:4px;">'
                                     + escHtml(label) + ' <span style="color:#27ae60;font-size:12px;margin-left:6px;">Saved</span></label>'
-                                    + '<div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px 12px;font-size:14px;color:#333;">'
+                                    + '<div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px 12px;font-size:14px;color:#333;overflow-wrap:break-word;word-wrap:break-word;">'
                                     + escHtml(val) + '</div>';
                             }
                             if (data.mark_recommendation) {
@@ -2028,7 +2030,7 @@
                         if (data.ok) {
                             var slot = document.getElementById('anchor-slot-' + key);
                             if (slot) {
-                                slot.innerHTML = '<div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:13px;">'
+                                slot.innerHTML = '<div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:13px;overflow-wrap:break-word;word-wrap:break-word;">'
                                     + '<strong style="color:#27ae60;">\u2713 ' + escHtml(anchorLabels[key] || key) + ':</strong> '
                                     + escHtml(val)
                                     + '</div>';
@@ -2049,7 +2051,7 @@
             });
 
             function ocRenderSaved(slot, fieldKey, label, val, actionUrl) {
-                slot.innerHTML = '<div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;">'
+                slot.innerHTML = '<div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;overflow-wrap:break-word;word-wrap:break-word;">'
                     + '<strong style="color:#27ae60;">\u2713 ' + escHtml(label) + ':</strong> ' + escHtml(val)
                     + ' <span style="color:#27ae60;font-size:12px;margin-left:6px;">Saved</span>'
                     + ' <a href="#" class="oc-edit-link" style="margin-left:8px;font-size:12px;color:#5C7E8F;">Edit</a></div>';
@@ -2972,7 +2974,7 @@
             {% endif %}
         </div>
 
-        <div class="card">
+        <div class="card" id="personas-card">
             <div class="card-header">
                 <h2>My Personas</h2>
             </div>
@@ -2980,18 +2982,16 @@
                 Personas are created by Lisa during study execution. You can browse, search, and reuse existing personas here.
             </p>
 
-            <form method="GET" action="/" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
-                <input type="hidden" name="token" value="{{ token }}">
+            <form id="personas-search-form" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
                 <div style="flex: 1;">
                     <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by Persona ID or name</label>
-                    <input type="text" name="personas_q" value="{{ personas_q }}" placeholder="Search personas..." style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
+                    <input type="text" id="personas-search-input" value="{{ personas_q }}" placeholder="Search personas..." style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
                 </div>
                 <button type="submit" class="btn btn-primary btn-small" style="height: 34px;">Search</button>
-                {% if personas_q %}
-                <a href="/?token={{ token }}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
-                {% endif %}
+                <a href="#" id="personas-search-clear" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px; {% if not personas_q %}display:none;{% endif %}">Clear</a>
             </form>
 
+            <div id="personas-list-container">
             {% if personas_list %}
             <table>
                 <thead>
@@ -3022,22 +3022,109 @@
                 <span>{{ personas_total }} personas total — Page {{ personas_page }} of {{ personas_total_pages }}</span>
                 <div style="display: flex; gap: 6px;">
                     {% if personas_page > 1 %}
-                    <a href="/?token={{ token }}&personas_page={{ personas_page - 1 }}{% if personas_q %}&personas_q={{ personas_q }}{% endif %}" class="btn btn-secondary btn-small">Prev</a>
+                    <a href="#" class="btn btn-secondary btn-small personas-page-link" data-page="{{ personas_page - 1 }}">Prev</a>
                     {% endif %}
                     {% if personas_page < personas_total_pages %}
-                    <a href="/?token={{ token }}&personas_page={{ personas_page + 1 }}{% if personas_q %}&personas_q={{ personas_q }}{% endif %}" class="btn btn-secondary btn-small">Next</a>
+                    <a href="#" class="btn btn-secondary btn-small personas-page-link" data-page="{{ personas_page + 1 }}">Next</a>
                     {% endif %}
                 </div>
             </div>
             {% else %}
             <div class="empty-state">
                 {% if personas_q %}
-                No personas matching "{{ personas_q }}". <a href="/?token={{ token }}">Clear search</a>
+                No personas matching "{{ personas_q }}". <a href="#" id="personas-search-clear-empty">Clear search</a>
                 {% else %}
                 No personas yet. Personas are created by Lisa when you run a study.
                 {% endif %}
             </div>
             {% endif %}
+            </div>
+
+            <script>
+            (function() {
+                var _pToken = '{{ token }}';
+                var _pQuery = '{{ personas_q }}';
+                var _pPage = {{ personas_page }};
+
+                function renderPersonasList(data) {
+                    var container = document.getElementById('personas-list-container');
+                    if (!data.personas || data.personas.length === 0) {
+                        var msg = data.q
+                            ? 'No personas matching "' + escHtml(data.q) + '". <a href="#" id="personas-search-clear-empty">Clear search</a>'
+                            : 'No personas yet. Personas are created by Lisa when you run a study.';
+                        container.innerHTML = '<div class="empty-state">' + msg + '</div>';
+                        var clearEmpty = document.getElementById('personas-search-clear-empty');
+                        if (clearEmpty) clearEmpty.addEventListener('click', function(ev) { ev.preventDefault(); clearPersonasSearch(); });
+                        return;
+                    }
+                    var html = '<table><thead><tr><th>Name</th><th>Persona ID</th><th>Action</th></tr></thead><tbody>';
+                    data.personas.forEach(function(p) {
+                        html += '<tr><td>' + escHtml(p.name) + '</td>'
+                            + '<td><code style="font-size:12px;background:#f0f0f0;padding:2px 6px;border-radius:3px;">' + escHtml(p.persona_instance_id) + '</code></td>'
+                            + '<td><a href="/?token=' + encodeURIComponent(_pToken) + '&view_persona=' + encodeURIComponent(p.persona_instance_id) + '" class="btn btn-primary btn-small">View</a>'
+                            + ' <form action="/delete-persona/' + encodeURIComponent(p.persona_instance_id) + '" method="POST" style="display:inline;" onsubmit="return confirm(\'Delete this persona?\');">'
+                            + '<input type="hidden" name="token" value="' + escHtml(_pToken) + '">'
+                            + '<button type="submit" class="btn btn-danger btn-small">Delete</button></form>'
+                            + '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:#777;">';
+                    html += '<span>' + data.total + ' personas total — Page ' + data.page + ' of ' + data.total_pages + '</span>';
+                    html += '<div style="display:flex;gap:6px;">';
+                    if (data.page > 1) html += '<a href="#" class="btn btn-secondary btn-small personas-page-link" data-page="' + (data.page - 1) + '">Prev</a>';
+                    if (data.page < data.total_pages) html += '<a href="#" class="btn btn-secondary btn-small personas-page-link" data-page="' + (data.page + 1) + '">Next</a>';
+                    html += '</div></div>';
+                    container.innerHTML = html;
+                    bindPageLinks();
+                    _pPage = data.page;
+                    _pQuery = data.q || '';
+                }
+
+                function loadPersonasPage(page, q) {
+                    var url = '/api/personas-list?token=' + encodeURIComponent(_pToken) + '&page=' + page;
+                    if (q) url += '&q=' + encodeURIComponent(q);
+                    fetch(url)
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.ok) renderPersonasList(data);
+                    })
+                    .catch(function() {});
+                }
+
+                function bindPageLinks() {
+                    document.querySelectorAll('.personas-page-link').forEach(function(link) {
+                        link.addEventListener('click', function(ev) {
+                            ev.preventDefault();
+                            var pg = parseInt(link.getAttribute('data-page'));
+                            loadPersonasPage(pg, _pQuery);
+                        });
+                    });
+                }
+                bindPageLinks();
+
+                function clearPersonasSearch() {
+                    document.getElementById('personas-search-input').value = '';
+                    document.getElementById('personas-search-clear').style.display = 'none';
+                    _pQuery = '';
+                    loadPersonasPage(1, '');
+                }
+
+                var searchForm = document.getElementById('personas-search-form');
+                if (searchForm) {
+                    searchForm.addEventListener('submit', function(ev) {
+                        ev.preventDefault();
+                        var q = document.getElementById('personas-search-input').value.trim();
+                        _pQuery = q;
+                        document.getElementById('personas-search-clear').style.display = q ? '' : 'none';
+                        loadPersonasPage(1, q);
+                    });
+                }
+                var clearBtn = document.getElementById('personas-search-clear');
+                if (clearBtn) clearBtn.addEventListener('click', function(ev) { ev.preventDefault(); clearPersonasSearch(); });
+                var clearEmpty = document.getElementById('personas-search-clear-empty');
+                if (clearEmpty) clearEmpty.addEventListener('click', function(ev) { ev.preventDefault(); clearPersonasSearch(); });
+            })();
+            </script>
         </div>
 
         <div class="card">

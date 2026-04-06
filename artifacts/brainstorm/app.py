@@ -7631,6 +7631,56 @@ def create_persona():
     return redirect(url_for("index", token=token, view_persona=new_instance_id))
 
 
+@app.route("/api/personas-list", methods=["GET"])
+def api_personas_list():
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return jsonify({"ok": False, "error": "Not authenticated."}), 403
+
+    page = max(1, int(request.args.get("page", "1") or "1"))
+    q = (request.args.get("q") or "").strip()
+    ps = 10
+
+    conn = get_db()
+    if q:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?)",
+            (user["id"], f"%{q}%", f"%{q}%"),
+        ).fetchone()[0]
+    else:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM personas WHERE user_id = ?",
+            (user["id"],),
+        ).fetchone()[0]
+
+    total_pages = max(1, (total + ps - 1) // ps)
+    page = min(page, total_pages)
+    offset = (page - 1) * ps
+
+    if q:
+        rows = conn.execute(
+            "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
+            (user["id"], f"%{q}%", f"%{q}%", ps, offset),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+            (user["id"], ps, offset),
+        ).fetchall()
+    conn.close()
+
+    personas = [{"persona_instance_id": r[0], "name": r[1], "created_at": r[2]} for r in rows]
+    return jsonify({
+        "ok": True,
+        "personas": personas,
+        "page": page,
+        "total_pages": total_pages,
+        "total": total,
+        "q": q,
+    })
+
+
 @app.route("/delete-persona/<path:instance_id>", methods=["POST"])
 def delete_persona(instance_id):
     token = get_token()
