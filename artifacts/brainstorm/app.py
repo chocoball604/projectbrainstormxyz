@@ -604,7 +604,11 @@ def _extract_optional_context(study_dict):
                     oc = {}
         except (json.JSONDecodeError, TypeError):
             pass
+    dui_val = (study_dict.get("definition_useful_insight") or "").strip()
+    if dui_val:
+        oc["definition_useful_insight"] = dui_val
     fields = [
+        ("definition_useful_insight", "Definition of Useful Insight"),
         ("competitive_context", "Competitive context"),
         ("cultural_sensitivities", "Cultural sensitivities"),
         ("adoption_barriers", "Adoption barriers"),
@@ -696,12 +700,14 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
         ("known_vs_unknown", "Known vs Unknown"),
         ("target_audience", "Target Audience"),
         ("study_fit", "Study Fit"),
-        ("definition_useful_insight", "Definition of Useful Insight"),
     ]
     brief_text = ""
     for field, label in brief_fields:
         val = (study_dict.get(field) or "").strip()
         brief_text += f"{label}: {val or 'Not specified'}\n"
+    dui_val = (study_dict.get("definition_useful_insight") or "").strip()
+    if dui_val:
+        brief_text += f"Definition of Useful Insight: {dui_val}\n"
 
     study_type_label = (
         "In-Depth Interview (IDI)"
@@ -983,7 +989,6 @@ V1A_LABELS = {
     "market_geography": "Market / Geography",
     "product_concept": "Product / Concept",
     "target_audience": "Target Audience",
-    "definition_useful_insight": "Definition of Useful Insight",
 }
 
 BUDGET_CEILINGS = {
@@ -2935,7 +2940,6 @@ RESEARCH_BRIEF_FIELDS = [
     ("known_vs_unknown", "Known vs Unknown"),
     ("target_audience", "Target Audience"),
     ("study_fit", "Study Fit"),
-    ("definition_useful_insight", "Definition of Useful Insight"),
 ]
 
 
@@ -2972,11 +2976,10 @@ def create_study():
         if (
             not decision_to_support
             or not target_audience
-            or not definition_useful_insight
             or not top_hypotheses
         ):
             return render_error(
-                "All survey brief fields are required (Decision to Support, Target Audience, Definition of Useful Insight, Top Hypotheses)."
+                "All survey brief fields are required (Decision to Support, Target Audience, Top Hypotheses)."
             )
 
         try:
@@ -3035,9 +3038,10 @@ def create_study():
             val = (request.form.get(field_key) or "").strip()
             if not val:
                 return render_error(
-                    f'"{field_label}" is required. All 6 anchors must be filled.',
+                    f'"{field_label}" is required. All 5 anchors must be filled.',
                 )
             brief[field_key] = val
+        definition_useful_insight_val = (request.form.get("definition_useful_insight") or "").strip()
 
         conn = get_db()
         conn.execute(
@@ -3054,7 +3058,7 @@ def create_study():
                 brief["known_vs_unknown"],
                 brief["target_audience"],
                 brief["study_fit"],
-                brief["definition_useful_insight"],
+                definition_useful_insight_val,
             ),
         )
         conn.commit()
@@ -3741,7 +3745,6 @@ ANCHOR_FIELDS = [
     ("known_vs_unknown", "Known vs Unknown"),
     ("target_audience", "Target Audience"),
     ("study_fit", "Study Fit"),
-    ("definition_useful_insight", "Definition of Useful Insight"),
 ]
 
 
@@ -4644,7 +4647,6 @@ def run_ben_qa(study_dict):
             "known_vs_unknown": "Known vs Unknown",
             "target_audience": "Target Audience",
             "study_fit": "Study Fit",
-            "definition_useful_insight": "Definition of Useful Insight",
         }
         missing_anchors = []
         for field_key, field_label in anchor_fields.items():
@@ -4856,7 +4858,6 @@ def ben_precheck(study, persona_count, persona_dossiers=None):
             ("market_geography", "Market / Geography"),
             ("product_concept", "Product / Concept"),
             ("target_audience", "Target Audience"),
-            ("definition_useful_insight", "Definition of Useful Insight"),
         ]
         for field, label in anchor_labels:
             val = get_v1a_value(study, field)
@@ -5165,7 +5166,6 @@ def get_save_buttons(study):
             ("market_geography", "Save as Market / Geography"),
             ("product_concept", "Save as Product / Concept"),
             ("target_audience", "Save as Target Audience"),
-            ("definition_useful_insight", "Save as Definition of Useful Insight"),
         ]
         study_dict = dict(study)
         for field, label in anchor_fields:
@@ -5235,11 +5235,6 @@ def get_coaching_nudge(study, persona_count):
                 "Target Audience",
                 "Who is the target audience for this research?",
             ),
-            (
-                "definition_useful_insight",
-                "Definition of Useful Insight",
-                "What would a useful insight look like for this study?",
-            ),
         ]
         study_dict = dict(study)
         for field, label, prompt in anchors:
@@ -5288,7 +5283,6 @@ def save_chat_field(study_id):
         "market_geography",
         "product_concept",
         "target_audience",
-        "definition_useful_insight",
         "survey_question_append",
     }
     if field not in valid_fields:
@@ -5422,7 +5416,6 @@ def send_chat(study_id):
         ("market_geography", "Market / Geography"),
         ("product_concept", "Product / Concept"),
         ("target_audience", "Target Audience"),
-        ("definition_useful_insight", "Definition of Useful Insight"),
     ]
     field_statuses = {}
     for key, label in anchor_keys:
@@ -5521,8 +5514,7 @@ def send_chat(study_id):
         "- Decision to Support\n"
         "- Market / Geography\n"
         "- Product / Concept\n"
-        "- Target Audience\n"
-        "- Definition (example) of Useful Insight\n\n"
+        "- Target Audience\n\n"
         "Important:\n"
         "- Do NOT ask the user to fill 'Study Fit' as a field; YOU explain fit when recommending a study type.\n"
         "- Do NOT treat 'Known vs Unknown' as required; if it appears, frame it as a hypothesis only.\n\n"
@@ -5691,7 +5683,6 @@ def run_study(study_id):
             ("known_vs_unknown", "Known vs Unknown"),
             ("target_audience", "Target Audience"),
             ("study_fit", "Study Fit"),
-            ("definition_useful_insight", "Definition of Useful Insight"),
         ]:
             val = (study[col] or "").strip()
             if not val:
@@ -6023,7 +6014,6 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
                 ("known_vs_unknown", "Known vs Unknown"),
                 ("target_audience", "Target Audience"),
                 ("study_fit", "Study Fit"),
-                ("definition_useful_insight", "Definition of Useful Insight"),
             ]
             brief_text = ""
             for field, label in brief_fields:
@@ -6602,7 +6592,6 @@ def save_remaining_anchors(study_id):
     mg = (request.form.get("market_geography") or "").strip()
     pc = (request.form.get("product_concept") or "").strip()
     ta = (request.form.get("target_audience") or "").strip()
-    dui = (request.form.get("definition_useful_insight") or "").strip()
 
     updates = []
     params = []
@@ -6615,9 +6604,6 @@ def save_remaining_anchors(study_id):
     if ta:
         updates.append("target_audience = ?")
         params.append(ta)
-    if dui:
-        updates.append("definition_useful_insight = ?")
-        params.append(dui)
 
     if not updates:
         conn.close()
@@ -6671,7 +6657,7 @@ def _build_precheck_state(study_dict, persona_count):
     return {
         "has_bp": has_bp, "has_ds": has_ds, "has_mg": has_mg,
         "has_pc": has_pc, "has_ta": has_ta, "has_dui": has_dui,
-        "all_anchors": (has_bp and has_ds and has_mg and has_pc and has_ta) if st == "synthetic_survey" else (has_bp and has_ds and has_mg and has_pc and has_ta and has_dui),
+        "all_anchors": has_bp and has_ds and has_mg and has_pc and has_ta,
         "persona_count": persona_count, "personas_min": p_min,
         "personas_complete": p_complete, "personas_gap": p_gap,
         "study_type": st,
@@ -6707,7 +6693,6 @@ def save_single_anchor(study_id):
         "market_geography": "study_fit",
         "product_concept": "known_vs_unknown",
         "target_audience": "target_audience",
-        "definition_useful_insight": "definition_useful_insight",
     }
 
     if anchor_key not in allowed_keys:
@@ -6753,6 +6738,7 @@ def save_single_anchor(study_id):
 
 
 OPTIONAL_CONTEXT_FIELDS = {
+    "definition_useful_insight": "Definition of Useful Insight",
     "competitive_context": "Competitive context",
     "cultural_sensitivities": "Cultural sensitivities",
     "adoption_barriers": "Adoption barriers",
@@ -6789,24 +6775,31 @@ def save_optional_context_field(study_id):
                 return jsonify({"ok": False, "error": "Draft study not found."}), 404
             return render_error("Draft study not found.")
 
-        existing_brief = {}
-        if study["survey_brief"]:
-            try:
-                existing_brief = json.loads(study["survey_brief"])
-            except (json.JSONDecodeError, TypeError):
-                existing_brief = {}
+        if field_key == "definition_useful_insight":
+            conn.execute(
+                "UPDATE studies SET definition_useful_insight = ? WHERE id = ?",
+                (field_value, study_id),
+            )
+            conn.commit()
+        else:
+            existing_brief = {}
+            if study["survey_brief"]:
+                try:
+                    existing_brief = json.loads(study["survey_brief"])
+                except (json.JSONDecodeError, TypeError):
+                    existing_brief = {}
 
-        oc = existing_brief.get("optional_context", {})
-        if not isinstance(oc, dict):
-            oc = {}
-        oc[field_key] = field_value
-        existing_brief["optional_context"] = oc
+            oc = existing_brief.get("optional_context", {})
+            if not isinstance(oc, dict):
+                oc = {}
+            oc[field_key] = field_value
+            existing_brief["optional_context"] = oc
 
-        conn.execute(
-            "UPDATE studies SET survey_brief = ? WHERE id = ?",
-            (json.dumps(existing_brief), study_id),
-        )
-        conn.commit()
+            conn.execute(
+                "UPDATE studies SET survey_brief = ? WHERE id = ?",
+                (json.dumps(existing_brief), study_id),
+            )
+            conn.commit()
     except Exception as e:
         if _is_ajax(request):
             return jsonify({"ok": False, "error": f"Save failed: {e}"}), 500
