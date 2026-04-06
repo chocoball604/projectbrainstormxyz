@@ -204,6 +204,9 @@ VALID_STUDY_TYPES = ["synthetic_survey", "synthetic_idi", "synthetic_focus_group
 
 BILLABLE_STATUSES = ("completed", "qa_blocked", "terminated_system", "terminated_user")
 FREE_TIER_MONTHLY_LIMIT = 6
+TEST_USER_EMAIL = "test@admin.local"
+TEST_USER_PASSWORD = "test123"
+UNLIMITED_USER_IDS = set()
 
 UPLOAD_MAX_FILES_PER_STUDY = 5
 UPLOAD_MAX_FILE_SIZE = 1 * 1024 * 1024
@@ -810,9 +813,10 @@ def get_monthly_usage(conn, user_id):
         f"SELECT COUNT(*) FROM studies WHERE user_id = ? AND status IN ({placeholders}) AND created_at >= ?",
         (user_id, *BILLABLE_STATUSES, month_start_str),
     ).fetchone()[0]
+    limit = 999999 if user_id in UNLIMITED_USER_IDS else FREE_TIER_MONTHLY_LIMIT
     return (
         count,
-        FREE_TIER_MONTHLY_LIMIT,
+        limit,
         window_start.strftime("%Y-%m-%d"),
         window_end.strftime("%Y-%m-%d"),
     )
@@ -1299,6 +1303,17 @@ def init_db():
             (SEED_ALLOWED_MODELS[2],),
         )
     migrate_db(conn)
+    test_row = conn.execute("SELECT id FROM users WHERE email = ?", (TEST_USER_EMAIL,)).fetchone()
+    if not test_row:
+        from werkzeug.security import generate_password_hash as _gph
+        conn.execute(
+            "INSERT INTO users (email, username, password_hash, state) VALUES (?, ?, ?, 'active')",
+            (TEST_USER_EMAIL, "TestAdmin", _gph(TEST_USER_PASSWORD)),
+        )
+        conn.commit()
+        test_row = conn.execute("SELECT id FROM users WHERE email = ?", (TEST_USER_EMAIL,)).fetchone()
+    if test_row:
+        UNLIMITED_USER_IDS.add(test_row["id"])
     conn.commit()
     conn.close()
 
@@ -1521,6 +1536,8 @@ def user_needs_verification(user):
 
 def require_verified_user(token, user, is_admin):
     if is_admin:
+        return None
+    if user and user["id"] in UNLIMITED_USER_IDS:
         return None
     if user and user_needs_verification(user):
         return redirect(url_for("verify_email", token=token))
@@ -2252,6 +2269,9 @@ def index():
         dm_admin_unread=_dm_unread_count(is_admin=True) if is_admin else 0,
         dm_latest_preview=dm_latest_preview,
         admin_email=ADMIN_EMAIL,
+        monthly_study_limit=FREE_TIER_MONTHLY_LIMIT,
+        test_user_email=TEST_USER_EMAIL,
+        test_user_password=TEST_USER_PASSWORD,
     )
 
 
@@ -2863,6 +2883,34 @@ def admin_change_password():
 
     ADMIN_PASSWORD = new_pw
     os.environ["ADMIN_PASSWORD"] = new_pw
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/update-quota", methods=["POST"])
+def admin_update_quota():
+    global FREE_TIER_MONTHLY_LIMIT
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    ajax = _is_ajax(request)
+    if not is_admin:
+        if ajax:
+            return jsonify({"ok": False, "error": "Admin access required."}), 403
+        return render_error("Admin access required.")
+
+    try:
+        new_limit = int(request.form.get("monthly_limit", "").strip())
+    except (ValueError, AttributeError):
+        if ajax:
+            return jsonify({"ok": False, "error": "Invalid number."}), 400
+        return render_error("Invalid number for monthly limit.")
+    if new_limit < 1 or new_limit > 9999:
+        if ajax:
+            return jsonify({"ok": False, "error": "Limit must be between 1 and 9999."}), 400
+        return render_error("Monthly limit must be between 1 and 9999.")
+
+    FREE_TIER_MONTHLY_LIMIT = new_limit
+    if ajax:
+        return jsonify({"ok": True})
     return redirect(url_for("index", token=token))
 
 
@@ -7496,6 +7544,9 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         dm_admin_unread=0,
         dm_latest_preview=None,
         admin_email=ADMIN_EMAIL,
+        monthly_study_limit=FREE_TIER_MONTHLY_LIMIT,
+        test_user_email=TEST_USER_EMAIL,
+        test_user_password=TEST_USER_PASSWORD,
     )
 
 

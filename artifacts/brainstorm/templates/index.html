@@ -2677,16 +2677,22 @@
 
         <div class="card" style="margin-bottom: 16px; padding: 14px 18px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                {% if usage_limit >= 999999 %}
+                <span style="font-size: 13px; font-weight: 600; color: #1a1a2e;">Studies used this month: {{ usage_count }} — <span style="color:#22c55e;">Unlimited</span></span>
+                {% else %}
                 <span style="font-size: 13px; font-weight: 600; color: #1a1a2e;">Studies used this month: {{ usage_count }} of {{ usage_limit }}</span>
                 {% if usage_limit_reached %}
                 <span style="font-size: 12px; color: #dc3545; font-weight: 600;">Limit reached</span>
                 {% endif %}
+                {% endif %}
             </div>
+            {% if usage_limit < 999999 %}
             <div style="background: #e9ecef; border-radius: 6px; height: 10px; overflow: hidden;">
                 {% set pct = ((usage_count / usage_limit) * 100) if usage_limit > 0 else 0 %}
                 {% set bar_color = '#dc3545' if usage_limit_reached else ('#ffc107' if pct >= 75 else '#5C7E8F') %}
                 <div style="width: {{ [pct, 100]|min }}%; height: 100%; background: {{ bar_color }}; border-radius: 6px; transition: width 0.3s;"></div>
             </div>
+            {% endif %}
             {% if usage_window_start and usage_window_end %}
             <div style="margin-top: 4px; font-size: 11px; color: #999;">
                 Usage window: {{ usage_window_start }} to {{ usage_window_end }} (calendar month)
@@ -3307,6 +3313,35 @@
                 {% else %}
                 <p style="color: #777; font-size: 14px;">No users yet.</p>
                 {% endif %}
+            </div>
+        </div>
+
+        <div class="card" id="acc-quotas">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-quotas-body')">
+                <h2>Quotas &amp; Limits</h2>
+                <span class="admin-acc-arrow" id="acc-quotas-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-quotas-body">
+                <form action="/admin/update-quota" method="POST" style="margin-bottom:18px;">
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;">
+                        <div>
+                            <label style="font-size:12px;color:#777;display:block;margin-bottom:2px;">Studies per month (all users)</label>
+                            <input type="number" name="monthly_limit" value="{{ monthly_study_limit }}" min="1" max="9999" style="width:100px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-small" style="height:34px;">Update Limit</button>
+                    </div>
+                    <p style="font-size:12px;color:#999;margin-top:6px;">Current limit: <strong>{{ monthly_study_limit }}</strong> studies/month. This is a runtime setting and resets to default (6) on restart.</p>
+                </form>
+                <div style="border-top:1px solid #e2e8f0;padding-top:14px;">
+                    <h3 style="font-size:14px;color:#1a1a2e;margin-bottom:8px;">Test Account (No Limits)</h3>
+                    <p style="font-size:13px;color:#555;margin-bottom:4px;">A pre-created test user with unlimited studies for admin testing.</p>
+                    <table style="font-size:13px;">
+                        <tr><td style="padding:3px 12px 3px 0;color:#777;">Email:</td><td><code>{{ test_user_email }}</code></td></tr>
+                        <tr><td style="padding:3px 12px 3px 0;color:#777;">Password:</td><td><code>{{ test_user_password }}</code></td></tr>
+                    </table>
+                    <p style="font-size:11px;color:#999;margin-top:6px;">Log in with these credentials in a separate session to test without hitting usage limits.</p>
+                </div>
             </div>
         </div>
 

@@ -114,7 +114,7 @@
     "subject": "testing 222222",
     "body": "testing 222222",
     "category": "",
-    "read": false,
+    "read": true,
     "sender_type": "admin",
     "sender_id": null,
     "recipient_type": "user",
@@ -139,10 +139,35 @@
     "subject": "Re: this is soooo dumb",
     "body": "No that's only because you are dumb",
     "category": "",
-    "read": false,
+    "read": true,
     "sender_type": "admin",
     "sender_id": null,
     "recipient_type": "user",
     "recipient_user_id": 7
+  },
+  {
+    "id": "2513d4808cc66bf4",
+    "timestamp": "2026-04-05 15:13:53",
+    "subject": "Re: this is soooo dumb",
+    "body": "another test",
+    "category": "",
+    "read": true,
+    "sender_type": "admin",
+    "sender_id": null,
+    "recipient_type": "user",
+    "recipient_user_id": 7
+  },
+  {
+    "id": "c7ad9685852ff42b",
+    "timestamp": "2026-04-06 04:38:49",
+    "subject": "this app sucks",
+    "body": "hello hello",
+    "category": "Feedback",
+    "read": true,
+    "sender_type": "user",
+    "sender_id": 7,
+    "sender_name": "georgia123",
+    "recipient_type": "admin",
+    "recipient_user_id": null
   }
 ]
