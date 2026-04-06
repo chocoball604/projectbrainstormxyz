@@ -831,7 +831,7 @@ def get_monthly_usage(conn, user_id):
 
 STUDY_TYPE_LIMITS = {
     "synthetic_survey": {"max_questions": 12, "max_respondents": 400},
-    "synthetic_idi": {"min_personas": 1, "max_personas": 3},
+    "synthetic_idi": {"min_personas": 1, "max_personas": 1},
     "synthetic_focus_group": {"min_personas": 4, "max_personas": 6},
 }
 
@@ -5694,9 +5694,10 @@ def run_study(study_id):
                 return jsonify({"ok": False, "error": msg}), 400
             return render_error(msg)
 
-        min_required = 1 if study_type == "synthetic_idi" else 4
-        if persona_count < min_required:
-            auto_n = min_required - persona_count
+        max_allowed = 1 if study_type == "synthetic_idi" else 6
+        needed = max_allowed - persona_count
+        if needed > 0:
+            auto_n = needed
             try:
                 import random as _rng
                 healthy_models, excluded_fail, pool_status = _get_healthy_pool_models(conn)
@@ -5757,6 +5758,9 @@ def run_study(study_id):
                         return json.dumps(val)
                     return str(val)
 
+                if len(generated) > auto_n:
+                    print(f"PERSONA_GEN_CLIP study={study_id} generated={len(generated)} auto_n={auto_n}", flush=True)
+                    generated = generated[:auto_n]
                 for p_data in generated:
                     p_instance_id = f"P-{secrets.token_hex(4).upper()}"
                     p_persona_id = f"PID-{secrets.token_hex(4).upper()}"
@@ -5794,6 +5798,9 @@ def run_study(study_id):
                     new_persona_ids.append(p_instance_id)
 
                 all_persona_ids = list(personas_used) + new_persona_ids
+                if len(all_persona_ids) > max_allowed:
+                    print(f"PERSONA_TOTAL_CLIP study={study_id} total={len(all_persona_ids)} max={max_allowed}", flush=True)
+                    all_persona_ids = all_persona_ids[:max_allowed]
                 conn.execute(
                     "UPDATE studies SET personas_used = ? WHERE id = ?",
                     (json.dumps(all_persona_ids), study_id),
