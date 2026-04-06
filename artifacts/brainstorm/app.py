@@ -3738,6 +3738,10 @@ def save_discovery(study_id):
         if _is_ajax(request):
             return jsonify({"ok": False, "error": "Value cannot be empty."}), 400
         return render_error("Value cannot be empty.")
+    if len(value) > 300:
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Value must be 300 characters or fewer."}), 400
+        return render_error("Value must be 300 characters or fewer.")
 
     conn = get_db()
     study = conn.execute(
@@ -7274,6 +7278,11 @@ def save_single_anchor(study_id):
         if _is_ajax(request):
             return jsonify({"ok": False, "error": "Anchor value cannot be empty."}), 400
         return render_error("Anchor value cannot be empty.")
+    if len(anchor_value) > 300:
+        conn.close()
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Anchor value must be 300 characters or fewer."}), 400
+        return render_error("Anchor value must be 300 characters or fewer.")
 
     db_col = allowed_keys[anchor_key]
     conn.execute(
@@ -7331,6 +7340,10 @@ def save_optional_context_field(study_id):
         if _is_ajax(request):
             return jsonify({"ok": False, "error": "Invalid field key."}), 400
         return render_error("Invalid optional context field.")
+    if len(field_value) > 300:
+        if _is_ajax(request):
+            return jsonify({"ok": False, "error": "Field value must be 300 characters or fewer."}), 400
+        return render_error("Field value must be 300 characters or fewer.")
 
     conn = get_db()
     try:

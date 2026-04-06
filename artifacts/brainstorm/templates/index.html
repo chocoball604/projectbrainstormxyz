@@ -643,7 +643,7 @@
                     <form class="discovery-form" action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;" data-field="business_problem">
                         <input type="hidden" name="token" value="{{ token }}">
                         <input type="hidden" name="field" value="business_problem">
-                        <input type="text" name="value" required placeholder="Describe the business problem in one sentence" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <input type="text" name="value" required maxlength="300" placeholder="Describe the business problem in one sentence" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
                         <button type="submit" class="btn btn-primary btn-small">Save</button>
                     </form>
                     {% endif %}
@@ -662,7 +662,7 @@
                     <form class="discovery-form" action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;" data-field="decision_to_support">
                         <input type="hidden" name="token" value="{{ token }}">
                         <input type="hidden" name="field" value="decision_to_support">
-                        <input type="text" name="value" required placeholder="What decision will this research support?" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <input type="text" name="value" required maxlength="300" placeholder="What decision will this research support?" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
                         <button type="submit" class="btn btn-primary btn-small">Save</button>
                     </form>
                     {% endif %}
@@ -754,7 +754,7 @@
                     <input type="hidden" name="anchor_key" value="market_geography">
                     <div class="form-group" style="margin-bottom: 6px;">
                         <label>3. Market / Geography</label>
-                        <textarea name="anchor_value" rows="2" required placeholder="What market or geography does this study focus on?"></textarea>
+                        <textarea name="anchor_value" rows="2" required maxlength="300" placeholder="What market or geography does this study focus on?"></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary btn-small">Save Market / Geography</button>
                 </form>
@@ -772,7 +772,7 @@
                     <input type="hidden" name="anchor_key" value="product_concept">
                     <div class="form-group" style="margin-bottom: 6px;">
                         <label>4. Product / Concept</label>
-                        <textarea name="anchor_value" rows="2" required placeholder="What product, service, or concept is being researched?"></textarea>
+                        <textarea name="anchor_value" rows="2" required maxlength="300" placeholder="What product, service, or concept is being researched?"></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary btn-small">Save Product / Concept</button>
                 </form>
@@ -790,7 +790,7 @@
                     <input type="hidden" name="anchor_key" value="target_audience">
                     <div class="form-group" style="margin-bottom: 6px;">
                         <label>5. Target Audience</label>
-                        <textarea name="anchor_value" rows="2" required placeholder="Who is the target audience for this research?"></textarea>
+                        <textarea name="anchor_value" rows="2" required maxlength="300" placeholder="Who is the target audience for this research?"></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary btn-small">Save Target Audience</button>
                 </form>
@@ -1132,7 +1132,7 @@
                             <input type="hidden" name="field_key" value="{{ fk }}">
                             <div class="form-group" style="margin-bottom:4px;">
                                 <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                                <textarea name="field_value" rows="2" placeholder="{{ fp }}"></textarea>
+                                <textarea name="field_value" rows="2" maxlength="300" placeholder="{{ fp }}"></textarea>
                             </div>
                             <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">Save</button>
                         </form>
@@ -1930,7 +1930,7 @@
                         btn.disabled = false;
                         btn.textContent = 'Update Survey Config';
                         if (data.ok) {
-                            window.location.reload();
+                            handleAjaxResponse(data);
                         } else {
                             alert(data.error || 'Save failed.');
                         }
@@ -2065,7 +2065,7 @@
                     + '<input type="hidden" name="field_key" value="' + escHtml(fieldKey) + '">'
                     + '<div class="form-group" style="margin-bottom:4px;">'
                     + '<label>' + escHtml(label) + ' <span style="font-weight:400;color:#999;">(optional)</span></label>'
-                    + '<textarea name="field_value" rows="2">' + escHtml(currentVal) + '</textarea></div>'
+                    + '<textarea name="field_value" rows="2" maxlength="300">' + escHtml(currentVal) + '</textarea></div>'
                     + '<button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">Save</button></form>';
                 bindOcForm(slot.querySelector('.oc-field-form'));
             }
