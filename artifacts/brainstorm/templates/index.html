@@ -1496,7 +1496,7 @@
                     ob.innerHTML = '<div style="text-align:center;padding:24px;">'
                         + '<div style="display:inline-block;width:28px;height:28px;border:3px solid #5C7E8F;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px;"></div>'
                         + '<p style="font-size:14px;color:#004085;font-weight:600;margin:0 0 4px;">Executing study\u2026</p>'
-                        + '<p style="font-size:12px;color:#666;margin:0;">Lisa is generating your research output. This may take a minute.</p>'
+                        + '<p style="font-size:12px;color:#666;margin:0;">Lisa is generating your research output. This may take a few minutes.</p>'
                         + '</div>';
                 }
 
@@ -2304,102 +2304,51 @@
             {% if view_study_output.show_translate %}
             <div id="translate-bar" style="margin-bottom: 16px; padding: 10px 14px; background: #f0f4ff; border: 1px solid #d0d8e8; border-radius: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <span style="font-size: 13px; color: #555;">Output language: <strong>{{ view_study_output.output_lang_name }}</strong></span>
-                <button id="btn-translate" onclick="translateStudyOutput({{ view_study_output.id }})" class="btn btn-secondary" style="font-size: 13px; padding: 5px 14px;">
-                    &#127760; Translate to {{ view_study_output.user_lang_name }}
-                </button>
-                <button id="btn-show-original" onclick="toggleTranslation('original')" class="btn btn-secondary" style="font-size: 13px; padding: 5px 14px; display: none;">
-                    Show Original
-                </button>
-                <button id="btn-show-translated" onclick="toggleTranslation('translated')" class="btn btn-secondary" style="font-size: 13px; padding: 5px 14px; display: none;">
-                    &#127760; Show Translated
-                </button>
-                <span id="translate-status" style="font-size: 12px; color: #888; display: none;"></span>
+                <span id="translate-status" style="font-size: 12px; color: #888;"></span>
             </div>
-            <div id="translated-output-container" style="display: none; margin-bottom: 24px;">
-                <div style="background: #fffbea; border: 1px solid #f0d060; border-radius: 8px; padding: 4px 12px; margin-bottom: 8px; font-size: 12px; color: #8a6d00;">
-                    &#128221; Translated version ({{ view_study_output.user_lang_name }})
-                </div>
-                <pre id="translated-output-text" style="background: #fefef6; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.7;"></pre>
+
+            {% if view_study_output.translation_cached and view_study_output.translated_text %}
+            <details style="margin-bottom: 16px;" open>
+                <summary style="cursor: pointer; font-size: 14px; color: #2e7d32; font-weight: 500; padding: 8px 0;">&#128221; Translated Version ({{ view_study_output.user_lang_name }})</summary>
+                <pre style="background: #f0fdf4; border: 1px solid #c8e6c9; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.7; margin-top: 8px; border-left: 4px solid #66bb6a;">{{ view_study_output.translated_text }}</pre>
+            </details>
+            {% else %}
+            <div id="translated-output-container" style="display: none; margin-bottom: 16px;">
+                <details open>
+                    <summary style="cursor: pointer; font-size: 14px; color: #2e7d32; font-weight: 500; padding: 8px 0;">&#128221; Translated Version ({{ view_study_output.user_lang_name }})</summary>
+                    <pre id="translated-output-text" style="background: #f0fdf4; border: 1px solid #c8e6c9; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.7; margin-top: 8px; border-left: 4px solid #66bb6a;"></pre>
+                </details>
             </div>
             <script>
-            var _translateToken = '{{ token }}';
-            var _translateTargetLang = '{{ view_study_output.user_lang }}';
-            var _translationCached = {{ 'true' if view_study_output.translation_cached else 'false' }};
-            var _cachedTranslation = {{ view_study_output.translated_text|tojson }};
-            var _translationDone = false;
-
-            if (_translationCached && _cachedTranslation) {
-                document.getElementById('translated-output-text').textContent = _cachedTranslation;
-                _translationDone = true;
-            }
-
-            function translateStudyOutput(studyId) {
-                if (_translationDone) {
-                    toggleTranslation('translated');
-                    return;
-                }
-                var btnTranslate = document.getElementById('btn-translate');
+            (function() {
                 var status = document.getElementById('translate-status');
-                btnTranslate.disabled = true;
-                btnTranslate.textContent = 'Translating...';
-                status.style.display = 'inline';
-                status.textContent = 'This may take a minute for long reports...';
-
+                status.textContent = 'Auto-translating to {{ view_study_output.user_lang_name }}... This may take a few minutes.';
                 var fd = new FormData();
-                fd.append('token', _translateToken);
-                fd.append('target_lang', _translateTargetLang);
-
-                fetch('/translate-output/' + studyId, { method: 'POST', body: fd })
+                fd.append('token', '{{ token }}');
+                fd.append('target_lang', '{{ view_study_output.user_lang }}');
+                fetch('/translate-output/{{ view_study_output.id }}', { method: 'POST', body: fd })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.ok) {
                         if (data.skip) {
-                            status.textContent = data.reason || 'Already in target language.';
-                            btnTranslate.style.display = 'none';
+                            status.textContent = '';
                             return;
                         }
                         document.getElementById('translated-output-text').textContent = data.translated;
-                        _translationDone = true;
-                        toggleTranslation('translated');
-                        status.style.display = 'none';
+                        document.getElementById('translated-output-container').style.display = '';
+                        status.textContent = '';
                     } else {
-                        status.textContent = 'Error: ' + (data.error || 'Translation failed.');
+                        status.textContent = 'Translation unavailable: ' + (data.error || 'failed');
                         status.style.color = '#c0392b';
-                        btnTranslate.disabled = false;
-                        btnTranslate.innerHTML = '&#127760; Retry Translation';
                     }
                 })
-                .catch(function(err) {
-                    status.textContent = 'Network error. Please try again.';
+                .catch(function() {
+                    status.textContent = 'Translation failed (network error).';
                     status.style.color = '#c0392b';
-                    btnTranslate.disabled = false;
-                    btnTranslate.innerHTML = '&#127760; Retry Translation';
                 });
-            }
-
-            function toggleTranslation(mode) {
-                var reportViewer = document.getElementById('report-viewer');
-                var rawDetails = document.querySelectorAll('details');
-                var translatedContainer = document.getElementById('translated-output-container');
-                var btnTranslate = document.getElementById('btn-translate');
-                var btnOriginal = document.getElementById('btn-show-original');
-                var btnShowTranslated = document.getElementById('btn-show-translated');
-
-                if (mode === 'translated') {
-                    if (reportViewer) reportViewer.style.display = 'none';
-                    translatedContainer.style.display = 'block';
-                    btnTranslate.style.display = 'none';
-                    btnOriginal.style.display = 'inline-flex';
-                    btnShowTranslated.style.display = 'none';
-                } else {
-                    if (reportViewer) reportViewer.style.display = '';
-                    translatedContainer.style.display = 'none';
-                    btnTranslate.style.display = 'none';
-                    btnOriginal.style.display = 'none';
-                    btnShowTranslated.style.display = 'inline-flex';
-                }
-            }
+            })();
             </script>
+            {% endif %}
             {% endif %}
 
             {% if view_study_output.report_sections %}
@@ -3225,27 +3174,42 @@
                 Persona ID: <code>{{ view_persona.persona_instance_id }}</code> | Created: {{ view_persona.created_at }}
             </p>
 
+            {% if view_persona.needs_translation %}
+            <div id="persona-translate-bar" style="margin-bottom: 16px; padding: 10px 14px; background: #f0f4ff; border: 1px solid #d0d8e8; border-radius: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span style="font-size: 13px; color: #555;">Content language: <strong>{{ view_persona.content_lang_name }}</strong></span>
+                <span id="persona-translate-status" style="font-size: 12px; color: #888;"></span>
+            </div>
+            {% endif %}
+
+            {% set pf = view_persona.translated_fields %}
+            {% macro persona_field(num, label, field_name) %}
+            <div style="margin-bottom: 16px;">
+                <strong style="color: #1a1a2e;">{{ num }}. {{ label }}</strong>
+                {% if pf and pf.get(field_name) %}
+                <div style="display: flex; gap: 16px; margin-top: 4px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <div style="font-size: 11px; color: #999; margin-bottom: 2px;">{{ view_persona.content_lang_name }}</div>
+                        <p style="color: #555; white-space: pre-wrap; background: #f8f9fa; padding: 8px; border-radius: 4px; border-left: 3px solid #ddd; margin: 0;">{{ view_persona[field_name] }}</p>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <div style="font-size: 11px; color: #2e7d32; margin-bottom: 2px;">{{ view_persona.user_lang_name }}</div>
+                        <p style="color: #333; white-space: pre-wrap; background: #f0fdf4; padding: 8px; border-radius: 4px; border-left: 3px solid #66bb6a; margin: 0;">{{ pf[field_name] }}</p>
+                    </div>
+                </div>
+                {% elif view_persona.needs_translation %}
+                <p id="persona-field-{{ field_name }}" style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona[field_name] }}</p>
+                {% else %}
+                <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona[field_name] }}</p>
+                {% endif %}
+            </div>
+            {% endmacro %}
+
             <div style="background: #f8f9fa; border-radius: 6px; padding: 20px; font-size: 14px; line-height: 1.6;">
-                <div style="margin-bottom: 16px;">
-                    <strong style="color: #1a1a2e;">1. Persona Summary</strong>
-                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona.persona_summary }}</p>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <strong style="color: #1a1a2e;">2. Demographic Frame</strong>
-                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona.demographic_frame }}</p>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <strong style="color: #1a1a2e;">3. Psychographic Profile</strong>
-                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona.psychographic_profile }}</p>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <strong style="color: #1a1a2e;">4. Contextual Constraints</strong>
-                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona.contextual_constraints }}</p>
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <strong style="color: #1a1a2e;">5. Behavioural Tendencies</strong>
-                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona.behavioural_tendencies }}</p>
-                </div>
+                {{ persona_field(1, "Persona Summary", "persona_summary") }}
+                {{ persona_field(2, "Demographic Frame", "demographic_frame") }}
+                {{ persona_field(3, "Psychographic Profile", "psychographic_profile") }}
+                {{ persona_field(4, "Contextual Constraints", "contextual_constraints") }}
+                {{ persona_field(5, "Behavioural Tendencies", "behavioural_tendencies") }}
                 <div style="margin-bottom: 16px;">
                     <strong style="color: #1a1a2e;">6. Persona Generation Model</strong>
                     {% set prov_raw = view_persona.ai_model_provenance or '' %}
@@ -3256,15 +3220,37 @@
                     <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ prov_raw }}</p>
                     {% endif %}
                 </div>
-                <div style="margin-bottom: 16px;">
-                    <strong style="color: #1a1a2e;">7. Grounding Sources</strong>
-                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona.grounding_sources }}</p>
-                </div>
-                <div>
-                    <strong style="color: #1a1a2e;">8. Confidence and Limits</strong>
-                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona.confidence_and_limits }}</p>
-                </div>
+                {{ persona_field(7, "Grounding Sources", "grounding_sources") }}
+                {{ persona_field(8, "Confidence and Limits", "confidence_and_limits") }}
             </div>
+
+            {% if view_persona.needs_translation and not view_persona.translated_fields %}
+            <script>
+            (function() {
+                var status = document.getElementById('persona-translate-status');
+                status.textContent = 'Auto-translating to {{ view_persona.user_lang_name }}...';
+                var fd = new FormData();
+                fd.append('token', '{{ token }}');
+                fd.append('target_lang', '{{ view_persona.user_lang }}');
+                fetch('/translate-persona/{{ view_persona.persona_instance_id }}', { method: 'POST', body: fd })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok && data.fields) {
+                        window.location.reload();
+                    } else if (data.ok && data.skip) {
+                        status.textContent = '';
+                    } else {
+                        status.textContent = 'Translation unavailable: ' + (data.error || 'unknown error');
+                        status.style.color = '#c0392b';
+                    }
+                })
+                .catch(function() {
+                    status.textContent = 'Translation failed (network error).';
+                    status.style.color = '#c0392b';
+                });
+            })();
+            </script>
+            {% endif %}
 
             <div class="info-msg" style="margin-top: 16px;">
                 This persona is immutable (read-only). You can reuse it in future studies by attaching it during study setup.

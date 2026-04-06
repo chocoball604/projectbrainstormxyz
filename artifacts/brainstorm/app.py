@@ -97,7 +97,7 @@ def __health():
     return jsonify({"status": "ok", "service": "brainstorm_flask"})
 
 
-VALID_LANGS = {"en", "zh-Hans", "zh-Hant", "ja"}
+VALID_LANGS = {"en", "zh-Hans", "zh-Hant", "ja", "ko", "th"}
 
 
 @app.context_processor
@@ -1394,6 +1394,10 @@ def migrate_db(conn):
     cols = [row[1] for row in conn.execute("PRAGMA table_info(personas)").fetchall()]
     if "persona_instance_id" not in cols:
         conn.execute("ALTER TABLE personas ADD COLUMN persona_instance_id TEXT")
+    if "content_language" not in cols:
+        conn.execute("ALTER TABLE personas ADD COLUMN content_language TEXT")
+    if "translated_content" not in cols:
+        conn.execute("ALTER TABLE personas ADD COLUMN translated_content TEXT")
 
     conn.execute("""
         UPDATE personas SET persona_instance_id = persona_id || '-v' || version
@@ -2281,6 +2285,22 @@ def index():
             ).fetchone()
             if row:
                 view_persona = dict(row)
+                _p_content_lang = view_persona.get("content_language") or "en"
+                _p_user_lang = request.cookies.get("pb_lang", "en")
+                if _p_user_lang not in VALID_LANGS:
+                    _p_user_lang = "en"
+                view_persona["needs_translation"] = (_p_content_lang != _p_user_lang)
+                view_persona["content_lang_name"] = LANG_CODE_TO_NAME.get(_p_content_lang, _p_content_lang)
+                view_persona["user_lang_name"] = LANG_CODE_TO_NAME.get(_p_user_lang, _p_user_lang)
+                view_persona["user_lang"] = _p_user_lang
+                view_persona["translated_fields"] = None
+                if view_persona["needs_translation"] and view_persona.get("translated_content"):
+                    try:
+                        _tc = json.loads(view_persona["translated_content"])
+                        if isinstance(_tc, dict) and _tc.get("lang") == _p_user_lang:
+                            view_persona["translated_fields"] = _tc.get("fields", {})
+                    except (json.JSONDecodeError, TypeError):
+                        pass
 
         clone_from = request.args.get("clone_from")
         if clone_from:
@@ -4431,6 +4451,9 @@ def build_structured_report(
 CJK_FONT_PATH = os.path.join(
     os.path.dirname(__file__), "fonts", "NotoSansCJK-Regular.ttc"
 )
+THAI_FONT_PATH = os.path.join(
+    os.path.dirname(__file__), "fonts", "NotoSansThai.ttf"
+)
 TRAD_MARKERS = set("漢歡測臺體繁廣")
 SIMP_MARKERS = set("汉欢测台体简")
 
@@ -4438,6 +4461,14 @@ SIMP_MARKERS = set("汉欢测台体简")
 def _has_non_ascii(text):
     for ch in text:
         if ord(ch) > 127:
+            return True
+    return False
+
+
+def _has_thai(text):
+    for ch in text:
+        cp = ord(ch)
+        if 0x0E00 <= cp <= 0x0E7F:
             return True
     return False
 
@@ -4450,7 +4481,16 @@ def _has_cjk(text):
             or 0xF900 <= cp <= 0xFAFF
             or 0x20000 <= cp <= 0x2FA1F
             or 0xFF00 <= cp <= 0xFFEF
+            or 0xAC00 <= cp <= 0xD7AF
         ):
+            return True
+    return False
+
+
+def _has_hangul(text):
+    for ch in text:
+        cp = ord(ch)
+        if 0xAC00 <= cp <= 0xD7AF or 0x1100 <= cp <= 0x11FF or 0x3130 <= cp <= 0x318F:
             return True
     return False
 
@@ -4466,6 +4506,8 @@ def _has_kana(text):
 def _pick_cjk_font(text):
     if _has_kana(text):
         return "CJK_JP"
+    if _has_hangul(text):
+        return "CJK_JP"
     chars = set(text)
     if chars & TRAD_MARKERS:
         return "CJK_TC"
@@ -4475,20 +4517,32 @@ def _pick_cjk_font(text):
 
 
 def _register_cjk_fonts(pdf):
-    if not os.path.exists(CJK_FONT_PATH):
-        return False
-    try:
-        pdf.add_font("CJK_JP", fname=CJK_FONT_PATH, collection_font_number=0)
-        pdf.add_font("CJK_SC", fname=CJK_FONT_PATH, collection_font_number=2)
-        pdf.add_font("CJK_TC", fname=CJK_FONT_PATH, collection_font_number=3)
-        return True
-    except Exception:
-        return False
+    cjk_ok = False
+    if os.path.exists(CJK_FONT_PATH):
+        try:
+            pdf.add_font("CJK_JP", fname=CJK_FONT_PATH, collection_font_number=0)
+            pdf.add_font("CJK_SC", fname=CJK_FONT_PATH, collection_font_number=2)
+            pdf.add_font("CJK_TC", fname=CJK_FONT_PATH, collection_font_number=3)
+            cjk_ok = True
+        except Exception:
+            pass
+    if os.path.exists(THAI_FONT_PATH):
+        try:
+            pdf.add_font("Thai", fname=THAI_FONT_PATH)
+        except Exception:
+            pass
+    return cjk_ok
+
+
+def _pick_unicode_font(text):
+    if _has_thai(text):
+        return "Thai"
+    return _pick_cjk_font(text)
 
 
 def _pdf_set_font(pdf, text, size, style="", cjk_available=True):
-    if cjk_available and _has_cjk(text):
-        font_name = _pick_cjk_font(text)
+    if cjk_available and (_has_cjk(text) or _has_thai(text)):
+        font_name = _pick_unicode_font(text)
         pdf.set_font(font_name, "", size)
     else:
         pdf.set_font("Helvetica", style, size)
@@ -4516,10 +4570,16 @@ def _pdf_write_text(
             )
         return
 
-    font_name = _pick_cjk_font(text)
-    fallback_order = ["CJK_JP", "CJK_SC", "CJK_TC"]
-    fallback_order.remove(font_name)
-    fallback_order.insert(0, font_name)
+    font_name = _pick_unicode_font(text)
+    if font_name == "Thai":
+        fallback_order = ["Thai", "CJK_JP", "CJK_SC", "CJK_TC"]
+    else:
+        fallback_order = ["CJK_JP", "CJK_SC", "CJK_TC"]
+        try:
+            fallback_order.remove(font_name)
+        except ValueError:
+            pass
+        fallback_order.insert(0, font_name)
 
     for fn in fallback_order:
         try:
@@ -5584,6 +5644,116 @@ def translate_output(study_id):
     return jsonify({"ok": True, "translated": translated_text, "lang": target_lang, "cached": False})
 
 
+@app.route("/translate-persona/<persona_pid>", methods=["POST"])
+def translate_persona(persona_pid):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return jsonify({"ok": False, "error": "Unauthorized."}), 401
+
+    target_lang = request.form.get("target_lang", "en")
+    if target_lang not in VALID_LANGS:
+        target_lang = "en"
+
+    conn = get_db()
+    persona = conn.execute(
+        "SELECT * FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+        (persona_pid, user["id"]),
+    ).fetchone()
+    if not persona:
+        conn.close()
+        return jsonify({"ok": False, "error": "Persona not found."}), 404
+
+    p_dict = dict(persona)
+    content_lang = p_dict.get("content_language") or "en"
+    if content_lang == target_lang:
+        conn.close()
+        return jsonify({"ok": True, "skip": True})
+
+    existing = p_dict.get("translated_content")
+    if existing:
+        try:
+            ex_data = json.loads(existing)
+            if isinstance(ex_data, dict) and ex_data.get("lang") == target_lang:
+                conn.close()
+                return jsonify({"ok": True, "fields": ex_data.get("fields", {}), "lang": target_lang, "cached": True})
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    translate_fields = ["persona_summary", "demographic_frame", "psychographic_profile",
+                        "contextual_constraints", "behavioural_tendencies",
+                        "grounding_sources", "confidence_and_limits"]
+    original_text = ""
+    for f in translate_fields:
+        val = p_dict.get(f, "") or ""
+        original_text += f"=== {f} ===\n{val}\n\n"
+
+    if not original_text.strip():
+        conn.close()
+        return jsonify({"ok": False, "error": "No persona content to translate."}), 400
+
+    mc = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM model_config").fetchall()}
+    translate_model = mc.get("mark_model", "")
+    if not translate_model:
+        conn.close()
+        return jsonify({"ok": False, "error": "No model configured."}), 500
+
+    target_lang_name = LANG_CODE_TO_NAME.get(target_lang, target_lang)
+    source_lang_name = LANG_CODE_TO_NAME.get(content_lang, content_lang)
+
+    translate_system = (
+        f"You are a professional translator. Translate the following persona dossier sections "
+        f"from {source_lang_name} to {target_lang_name}. "
+        f"Preserve the === section_name === headers exactly as-is (in English). "
+        f"Translate only the content within each section. "
+        f"Maintain professional market research tone."
+    )
+
+    conn.close()
+    try:
+        translated_raw = call_llm(
+            translate_model,
+            [{"role": "system", "content": translate_system}, {"role": "user", "content": original_text}],
+            purpose="translate_persona",
+            timeout_seconds=90,
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Translation failed: {str(e)[:200]}"}), 500
+
+    if not translated_raw or not translated_raw.strip():
+        return jsonify({"ok": False, "error": "Translation returned empty."}), 500
+
+    translated_fields = {}
+    for f in translate_fields:
+        marker = f"=== {f} ==="
+        idx = translated_raw.find(marker)
+        if idx >= 0:
+            start = idx + len(marker)
+            next_marker_idx = translated_raw.find("===", start + 1)
+            if next_marker_idx > 0:
+                section_text = translated_raw[start:next_marker_idx].strip()
+                if section_text.startswith("\n"):
+                    section_text = section_text[1:]
+                last_newline = section_text.rfind("\n")
+                if last_newline > 0 and section_text[last_newline:].strip() == "":
+                    section_text = section_text[:last_newline].strip()
+            else:
+                section_text = translated_raw[start:].strip()
+            translated_fields[f] = section_text
+
+    translation_data = json.dumps({"lang": target_lang, "fields": translated_fields})
+    conn = get_db()
+    conn.execute(
+        "UPDATE personas SET translated_content = ? WHERE persona_instance_id = ? AND user_id = ?",
+        (translation_data, persona_pid, user["id"]),
+    )
+    conn.commit()
+    conn.close()
+
+    print(f"TRANSLATE_PERSONA pid={persona_pid} from={content_lang} to={target_lang}", flush=True)
+    return jsonify({"ok": True, "fields": translated_fields, "lang": target_lang, "cached": False})
+
+
 @app.route("/save-chat-field/<int:study_id>", methods=["POST"])
 def save_chat_field(study_id):
     token = get_token()
@@ -5983,6 +6153,21 @@ def run_study(study_id):
             return jsonify({"ok": False, "error": "You must select a study type before running the study."}), 400
         return render_error("You must select a study type before running the study.")
 
+    conn.execute(
+        "UPDATE studies SET status = 'running' WHERE id = ? AND status = 'draft'",
+        (study_id,),
+    )
+    conn.commit()
+
+    def _reset_to_draft():
+        try:
+            c2 = get_db()
+            c2.execute("UPDATE studies SET status = 'draft' WHERE id = ? AND status = 'running'", (study_id,))
+            c2.commit()
+            c2.close()
+        except Exception:
+            pass
+
     personas_used = normalize_personas_used(study["personas_used"])
     persona_count = len(personas_used)
 
@@ -5991,17 +6176,20 @@ def run_study(study_id):
         q_count = study["question_count"] or 8
         if r_count < 25 or r_count > 100:
             conn.close()
+            _reset_to_draft()
             if ajax:
                 return jsonify({"ok": False, "error": "Survey respondent count must be between 25 and 100."}), 400
             return render_error("Survey respondent count must be between 25 and 100.")
         if q_count < 1 or q_count > 12:
             conn.close()
+            _reset_to_draft()
             if ajax:
                 return jsonify({"ok": False, "error": "Survey question count must be between 1 and 12."}), 400
             return render_error("Survey question count must be between 1 and 12.")
         sq = [q for q in json.loads(study["survey_questions"] or "[]") if q is not None]
         if len(sq) != q_count:
             conn.close()
+            _reset_to_draft()
             if ajax:
                 return jsonify({"ok": False, "error": f"Survey must have exactly {q_count} questions (currently {len(sq)})."}), 400
             return render_error(
@@ -6021,12 +6209,16 @@ def run_study(study_id):
                 anchor_missing.append(label)
         if anchor_missing:
             conn.close()
+            _reset_to_draft()
             msg = f"Cannot run: the following Research Brief anchors are missing: {', '.join(anchor_missing)}"
             if ajax:
                 return jsonify({"ok": False, "error": msg}), 400
             return render_error(msg)
 
         max_allowed = 1 if study_type == "synthetic_idi" else 6
+        _run_geo = (study["study_fit"] or "").strip()
+        _run_admin_srcs = get_admin_web_sources(conn, status_filter="active")
+        _persona_content_lang, _ = infer_market_language(_run_geo, _run_admin_srcs)
         needed = max_allowed - persona_count
         if needed > 0:
             auto_n = needed
@@ -6035,12 +6227,14 @@ def run_study(study_id):
                 healthy_models, excluded_fail, pool_status = _get_healthy_pool_models(conn)
                 if pool_status == "no_eligible":
                     conn.close()
+                    _reset_to_draft()
                     msg_ne = "No eligible persona generation models in pool (GPT-family excluded). An admin must add non-GPT models to the persona model pool."
                     if ajax:
                         return jsonify({"ok": False, "error": msg_ne}), 500
                     return render_error(msg_ne)
                 if pool_status == "all_fail":
                     conn.close()
+                    _reset_to_draft()
                     msg_af = "All eligible persona models failed their last health check: " + ", ".join(excluded_fail) + ". An admin must run a health check or fix the model pool before running a study."
                     if ajax:
                         return jsonify({"ok": False, "error": msg_af}), 500
@@ -6102,8 +6296,9 @@ def run_study(study_id):
                            (user_id, persona_id, version, persona_instance_id, name,
                             persona_summary, demographic_frame, psychographic_profile,
                             contextual_constraints, behavioural_tendencies,
-                            ai_model_provenance, grounding_sources, confidence_and_limits)
-                           VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            ai_model_provenance, grounding_sources, confidence_and_limits,
+                            content_language)
+                           VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             user["id"],
                             p_persona_id,
@@ -6117,6 +6312,7 @@ def run_study(study_id):
                             provenance,
                             _pstr(p_data.get("grounding_sources", "")),
                             _pstr(p_data.get("confidence_and_limits", "")),
+                            _persona_content_lang,
                         ),
                     )
                     conn.execute(
@@ -6148,6 +6344,7 @@ def run_study(study_id):
                 )
             except Exception as e:
                 conn.close()
+                _reset_to_draft()
                 print(f"AUTO_PERSONAS_FAILED study={study_id} reason={e}", flush=True)
                 msg_ap = "Auto-persona generation failed due to invalid generator output. Please try again or attach personas manually."
                 if ajax:
@@ -6157,17 +6354,20 @@ def run_study(study_id):
         if study_type == "synthetic_idi":
             if persona_count > 1:
                 conn.close()
+                _reset_to_draft()
                 if ajax:
                     return jsonify({"ok": False, "error": "IDI requires exactly 1 persona. Remove extras before running."}), 400
                 return render_error("IDI requires exactly 1 persona. Remove extras before running.")
         elif study_type == "synthetic_focus_group":
             if persona_count < 4:
                 conn.close()
+                _reset_to_draft()
                 if ajax:
                     return jsonify({"ok": False, "error": "Focus Group requires at least 4 personas."}), 400
                 return render_error("Focus Group requires at least 4 personas.")
             if persona_count > 6:
                 conn.close()
+                _reset_to_draft()
                 if ajax:
                     return jsonify({"ok": False, "error": "Focus Group allows max 6 personas."}), 400
                 return render_error("Focus Group allows max 6 personas.")
@@ -6189,6 +6389,13 @@ def _run_study_execute(conn, study, study_type, personas_used, persona_names, st
         return _run_study_core(_active_conn, study, study_type, personas_used, persona_names, study_id, user, token, ajax)
     except Exception as exc:
         print(f"RUN_STUDY_UNHANDLED study={study_id} error={exc}", flush=True)
+        try:
+            c2 = get_db()
+            c2.execute("UPDATE studies SET status = 'draft' WHERE id = ? AND status = 'running'", (study_id,))
+            c2.commit()
+            c2.close()
+        except Exception:
+            pass
         if ajax:
             return jsonify({"ok": False, "error": "An unexpected error occurred during study execution. Please try again or contact admin."}), 500
         return render_error(f"Unexpected execution error: {exc}")
