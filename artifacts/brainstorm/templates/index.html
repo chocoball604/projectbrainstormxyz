@@ -2309,11 +2309,47 @@
                 <span id="translate-status" style="font-size: 12px; color: #888;"></span>
             </div>
 
+            <script>
+            function _fillTranslatedSections(sections) {
+                if (!sections) return;
+                var slots = document.querySelectorAll('.translated-section-slot');
+                slots.forEach(function(slot) {
+                    var key = slot.getAttribute('data-section-key');
+                    if (key && sections[key]) {
+                        var text = sections[key];
+                        var lines = text.split('\n');
+                        var html = '';
+                        for (var i = 0; i < lines.length; i++) {
+                            var line = lines[i];
+                            var escaped = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                            if (/^\s*[-•]\s/.test(line)) {
+                                html += '<div style="padding-left: 16px; margin-bottom: 2px;">' + escaped + '</div>';
+                            } else if (line.trim() === '') {
+                                html += '<br>';
+                            } else {
+                                html += '<div style="margin-bottom: 4px;">' + escaped + '</div>';
+                            }
+                        }
+                        slot.innerHTML = '<details style="margin-top: 8px;" open>'
+                            + '<summary style="cursor:pointer;font-size:13px;color:#2e7d32;font-weight:500;">Translated</summary>'
+                            + '<div style="background:#f0fdf4;border:1px solid #c8e6c9;border-radius:6px;padding:12px;font-size:13px;line-height:1.6;margin-top:6px;border-left:4px solid #66bb6a;">'
+                            + html + '</div></details>';
+                    }
+                });
+            }
+            </script>
+
             {% if view_study_output.translation_cached and view_study_output.translated_text %}
             <details style="margin-bottom: 16px;" open>
                 <summary style="cursor: pointer; font-size: 14px; color: #2e7d32; font-weight: 500; padding: 8px 0;">&#128221; Translated Version ({{ view_study_output.user_lang_name }})</summary>
                 <pre style="background: #f0fdf4; border: 1px solid #c8e6c9; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.7; margin-top: 8px; border-left: 4px solid #66bb6a;">{{ view_study_output.translated_text }}</pre>
             </details>
+            <script>
+            (function() {
+                var sections = {{ view_study_output.translated_sections|tojson }};
+                _fillTranslatedSections(sections);
+            })();
+            </script>
             {% else %}
             <div id="translated-output-container" style="display: none; margin-bottom: 16px;">
                 <details open>
@@ -2339,6 +2375,9 @@
                         document.getElementById('translated-output-text').textContent = data.translated;
                         document.getElementById('translated-output-container').style.display = '';
                         status.textContent = '';
+                        if (data.sections) {
+                            _fillTranslatedSections(data.sections);
+                        }
                     } else {
                         status.textContent = 'Translation unavailable: ' + (data.error || 'failed');
                         status.style.color = '#c0392b';
@@ -2379,36 +2418,42 @@
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">4. Key Findings</h4>
                     <div class="report-section-body">{{ view_study_output.report_sections.key_findings|format_report_text }}</div>
+                    <div class="translated-section-slot" data-section-key="key_findings"></div>
                 </div>
 
                 {% if view_study_output.report_sections.what_surprised_us %}
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #fff8e1; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #f9a825;">5. What Surprised Us</h4>
                     <div class="report-section-body">{{ view_study_output.report_sections.what_surprised_us|format_report_text }}</div>
+                    <div class="translated-section-slot" data-section-key="what_surprised_us"></div>
                 </div>
                 {% endif %}
 
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">6. Risks, Limits, and Unknowns</h4>
                     <div class="report-section-body">{{ view_study_output.report_sections.risks_limits|format_report_text }}</div>
+                    <div class="translated-section-slot" data-section-key="risks_limits"></div>
                 </div>
 
                 {% if view_study_output.report_sections.grounding_coverage %}
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #e8f5e9; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #4caf50;">7. Grounding Coverage Summary</h4>
                     <div class="report-section-body">{{ view_study_output.report_sections.grounding_coverage|format_report_text }}</div>
+                    <div class="translated-section-slot" data-section-key="grounding_coverage"></div>
                 </div>
                 {% endif %}
 
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">8. Sources and Citations</h4>
                     <div class="report-section-body">{{ view_study_output.report_sections.sources_citations|format_report_text }}</div>
+                    <div class="translated-section-slot" data-section-key="sources_citations"></div>
                 </div>
 
                 {% if view_study_output.report_sections.persona_summaries %}
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f3e8ff; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #7c3aed;">9. Persona Summaries</h4>
                     <div class="report-section-body">{{ view_study_output.report_sections.persona_summaries|format_report_text }}</div>
+                    <div class="translated-section-slot" data-section-key="persona_summaries"></div>
                 </div>
                 {% endif %}
 
@@ -2416,6 +2461,7 @@
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #e8f0fe; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #5C7E8F;">{{ 9 + fus.round }}. Follow-up Round {{ fus.round }}</h4>
                     <div class="report-section-body">{{ fus.content|format_report_text }}</div>
+                    <div class="translated-section-slot" data-section-key="followup_{{ fus.round }}"></div>
                 </div>
                 {% endfor %}
 

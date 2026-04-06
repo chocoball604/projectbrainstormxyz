@@ -2399,12 +2399,15 @@ def index():
                 _translated_raw = view_study_output.get("translated_output")
                 view_study_output["translation_cached"] = False
                 view_study_output["translated_text"] = ""
+                view_study_output["translated_sections"] = {}
                 if _translated_raw:
                     try:
                         _tdata = json.loads(_translated_raw)
                         if isinstance(_tdata, dict) and _tdata.get("lang") == _user_lang:
-                            view_study_output["translation_cached"] = True
-                            view_study_output["translated_text"] = _tdata.get("text", "")
+                            if _tdata.get("sections"):
+                                view_study_output["translation_cached"] = True
+                                view_study_output["translated_text"] = _tdata.get("text", "")
+                                view_study_output["translated_sections"] = _tdata.get("sections", {})
                     except (json.JSONDecodeError, TypeError):
                         pass
 
@@ -5580,9 +5583,13 @@ def translate_output(study_id):
     if existing:
         try:
             existing_data = json.loads(existing)
-            if isinstance(existing_data, dict) and existing_data.get("lang") == target_lang:
+            if isinstance(existing_data, dict) and existing_data.get("lang") == target_lang and existing_data.get("sections"):
                 conn.close()
-                return jsonify({"ok": True, "translated": existing_data.get("text", ""), "lang": target_lang, "cached": True})
+                return jsonify({
+                    "ok": True, "translated": existing_data.get("text", ""),
+                    "sections": existing_data.get("sections", {}),
+                    "lang": target_lang, "cached": True,
+                })
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -5603,6 +5610,48 @@ def translate_output(study_id):
         conn.close()
         return jsonify({"ok": False, "error": "No model configured for translation."}), 500
 
+    followup_rows = conn.execute(
+        "SELECT * FROM followups WHERE study_id = ? ORDER BY followup_round ASC",
+        (study_id,),
+    ).fetchall()
+    followups = [dict(f) for f in followup_rows]
+
+    all_upload_names = []
+    _personas_used_raw = study_dict.get("personas_used")
+    _persona_data_for_report = []
+    if _personas_used_raw:
+        try:
+            _pids = json.loads(_personas_used_raw) if isinstance(_personas_used_raw, str) else _personas_used_raw
+            if _pids:
+                _ph = ",".join("?" for _ in _pids)
+                _persona_data_for_report = [
+                    dict(r) for r in conn.execute(
+                        f"SELECT persona_id, persona_instance_id, name, persona_summary, demographic_frame, psychographic_profile, contextual_constraints, behavioural_tendencies FROM personas WHERE (persona_instance_id IN ({_ph}) OR persona_id IN ({_ph})) AND user_id = ? ORDER BY name",
+                        _pids + _pids + [user["id"]],
+                    ).fetchall()
+                ]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    report = build_structured_report(
+        study_dict, followups=followups,
+        uploaded_filenames=all_upload_names,
+        persona_data=_persona_data_for_report,
+    )
+
+    sections_to_translate = {}
+    for skey in ("key_findings", "what_surprised_us", "risks_limits",
+                 "grounding_coverage", "sources_citations", "persona_summaries"):
+        val = report.get(skey) or ""
+        if val.strip():
+            sections_to_translate[skey] = val
+    for fus in report.get("followup_sections", []):
+        fkey = f"followup_{fus['round']}"
+        if fus.get("content", "").strip():
+            sections_to_translate[fkey] = fus["content"]
+
+    conn.close()
+
     translate_system = (
         f"You are a professional translator specializing in market research documents. "
         f"Translate the following research output from {source_lang_name} to {target_lang_name}. "
@@ -5611,7 +5660,6 @@ def translate_output(study_id):
         f"Translate the content faithfully, maintaining the analytical tone and research terminology."
     )
 
-    conn.close()
     try:
         translated = call_llm(
             translate_model,
@@ -5630,7 +5678,50 @@ def translate_output(study_id):
         return jsonify({"ok": False, "error": "Translation returned empty result."}), 500
 
     translated_text = translated.strip()
-    translation_data = json.dumps({"lang": target_lang, "text": translated_text})
+    translated_sections = {}
+
+    if sections_to_translate:
+        sections_prompt = json.dumps(sections_to_translate, ensure_ascii=False)
+        sections_system = (
+            f"You are a professional translator specializing in market research documents. "
+            f"Translate the following JSON object from {source_lang_name} to {target_lang_name}. "
+            f"Each key maps to a report section. Translate every value faithfully. "
+            f"Preserve all formatting, line breaks, bullet points, and structure within each value. "
+            f"Return ONLY a valid JSON object with the same keys and translated values. "
+            f"Do not add commentary, explanations, or extra keys."
+        )
+        try:
+            sections_raw = call_llm(
+                translate_model,
+                [
+                    {"role": "system", "content": sections_system},
+                    {"role": "user", "content": sections_prompt},
+                ],
+                purpose="translate_study_sections",
+                timeout_seconds=120,
+            )
+            if sections_raw and sections_raw.strip():
+                cleaned = sections_raw.strip()
+                if cleaned.startswith("```"):
+                    cleaned = "\n".join(cleaned.split("\n")[1:])
+                    if cleaned.endswith("```"):
+                        cleaned = cleaned[:-3]
+                    cleaned = cleaned.strip()
+                brace_idx = cleaned.find("{")
+                if brace_idx > 0:
+                    cleaned = cleaned[brace_idx:]
+                last_brace = cleaned.rfind("}")
+                if last_brace >= 0 and last_brace < len(cleaned) - 1:
+                    cleaned = cleaned[:last_brace + 1]
+                translated_sections = json.loads(cleaned)
+        except Exception as e:
+            app.logger.warning(f"Section translation failed for study {study_id}: {e}")
+
+    translation_data = json.dumps({
+        "lang": target_lang,
+        "text": translated_text,
+        "sections": translated_sections,
+    })
 
     conn = get_db()
     conn.execute(
@@ -5640,8 +5731,12 @@ def translate_output(study_id):
     conn.commit()
     conn.close()
 
-    print(f"TRANSLATE study_id={study_id} from={output_lang} to={target_lang}", flush=True)
-    return jsonify({"ok": True, "translated": translated_text, "lang": target_lang, "cached": False})
+    print(f"TRANSLATE study_id={study_id} from={output_lang} to={target_lang} sections={len(translated_sections)}", flush=True)
+    return jsonify({
+        "ok": True, "translated": translated_text,
+        "sections": translated_sections,
+        "lang": target_lang, "cached": False,
+    })
 
 
 @app.route("/translate-persona/<persona_pid>", methods=["POST"])
