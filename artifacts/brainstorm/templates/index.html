@@ -1930,8 +1930,7 @@
                         btn.disabled = false;
                         btn.textContent = 'Update Survey Config';
                         if (data.ok) {
-                            if (data.precheck) updatePrecheckPanel(data.precheck);
-                            if (data.qa_status) updatePrecheckStatusBox(data);
+                            window.location.reload();
                         } else {
                             alert(data.error || 'Save failed.');
                         }
