@@ -44,6 +44,53 @@ from werkzeug.security import check_password_hash, generate_password_hash
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-fallback-key")
 
+import re as _re_mod
+from markupsafe import Markup
+
+@app.template_filter("format_report_text")
+def _format_report_text(text):
+    if not text:
+        return Markup("")
+    lines = text.split("\n")
+    html_parts = []
+    in_list = False
+    for line in lines:
+        stripped = line.rstrip()
+        is_bullet = stripped.lstrip().startswith("- ") or stripped.lstrip().startswith("• ") or stripped.lstrip().startswith("✓ ") or stripped.lstrip().startswith("✗ ")
+        is_indented_bullet = len(stripped) > len(stripped.lstrip()) and is_bullet
+        if is_bullet:
+            if not in_list:
+                html_parts.append("<ul class='report-list'>")
+                in_list = True
+            bullet_text = stripped.lstrip()
+            for prefix in ["- ", "• ", "✓ ", "✗ "]:
+                if bullet_text.startswith(prefix):
+                    bullet_text = bullet_text[len(prefix):]
+                    break
+            if stripped.lstrip().startswith("✓"):
+                html_parts.append(f"<li class='report-check'>✓ {Markup.escape(bullet_text)}</li>")
+            elif stripped.lstrip().startswith("✗"):
+                html_parts.append(f"<li class='report-cross'>✗ {Markup.escape(bullet_text)}</li>")
+            else:
+                html_parts.append(f"<li>{Markup.escape(bullet_text)}</li>")
+        else:
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            if not stripped:
+                html_parts.append("<div class='report-spacer'></div>")
+            elif stripped.endswith(":") and len(stripped) < 80:
+                html_parts.append(f"<p class='report-subhead'>{Markup.escape(stripped)}</p>")
+            elif _re_mod.match(r'^Finding \d+', stripped):
+                html_parts.append(f"<p class='report-finding'>{Markup.escape(stripped)}</p>")
+            elif stripped.startswith("Confidence:") or stripped.lstrip().startswith("Confidence:"):
+                html_parts.append(f"<p class='report-confidence'>{Markup.escape(stripped)}</p>")
+            else:
+                html_parts.append(f"<p>{Markup.escape(stripped)}</p>")
+    if in_list:
+        html_parts.append("</ul>")
+    return Markup("\n".join(html_parts))
+
 
 @app.route("/__health")
 def __health():
@@ -2183,11 +2230,26 @@ def index():
                     ).fetchall()
                 ]
                 all_upload_names = upload_names + active_admin_names
+                _persona_data_for_report = []
+                if view_study_output.get("personas_used"):
+                    try:
+                        _pids = json.loads(view_study_output["personas_used"]) if isinstance(view_study_output["personas_used"], str) else view_study_output["personas_used"]
+                    except (json.JSONDecodeError, TypeError):
+                        _pids = []
+                    if _pids:
+                        _ph = ",".join("?" for _ in _pids)
+                        _persona_data_for_report = [
+                            dict(r) for r in conn.execute(
+                                f"SELECT persona_id, persona_instance_id, name, persona_summary, demographic_frame, psychographic_profile, contextual_constraints, behavioural_tendencies FROM personas WHERE (persona_instance_id IN ({_ph}) OR persona_id IN ({_ph})) AND user_id = ? ORDER BY name",
+                                _pids + _pids + [user["id"]],
+                            ).fetchall()
+                        ]
                 view_study_output["report_sections"] = build_structured_report(
                     view_study_output,
                     followups=view_study_output["followups"],
                     version=report_version,
                     uploaded_filenames=all_upload_names,
+                    persona_data=_persona_data_for_report,
                 )
                 if view_study_output.get("study_type") == "synthetic_survey":
                     _sq_raw = view_study_output.get("survey_questions") or "[]"
@@ -3804,7 +3866,7 @@ def _parse_lisa_memo(raw_text):
 
 
 def build_structured_report(
-    study, followups=None, version=None, uploaded_filenames=None
+    study, followups=None, version=None, uploaded_filenames=None, persona_data=None
 ):
     if followups is None:
         followups = []
@@ -4176,6 +4238,34 @@ def build_structured_report(
     )
     sections["sources_citations"] = "\n".join(source_lines)
 
+    persona_summary_lines = []
+    if persona_data:
+        for p in persona_data:
+            p_name = p.get("name", "Unknown")
+            p_id = p.get("persona_id", "")
+            persona_summary_lines.append(f"{p_name} ({p_id})")
+            if p.get("persona_summary"):
+                persona_summary_lines.append(f"  {p['persona_summary']}")
+            attrs = []
+            if p.get("demographic_frame"):
+                attrs.append(("Demographics", p["demographic_frame"]))
+            if p.get("psychographic_profile"):
+                attrs.append(("Psychographics", p["psychographic_profile"]))
+            if p.get("contextual_constraints"):
+                attrs.append(("Context", p["contextual_constraints"]))
+            if p.get("behavioural_tendencies"):
+                attrs.append(("Behaviour", p["behavioural_tendencies"]))
+            for attr_label, attr_val in attrs:
+                short = attr_val.strip().replace("\n", " ")
+                if len(short) > 200:
+                    short = short[:197] + "..."
+                persona_summary_lines.append(f"  - {attr_label}: {short}")
+            persona_summary_lines.append("")
+    if persona_summary_lines:
+        sections["persona_summaries"] = "\n".join(persona_summary_lines)
+    else:
+        sections["persona_summaries"] = ""
+
     sections["followup_sections"] = []
     for fu in followups:
         if fu.get("followup_round", 0) > version - 1:
@@ -4404,6 +4494,7 @@ def generate_report_pdf(study, sections):
         ("6. Risks, Limits, and Unknowns", sections.get("risks_limits", "")),
         ("7. Grounding Coverage Summary", sections.get("grounding_coverage", "")),
         ("8. Sources and Citations", sections.get("sources_citations", "")),
+        ("9. Persona Summaries", sections.get("persona_summaries", "")),
     ]
 
     for heading, content in heading_sections:
@@ -4422,7 +4513,7 @@ def generate_report_pdf(study, sections):
     for fus in fu_sections:
         pdf.set_font("Helvetica", "B", 12)
         pdf.set_fill_color(240, 240, 240)
-        heading = f"{8 + fus['round']}. Follow-up Round {fus['round']}"
+        heading = f"{9 + fus['round']}. Follow-up Round {fus['round']}"
         pdf.cell(0, 8, heading, new_x="LMARGIN", new_y="NEXT", fill=True)
         pdf.ln(2)
         _pdf_write_text(
@@ -5003,10 +5094,25 @@ def download_pdf(study_id):
             "SELECT filename FROM admin_uploads WHERE status = 'active'"
         ).fetchall()
     ]
+    _pdf_persona_data = []
+    _pdf_study_dict = dict(study)
+    if _pdf_study_dict.get("personas_used"):
+        try:
+            _pdf_pids = json.loads(_pdf_study_dict["personas_used"]) if isinstance(_pdf_study_dict["personas_used"], str) else _pdf_study_dict["personas_used"]
+        except (json.JSONDecodeError, TypeError):
+            _pdf_pids = []
+        if _pdf_pids:
+            _pdf_ph = ",".join("?" for _ in _pdf_pids)
+            _pdf_persona_data = [
+                dict(r) for r in conn.execute(
+                    f"SELECT persona_id, persona_instance_id, name, persona_summary, demographic_frame, psychographic_profile, contextual_constraints, behavioural_tendencies FROM personas WHERE (persona_instance_id IN ({_pdf_ph}) OR persona_id IN ({_pdf_ph})) AND user_id = ? ORDER BY name",
+                    _pdf_pids + _pdf_pids + [user["id"]],
+                ).fetchall()
+            ]
     conn.close()
     all_upload_names = upload_names + active_admin_names
     followups = [dict(f) for f in followup_rows]
-    study_dict = dict(study)
+    study_dict = _pdf_study_dict
     version_param = request.args.get("version")
     version = int(version_param) if version_param and version_param.isdigit() else None
     sections = build_structured_report(
@@ -5014,6 +5120,7 @@ def download_pdf(study_id):
         followups=followups,
         version=version,
         uploaded_filenames=all_upload_names,
+        persona_data=_pdf_persona_data,
     )
     pdf_bytes = generate_report_pdf(study_dict, sections)
     report_version = sections.get("version", 1)

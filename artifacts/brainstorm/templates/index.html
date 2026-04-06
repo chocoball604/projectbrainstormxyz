@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;600&family=Noto+Sans+TC:wght@400;600&family=Noto+Sans+JP:wght@400;600&family=Noto+Sans+KR:wght@400;600&display=swap" rel="stylesheet">
     <title>Project Brainstorm V1</title>
     <style>
         :root {
@@ -20,7 +23,7 @@
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: Calibri, "Segoe UI", Arial, sans-serif;
+            font-family: Calibri, "Segoe UI", Arial, "Noto Sans SC", "Noto Sans TC", "Noto Sans JP", "Noto Sans KR", sans-serif;
             font-size: var(--font-body);
             line-height: var(--line-body);
             background: #f5f5f5;
@@ -28,17 +31,27 @@
             min-height: 100vh;
         }
         html[data-lang="en"] body {
-            font-family: Calibri, "Segoe UI", Arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic", "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+            font-family: Calibri, "Segoe UI", Arial, "Noto Sans JP", "Noto Sans SC", "Noto Sans TC", "Noto Sans KR", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic", "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
         }
-        html[data-lang="ja"] body { font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic", sans-serif; }
-        html[data-lang="zh-Hans"] body { font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
-        html[data-lang="zh-Hant"] body { font-family: "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif; }
+        html[data-lang="ja"] body { font-family: "Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic", sans-serif; }
+        html[data-lang="zh-Hans"] body { font-family: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
+        html[data-lang="zh-Hant"] body { font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif; }
         .brand-lockup {
             display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;
         }
         .brand-lockup img { height: 28px; width: 28px; object-fit: contain; }
         .brand-wordmark { font-size: 18px; font-weight: 700; white-space: nowrap; }
         .brand-cn { font-size: 1.05em; margin-left: 0.35em; font-weight: 700; letter-spacing: 0.02em; font-family: 'PingFang TC','Microsoft JhengHei UI','Microsoft JhengHei',sans-serif; }
+        .report-section-body { background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px 18px; font-size: 13px; line-height: 1.75; }
+        .report-section-body p { margin: 0 0 6px 0; }
+        .report-section-body .report-spacer { height: 10px; }
+        .report-section-body .report-subhead { font-weight: 600; color: #1a1a2e; margin: 10px 0 4px 0; font-size: 13px; }
+        .report-section-body .report-finding { font-weight: 600; color: #2c5282; margin: 8px 0 2px 0; }
+        .report-section-body .report-confidence { font-size: 12px; color: #718096; margin: 0 0 6px 12px; font-style: italic; }
+        .report-section-body ul.report-list { margin: 4px 0 8px 20px; padding: 0; list-style: disc; }
+        .report-section-body ul.report-list li { margin: 2px 0; padding: 0; line-height: 1.65; }
+        .report-section-body ul.report-list li.report-check { list-style: none; color: #276749; }
+        .report-section-body ul.report-list li.report-cross { list-style: none; color: #c53030; }
         .header {
             background: var(--pb-white);
             color: var(--pb-text);
@@ -2297,54 +2310,61 @@
 
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">1. Executive Summary</h4>
-                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.executive_summary }}</pre>
+                    <div class="report-section-body">{{ view_study_output.report_sections.executive_summary|format_report_text }}</div>
                 </div>
 
                 {% if view_study_output.report_sections.why_study_type %}
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">2. Why This Study Type Was Chosen</h4>
-                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.why_study_type }}</pre>
+                    <div class="report-section-body">{{ view_study_output.report_sections.why_study_type|format_report_text }}</div>
                 </div>
                 {% endif %}
 
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">3. What Was Studied</h4>
-                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.what_was_studied }}</pre>
+                    <div class="report-section-body">{{ view_study_output.report_sections.what_was_studied|format_report_text }}</div>
                 </div>
 
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">4. Key Findings</h4>
-                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.key_findings }}</pre>
+                    <div class="report-section-body">{{ view_study_output.report_sections.key_findings|format_report_text }}</div>
                 </div>
 
                 {% if view_study_output.report_sections.what_surprised_us %}
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #fff8e1; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #f9a825;">5. What Surprised Us</h4>
-                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.what_surprised_us }}</pre>
+                    <div class="report-section-body">{{ view_study_output.report_sections.what_surprised_us|format_report_text }}</div>
                 </div>
                 {% endif %}
 
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">6. Risks, Limits, and Unknowns</h4>
-                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.risks_limits }}</pre>
+                    <div class="report-section-body">{{ view_study_output.report_sections.risks_limits|format_report_text }}</div>
                 </div>
 
                 {% if view_study_output.report_sections.grounding_coverage %}
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #e8f5e9; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #4caf50;">7. Grounding Coverage Summary</h4>
-                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.grounding_coverage }}</pre>
+                    <div class="report-section-body">{{ view_study_output.report_sections.grounding_coverage|format_report_text }}</div>
                 </div>
                 {% endif %}
 
                 <div style="margin-bottom: 20px;">
                     <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f0f4ff; padding: 8px 12px; border-radius: 4px;">8. Sources and Citations</h4>
-                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ view_study_output.report_sections.sources_citations }}</pre>
+                    <div class="report-section-body">{{ view_study_output.report_sections.sources_citations|format_report_text }}</div>
                 </div>
+
+                {% if view_study_output.report_sections.persona_summaries %}
+                <div style="margin-bottom: 20px;">
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #f3e8ff; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #7c3aed;">9. Persona Summaries</h4>
+                    <div class="report-section-body">{{ view_study_output.report_sections.persona_summaries|format_report_text }}</div>
+                </div>
+                {% endif %}
 
                 {% for fus in view_study_output.report_sections.followup_sections %}
                 <div style="margin-bottom: 20px;">
-                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #e8f0fe; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #5C7E8F;">{{ 8 + fus.round }}. Follow-up Round {{ fus.round }}</h4>
-                    <pre style="background: #fafafa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.7; font-family: inherit;">{{ fus.content }}</pre>
+                    <h4 style="font-size: 15px; color: #1a1a2e; margin-bottom: 8px; background: #e8f0fe; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #5C7E8F;">{{ 9 + fus.round }}. Follow-up Round {{ fus.round }}</h4>
+                    <div class="report-section-body">{{ fus.content|format_report_text }}</div>
                 </div>
                 {% endfor %}
 
