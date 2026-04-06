@@ -74,6 +74,7 @@ VERIFY_EXEMPT_ENDPOINTS = {
     "set_language",
     "static",
     "serve_blog_image",
+    "study_status",
 }
 
 
@@ -5602,6 +5603,24 @@ def send_chat(study_id):
         conn2.close()
 
     return redirect(f"/?token={token}&configure={study_id}")
+
+
+@app.route("/study-status/<int:study_id>")
+def study_status(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user:
+        return jsonify({"ok": False, "error": "Auth required."}), 403
+    conn = get_db()
+    row = conn.execute(
+        "SELECT status, qa_status FROM studies WHERE id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"ok": False, "error": "Not found."}), 404
+    done = row["status"] != "draft"
+    return jsonify({"ok": True, "status": row["status"], "qa_status": row["qa_status"], "done": done})
 
 
 @app.route("/run-study/<int:study_id>", methods=["POST"])

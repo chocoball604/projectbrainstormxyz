@@ -1502,6 +1502,25 @@
                         + '</div>';
                 }
 
+                var _resolved = false;
+                function finishSuccess() {
+                    if (_resolved) return;
+                    _resolved = true;
+                    window.location.href = '/?token=' + encodeURIComponent(token) + '&view_output=' + sid;
+                }
+
+                var pollIv = setInterval(function() {
+                    fetch('/study-status/' + sid + '?token=' + encodeURIComponent(token))
+                        .then(function(r) { return r.json(); })
+                        .then(function(d) {
+                            if (d.done) {
+                                clearInterval(pollIv);
+                                finishSuccess();
+                            }
+                        })
+                        .catch(function() {});
+                }, 5000);
+
                 var fd = new FormData();
                 fd.append('token', token);
                 fetch('/run-study/' + sid, {
@@ -1516,14 +1535,26 @@
                     return resp.json();
                 })
                 .then(function(data) {
-                    if (data.ok) {
-                        window.location.href = '/?token=' + encodeURIComponent(token) + '&view_output=' + sid;
-                    } else {
-                        renderExecError(ob, sid, data.error || 'Execution failed.');
+                    clearInterval(pollIv);
+                    if (data && data.ok) {
+                        finishSuccess();
+                    } else if (!_resolved) {
+                        renderExecError(ob, sid, (data && data.error) || 'Execution failed.');
                     }
                 })
                 .catch(function(err) {
-                    renderExecError(ob, sid, 'Network error: ' + err.message);
+                    if (!_resolved) {
+                        clearInterval(pollIv);
+                        fetch('/study-status/' + sid + '?token=' + encodeURIComponent(token))
+                            .then(function(r) { return r.json(); })
+                            .then(function(d) {
+                                if (d.done) { finishSuccess(); }
+                                else { renderExecError(ob, sid, 'Network error: ' + err.message); }
+                            })
+                            .catch(function() {
+                                renderExecError(ob, sid, 'Network error: ' + err.message);
+                            });
+                    }
                 });
             }
 
