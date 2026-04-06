@@ -2924,9 +2924,9 @@
                         <td>{{ s.study_type or '—' }}</td>
                         <td>
                             <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
-                            {% if s.qa_status == 'precheck_passed' %}
+                            {% if s.status == 'draft' and s.qa_status == 'precheck_passed' %}
                             <span class="badge badge-qa-precheck_passed" style="margin-left: 4px;">Ready</span>
-                            {% elif s.qa_status == 'precheck_failed' %}
+                            {% elif s.status == 'draft' and s.qa_status == 'precheck_failed' %}
                             <span class="badge badge-qa-precheck_failed" style="margin-left: 4px;">Items remaining</span>
                             {% elif s.qa_status == 'pass' %}
                             <span class="badge badge-qa-pass" style="margin-left: 4px;">QA: Pass</span>

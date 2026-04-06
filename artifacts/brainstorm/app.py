@@ -6117,7 +6117,7 @@ def study_status(study_id):
     conn.close()
     if not row:
         return jsonify({"ok": False, "error": "Not found."}), 404
-    done = row["status"] != "draft"
+    done = row["status"] in ("completed", "qa_blocked")
     return jsonify({"ok": True, "status": row["status"], "qa_status": row["qa_status"], "done": done})
 
 
