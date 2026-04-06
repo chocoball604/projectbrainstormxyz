@@ -744,9 +744,9 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
     brief_fields = [
         ("business_problem", "Business Problem"),
         ("decision_to_support", "Decision to Support"),
-        ("known_vs_unknown", "Known vs Unknown"),
+        ("known_vs_unknown", "Product / Concept"),
         ("target_audience", "Target Audience"),
-        ("study_fit", "Study Fit"),
+        ("study_fit", "Market / Geography"),
     ]
     brief_text = ""
     for field, label in brief_fields:
@@ -3152,9 +3152,9 @@ def admin_set_email():
 RESEARCH_BRIEF_FIELDS = [
     ("business_problem", "Business Problem"),
     ("decision_to_support", "Decision to Support"),
-    ("known_vs_unknown", "Known vs Unknown"),
+    ("known_vs_unknown", "Product / Concept"),
     ("target_audience", "Target Audience"),
-    ("study_fit", "Study Fit"),
+    ("study_fit", "Market / Geography"),
 ]
 
 
@@ -3961,9 +3961,9 @@ STUDY_TYPE_LABELS = {
 ANCHOR_FIELDS = [
     ("business_problem", "Business Problem"),
     ("decision_to_support", "Decision to Support"),
-    ("known_vs_unknown", "Known vs Unknown"),
+    ("known_vs_unknown", "Product / Concept"),
     ("target_audience", "Target Audience"),
-    ("study_fit", "Study Fit"),
+    ("study_fit", "Market / Geography"),
 ]
 
 
@@ -4928,9 +4928,9 @@ def run_ben_qa(study_dict):
         anchor_fields = {
             "business_problem": "Business Problem",
             "decision_to_support": "Decision to Support",
-            "known_vs_unknown": "Known vs Unknown",
+            "known_vs_unknown": "Product / Concept",
             "target_audience": "Target Audience",
-            "study_fit": "Study Fit",
+            "study_fit": "Market / Geography",
         }
         missing_anchors = []
         for field_key, field_label in anchor_fields.items():
@@ -6113,8 +6113,8 @@ def send_chat(study_id):
         "- Product / Concept\n"
         "- Target Audience\n\n"
         "Important:\n"
-        "- Do NOT ask the user to fill 'Study Fit' as a field; YOU explain fit when recommending a study type.\n"
-        "- Do NOT treat 'Known vs Unknown' as required; if it appears, frame it as a hypothesis only.\n\n"
+        "- Do NOT ask the user to fill 'Market / Geography' as a field; YOU explain fit when recommending a study type.\n"
+        "- Do NOT treat 'Product / Concept' as required; if it appears, frame it as a hypothesis only.\n\n"
         "Task rules:\n"
         "1) Briefly acknowledge the user's latest message.\n"
         "2) Identify the single most important missing/unclear item based on field status.\n"
@@ -6295,9 +6295,9 @@ def run_study(study_id):
         for col, label in [
             ("business_problem", "Business Problem"),
             ("decision_to_support", "Decision to Support"),
-            ("known_vs_unknown", "Known vs Unknown"),
+            ("known_vs_unknown", "Product / Concept"),
             ("target_audience", "Target Audience"),
-            ("study_fit", "Study Fit"),
+            ("study_fit", "Market / Geography"),
         ]:
             val = (study[col] or "").strip()
             if not val:
@@ -6664,9 +6664,9 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             brief_fields = [
                 ("business_problem", "Business Problem"),
                 ("decision_to_support", "Decision to Support"),
-                ("known_vs_unknown", "Known vs Unknown"),
+                ("known_vs_unknown", "Product / Concept"),
                 ("target_audience", "Target Audience"),
-                ("study_fit", "Study Fit"),
+                ("study_fit", "Market / Geography"),
             ]
             brief_text = ""
             for field, label in brief_fields:
