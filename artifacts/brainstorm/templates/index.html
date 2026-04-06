@@ -2301,6 +2301,107 @@
             </div>
             {% endif %}
 
+            {% if view_study_output.show_translate %}
+            <div id="translate-bar" style="margin-bottom: 16px; padding: 10px 14px; background: #f0f4ff; border: 1px solid #d0d8e8; border-radius: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span style="font-size: 13px; color: #555;">Output language: <strong>{{ view_study_output.output_lang_name }}</strong></span>
+                <button id="btn-translate" onclick="translateStudyOutput({{ view_study_output.id }})" class="btn btn-secondary" style="font-size: 13px; padding: 5px 14px;">
+                    &#127760; Translate to {{ view_study_output.user_lang_name }}
+                </button>
+                <button id="btn-show-original" onclick="toggleTranslation('original')" class="btn btn-secondary" style="font-size: 13px; padding: 5px 14px; display: none;">
+                    Show Original
+                </button>
+                <button id="btn-show-translated" onclick="toggleTranslation('translated')" class="btn btn-secondary" style="font-size: 13px; padding: 5px 14px; display: none;">
+                    &#127760; Show Translated
+                </button>
+                <span id="translate-status" style="font-size: 12px; color: #888; display: none;"></span>
+            </div>
+            <div id="translated-output-container" style="display: none; margin-bottom: 24px;">
+                <div style="background: #fffbea; border: 1px solid #f0d060; border-radius: 8px; padding: 4px 12px; margin-bottom: 8px; font-size: 12px; color: #8a6d00;">
+                    &#128221; Translated version ({{ view_study_output.user_lang_name }})
+                </div>
+                <pre id="translated-output-text" style="background: #fefef6; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.7;"></pre>
+            </div>
+            <script>
+            var _translateToken = '{{ token }}';
+            var _translateTargetLang = '{{ view_study_output.user_lang }}';
+            var _translationCached = {{ 'true' if view_study_output.translation_cached else 'false' }};
+            var _cachedTranslation = {{ view_study_output.translated_text|tojson }};
+            var _translationDone = false;
+
+            if (_translationCached && _cachedTranslation) {
+                document.getElementById('translated-output-text').textContent = _cachedTranslation;
+                _translationDone = true;
+            }
+
+            function translateStudyOutput(studyId) {
+                if (_translationDone) {
+                    toggleTranslation('translated');
+                    return;
+                }
+                var btnTranslate = document.getElementById('btn-translate');
+                var status = document.getElementById('translate-status');
+                btnTranslate.disabled = true;
+                btnTranslate.textContent = 'Translating...';
+                status.style.display = 'inline';
+                status.textContent = 'This may take a minute for long reports...';
+
+                var fd = new FormData();
+                fd.append('token', _translateToken);
+                fd.append('target_lang', _translateTargetLang);
+
+                fetch('/translate-output/' + studyId, { method: 'POST', body: fd })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        if (data.skip) {
+                            status.textContent = data.reason || 'Already in target language.';
+                            btnTranslate.style.display = 'none';
+                            return;
+                        }
+                        document.getElementById('translated-output-text').textContent = data.translated;
+                        _translationDone = true;
+                        toggleTranslation('translated');
+                        status.style.display = 'none';
+                    } else {
+                        status.textContent = 'Error: ' + (data.error || 'Translation failed.');
+                        status.style.color = '#c0392b';
+                        btnTranslate.disabled = false;
+                        btnTranslate.innerHTML = '&#127760; Retry Translation';
+                    }
+                })
+                .catch(function(err) {
+                    status.textContent = 'Network error. Please try again.';
+                    status.style.color = '#c0392b';
+                    btnTranslate.disabled = false;
+                    btnTranslate.innerHTML = '&#127760; Retry Translation';
+                });
+            }
+
+            function toggleTranslation(mode) {
+                var reportViewer = document.getElementById('report-viewer');
+                var rawDetails = document.querySelectorAll('details');
+                var translatedContainer = document.getElementById('translated-output-container');
+                var btnTranslate = document.getElementById('btn-translate');
+                var btnOriginal = document.getElementById('btn-show-original');
+                var btnShowTranslated = document.getElementById('btn-show-translated');
+
+                if (mode === 'translated') {
+                    if (reportViewer) reportViewer.style.display = 'none';
+                    translatedContainer.style.display = 'block';
+                    btnTranslate.style.display = 'none';
+                    btnOriginal.style.display = 'inline-flex';
+                    btnShowTranslated.style.display = 'none';
+                } else {
+                    if (reportViewer) reportViewer.style.display = '';
+                    translatedContainer.style.display = 'none';
+                    btnTranslate.style.display = 'none';
+                    btnOriginal.style.display = 'none';
+                    btnShowTranslated.style.display = 'inline-flex';
+                }
+            }
+            </script>
+            {% endif %}
+
             {% if view_study_output.report_sections %}
             <div id="report-viewer" style="margin-bottom: 24px;">
                 <h3 style="font-size: 18px; color: #1a1a2e; margin-bottom: 16px; border-bottom: 2px solid #5C7E8F; padding-bottom: 8px;">

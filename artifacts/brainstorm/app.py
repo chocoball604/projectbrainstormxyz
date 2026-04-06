@@ -771,6 +771,24 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
         '"confidence_and_limits": "..."}]}\n\n'
     )
 
+    _persona_geo = (study_dict.get("study_fit") or "").strip()
+    _persona_admin_srcs = []
+    try:
+        _p_conn = get_db()
+        _persona_admin_srcs = get_admin_web_sources(_p_conn, status_filter="active")
+        _p_conn.close()
+    except Exception:
+        pass
+    _p_lang_code, _p_lang_name = infer_market_language(_persona_geo, _persona_admin_srcs)
+    _persona_lang_rule = ""
+    if _p_lang_code != "en":
+        _persona_lang_rule = (
+            f"\n7. LANGUAGE: Write persona dossier content (persona_summary, demographic_frame, "
+            f"psychographic_profile, contextual_constraints, behavioural_tendencies, grounding_sources, "
+            f"confidence_and_limits) in {_p_lang_name}, as appropriate for the {_persona_geo} market. "
+            f"Keep JSON keys in English."
+        )
+
     system_prompt = (
         "You are Lisa, a senior qualitative research analyst at Project Brainstorm. "
         "Generate realistic, diverse synthetic research personas for a qualitative study.\n\n"
@@ -782,6 +800,7 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
         "4. Use realistic names appropriate for the target market.\n"
         "5. Be culturally grounded for Asia-Pacific markets where relevant.\n"
         "6. Each field must be substantive (50-200 words), not placeholder text."
+        + _persona_lang_rule
     )
 
     oc_block, oc_keys = _extract_optional_context(study_dict)
@@ -1408,6 +1427,10 @@ def migrate_db(conn):
         conn.execute("ALTER TABLE studies ADD COLUMN confidence_summary TEXT")
     if "final_report" not in study_cols:
         conn.execute("ALTER TABLE studies ADD COLUMN final_report TEXT")
+    if "output_language" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN output_language TEXT")
+    if "translated_output" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN translated_output TEXT")
 
     fu_info = conn.execute("PRAGMA table_info(followups)").fetchall()
     fu_cols = [r[1] for r in fu_info]
@@ -1628,6 +1651,92 @@ def get_admin_web_sources(conn, status_filter=None):
             "SELECT * FROM admin_web_sources ORDER BY id DESC"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+GEOGRAPHY_LANGUAGE_MAP = {
+    "hong kong": ("zh-Hant", "Traditional Chinese (Cantonese)"),
+    "hk": ("zh-Hant", "Traditional Chinese (Cantonese)"),
+    "macau": ("zh-Hant", "Traditional Chinese (Cantonese)"),
+    "macao": ("zh-Hant", "Traditional Chinese (Cantonese)"),
+    "taiwan": ("zh-Hant", "Traditional Chinese (Mandarin)"),
+    "china": ("zh-Hans", "Simplified Chinese (Mandarin)"),
+    "mainland china": ("zh-Hans", "Simplified Chinese (Mandarin)"),
+    "prc": ("zh-Hans", "Simplified Chinese (Mandarin)"),
+    "japan": ("ja", "Japanese"),
+    "south korea": ("ko", "Korean"),
+    "korea": ("ko", "Korean"),
+    "thailand": ("th", "Thai"),
+    "vietnam": ("vi", "Vietnamese"),
+    "indonesia": ("id", "Bahasa Indonesia"),
+    "malaysia": ("ms", "Bahasa Melayu"),
+    "philippines": ("tl", "Filipino/Tagalog"),
+    "singapore": ("en", "English"),
+    "australia": ("en", "English"),
+    "new zealand": ("en", "English"),
+    "india": ("en", "English"),
+    "united states": ("en", "English"),
+    "usa": ("en", "English"),
+    "united kingdom": ("en", "English"),
+    "uk": ("en", "English"),
+    "canada": ("en", "English"),
+}
+
+SOURCE_LANG_MAP = {
+    "cn": "zh-Hant",
+    "zh": "zh-Hans",
+    "zh-hans": "zh-Hans",
+    "zh-hant": "zh-Hant",
+    "ja": "ja",
+    "ko": "ko",
+    "th": "th",
+    "vi": "vi",
+    "id": "id",
+    "ms": "ms",
+    "en": "en",
+}
+
+LANG_CODE_TO_NAME = {
+    "en": "English",
+    "zh-Hans": "Simplified Chinese",
+    "zh-Hant": "Traditional Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "th": "Thai",
+    "vi": "Vietnamese",
+    "id": "Bahasa Indonesia",
+    "ms": "Bahasa Melayu",
+    "tl": "Filipino/Tagalog",
+}
+
+
+def infer_market_language(study_fit_text, admin_sources=None):
+    geo = (study_fit_text or "").strip().lower()
+    geo_lang_code = None
+    geo_lang_name = None
+    for keyword, (code, name) in GEOGRAPHY_LANGUAGE_MAP.items():
+        if keyword in geo:
+            geo_lang_code = code
+            geo_lang_name = name
+            break
+
+    source_lang_code = None
+    if admin_sources:
+        lang_counts = {}
+        for src in admin_sources:
+            src_lang = (src.get("language") or "en").strip().lower()
+            normalized = SOURCE_LANG_MAP.get(src_lang, src_lang)
+            if normalized != "en":
+                lang_counts[normalized] = lang_counts.get(normalized, 0) + 1
+        if lang_counts:
+            source_lang_code = max(lang_counts, key=lang_counts.get)
+
+    if geo_lang_code and geo_lang_code != "en":
+        return geo_lang_code, geo_lang_name
+    if source_lang_code and source_lang_code != "en":
+        return source_lang_code, LANG_CODE_TO_NAME.get(source_lang_code, source_lang_code)
+    if geo_lang_code == "en":
+        return "en", "English"
+    return "en", "English"
 
 
 def create_grounding_trace(conn, trigger_event, study_id=None, persona_id=None):
@@ -1936,7 +2045,7 @@ def index():
             studies = [
                 dict(r)
                 for r in conn.execute(
-                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language FROM studies WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
                     (user["id"], f"%{studies_q}%", PAGE_SIZE, s_offset),
                 ).fetchall()
             ]
@@ -1944,7 +2053,7 @@ def index():
             studies = [
                 dict(r)
                 for r in conn.execute(
-                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language FROM studies WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
                     (user["id"], PAGE_SIZE, s_offset),
                 ).fetchall()
             ]
@@ -2257,6 +2366,27 @@ def index():
                         view_study_output["survey_questions_parsed"] = json.loads(_sq_raw) if isinstance(_sq_raw, str) else _sq_raw
                     except (json.JSONDecodeError, TypeError):
                         view_study_output["survey_questions_parsed"] = []
+
+                _out_lang = view_study_output.get("output_language") or "en"
+                _user_lang = request.cookies.get("pb_lang", "en")
+                if _user_lang not in VALID_LANGS:
+                    _user_lang = "en"
+                view_study_output["show_translate"] = (_out_lang != _user_lang)
+                view_study_output["user_lang"] = _user_lang
+                view_study_output["user_lang_name"] = LANG_CODE_TO_NAME.get(_user_lang, _user_lang)
+                view_study_output["output_lang_name"] = LANG_CODE_TO_NAME.get(_out_lang, _out_lang)
+
+                _translated_raw = view_study_output.get("translated_output")
+                view_study_output["translation_cached"] = False
+                view_study_output["translated_text"] = ""
+                if _translated_raw:
+                    try:
+                        _tdata = json.loads(_translated_raw)
+                        if isinstance(_tdata, dict) and _tdata.get("lang") == _user_lang:
+                            view_study_output["translation_cached"] = True
+                            view_study_output["translated_text"] = _tdata.get("text", "")
+                    except (json.JSONDecodeError, TypeError):
+                        pass
 
         conn.close()
 
@@ -5359,6 +5489,101 @@ def get_coaching_nudge(study, persona_count):
     return "Thanks for your message! I've noted your input — we'll use this as we shape the study together."
 
 
+@app.route("/translate-output/<int:study_id>", methods=["POST"])
+def translate_output(study_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return jsonify({"ok": False, "error": "Unauthorized."}), 401
+
+    target_lang = request.form.get("target_lang", "en")
+    if target_lang not in VALID_LANGS:
+        target_lang = "en"
+
+    conn = get_db()
+    study = conn.execute(
+        "SELECT * FROM studies WHERE id = ? AND user_id = ?",
+        (study_id, user["id"]),
+    ).fetchone()
+    if not study:
+        conn.close()
+        return jsonify({"ok": False, "error": "Study not found."}), 404
+
+    study_dict = dict(study)
+    output_lang = study_dict.get("output_language") or "en"
+
+    if output_lang == target_lang:
+        conn.close()
+        return jsonify({"ok": True, "skip": True, "reason": "Output already in target language."})
+
+    existing = study_dict.get("translated_output")
+    if existing:
+        try:
+            existing_data = json.loads(existing)
+            if isinstance(existing_data, dict) and existing_data.get("lang") == target_lang:
+                conn.close()
+                return jsonify({"ok": True, "translated": existing_data.get("text", ""), "lang": target_lang, "cached": True})
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    raw_output = study_dict.get("final_report") or study_dict.get("study_output") or ""
+    if not raw_output.strip():
+        conn.close()
+        return jsonify({"ok": False, "error": "No study output to translate."}), 400
+
+    target_lang_name = LANG_CODE_TO_NAME.get(target_lang, target_lang)
+    source_lang_name = LANG_CODE_TO_NAME.get(output_lang, output_lang)
+
+    mc = {
+        r["key"]: r["value"]
+        for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+    }
+    translate_model = mc.get("mark_model", "")
+    if not translate_model:
+        conn.close()
+        return jsonify({"ok": False, "error": "No model configured for translation."}), 500
+
+    translate_system = (
+        f"You are a professional translator specializing in market research documents. "
+        f"Translate the following research output from {source_lang_name} to {target_lang_name}. "
+        f"Preserve all formatting, section headers, speaker labels, and structure exactly. "
+        f"Do not add commentary or explanations. "
+        f"Translate the content faithfully, maintaining the analytical tone and research terminology."
+    )
+
+    conn.close()
+    try:
+        translated = call_llm(
+            translate_model,
+            [
+                {"role": "system", "content": translate_system},
+                {"role": "user", "content": raw_output},
+            ],
+            purpose="translate_study_output",
+            timeout_seconds=120,
+        )
+    except Exception as e:
+        app.logger.warning(f"Translation failed for study {study_id}: {e}")
+        return jsonify({"ok": False, "error": f"Translation failed: {str(e)[:200]}"}), 500
+
+    if not translated or not translated.strip():
+        return jsonify({"ok": False, "error": "Translation returned empty result."}), 500
+
+    translated_text = translated.strip()
+    translation_data = json.dumps({"lang": target_lang, "text": translated_text})
+
+    conn = get_db()
+    conn.execute(
+        "UPDATE studies SET translated_output = ? WHERE id = ? AND user_id = ?",
+        (translation_data, study_id, user["id"]),
+    )
+    conn.commit()
+    conn.close()
+
+    print(f"TRANSLATE study_id={study_id} from={output_lang} to={target_lang}", flush=True)
+    return jsonify({"ok": True, "translated": translated_text, "lang": target_lang, "cached": False})
+
+
 @app.route("/save-chat-field/<int:study_id>", methods=["POST"])
 def save_chat_field(study_id):
     token = get_token()
@@ -5976,6 +6201,9 @@ def _run_study_execute(conn, study, study_type, personas_used, persona_names, st
 
 def _run_study_core(_active_conn, study, study_type, personas_used, persona_names, study_id, user, token, ajax):
     conn = _active_conn[0]
+    _study_geo = (dict(study).get("study_fit") or "").strip()
+    _core_admin_srcs = get_admin_web_sources(conn, status_filter="active")
+    _study_lang_code, _study_lang_name = infer_market_language(_study_geo, _core_admin_srcs)
     output = None
     if study_type == "synthetic_survey":
         try:
@@ -5997,6 +6225,14 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             pc = (study_dict.get("known_vs_unknown") or "").strip()
             ta = (study_dict.get("target_audience") or "").strip()
             dui = (study_dict.get("definition_useful_insight") or "").strip()
+
+            _lang_instruction = ""
+            if _study_lang_code != "en":
+                _lang_instruction = (
+                    f"\n7. LANGUAGE: Produce all text content (top_findings, risks_unknowns, limitations, "
+                    f"target_audience description, open-ended sample_responses and themes) in {_study_lang_name}. "
+                    f"Keep JSON keys in English. This study targets the {mg} market."
+                )
 
             q_lines = []
             for i, q in enumerate(sq):
@@ -6053,11 +6289,12 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
                 "4. limitations should mention this is AI-simulated, not real respondents.\n"
                 "5. sources should list plausible grounding references.\n"
                 "6. Be realistic and culturally grounded for Asia-Pacific markets where relevant."
+                + _lang_instruction
             )
 
             oc_block, oc_keys = _extract_optional_context(study_dict)
             oc_section = f"\n{oc_block}\n" if oc_block else ""
-            print(f"OPTIONAL_CONTEXT_INJECT_LISA_EXEC study={study_id} type=synthetic_survey included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
+            print(f"OPTIONAL_CONTEXT_INJECT_LISA_EXEC study={study_id} type=synthetic_survey lang={_study_lang_code} included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
 
             lisa_user = (
                 f"Generate synthetic survey results for:\n"
@@ -6134,10 +6371,19 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
                 val = (study_dict.get(field) or "").strip()
                 brief_text += f"{label}: {val or 'Not specified'}\n"
 
+            _qual_lang_instruction = ""
+            if _study_lang_code != "en":
+                _qual_lang_instruction = (
+                    f"\n5. LANGUAGE: Conduct the transcript in {_study_lang_name}, with respondents speaking naturally "
+                    f"in {_study_lang_name} as appropriate for the {_study_geo} market. The Moderator may speak in {_study_lang_name} too. "
+                    f"Keep section headers (TRANSCRIPT, FIRST-PASS FINDINGS MEMO, Key themes, etc.) in English for parseability. "
+                    f"The Findings Memo analysis text should also be in {_study_lang_name}."
+                )
+
             oc_block, oc_keys = _extract_optional_context(study_dict)
             if oc_block:
                 brief_text += f"\n{oc_block}\n"
-            print(f"OPTIONAL_CONTEXT_INJECT_LISA_EXEC study={study_id} type={study_type} included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
+            print(f"OPTIONAL_CONTEXT_INJECT_LISA_EXEC study={study_id} type={study_type} lang={_study_lang_code} included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
 
             persona_dossiers = []
             for pid in personas_used:
@@ -6203,6 +6449,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
                 "2. Do NOT output JSON. Output plain text with the two labeled sections.\n"
                 "3. Be culturally grounded for Asia-Pacific markets where relevant.\n"
                 "4. Findings memo should be analytical and concise, not just a summary."
+                + _qual_lang_instruction
             )
 
             lisa_user = (
@@ -6253,7 +6500,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         study_id=str(study_id),
     )
     conn.commit()
-    print(f"TRACE_CREATED study_id={study_id} trigger=study_executed", flush=True)
+    print(f"TRACE_CREATED study_id={study_id} trigger=study_executed lang={_study_lang_code}", flush=True)
 
     qa_result = run_ben_qa(study_data)
     qa_decision = qa_result["decision"]
@@ -6303,7 +6550,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
 
     conn.execute(
         """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
-           confidence_summary = ?, final_report = ? WHERE id = ?""",
+           confidence_summary = ?, final_report = ?, output_language = ? WHERE id = ?""",
         (
             final_status,
             output,
@@ -6311,6 +6558,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             qa_notes,
             confidence_summary,
             final_report,
+            _study_lang_code,
             study_id,
         ),
     )
@@ -7541,7 +7789,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         studies = [
             dict(r)
             for r in conn.execute(
-                "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report FROM studies WHERE user_id = ? ORDER BY created_at DESC",
+                "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language FROM studies WHERE user_id = ? ORDER BY created_at DESC",
                 (user["id"],),
             ).fetchall()
         ]
@@ -7694,6 +7942,10 @@ def admin_dev_run_study(study_id):
     study_data = dict(study)
     study_data["study_output"] = output
 
+    _dev_geo = (study_data.get("study_fit") or "").strip()
+    _dev_admin_srcs = get_admin_web_sources(conn, status_filter="active")
+    _dev_lang_code, _dev_lang_name = infer_market_language(_dev_geo, _dev_admin_srcs)
+
     create_grounding_trace(conn, trigger_event="study_executed", study_id=str(study_id))
     conn.commit()
     print(f"TRACE_CREATED study_id={study_id} trigger=study_executed", flush=True)
@@ -7743,7 +7995,7 @@ def admin_dev_run_study(study_id):
 
     conn.execute(
         """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
-           confidence_summary = ?, final_report = ? WHERE id = ?""",
+           confidence_summary = ?, final_report = ?, output_language = ? WHERE id = ?""",
         (
             final_status,
             output,
@@ -7751,6 +8003,7 @@ def admin_dev_run_study(study_id):
             qa_notes,
             confidence_summary,
             final_report,
+            _dev_lang_code,
             study_id,
         ),
     )
