@@ -4366,8 +4366,7 @@ def build_structured_report(
     sections["grounding_coverage"] = "\n".join(grounding_lines)
 
     source_lines = [
-        "AI Model: Simulated output (placeholder)",
-        "Grounding Sources: As configured by admin web sources (if any)",
+        "AI Model: LLM-generated synthetic research output",
         "Persona Profiles: Generated from user-defined demographic and psychographic parameters",
     ]
     if study.get("personas_used"):
@@ -4387,9 +4386,6 @@ def build_structured_report(
         for uf in uploaded_filenames:
             source_lines.append(f"  - {uf}")
     source_lines.append("")
-    source_lines.append(
-        "Note: Real citations will be populated when live AI model integration is enabled."
-    )
     sections["sources_citations"] = "\n".join(source_lines)
 
     persona_summary_lines = []
