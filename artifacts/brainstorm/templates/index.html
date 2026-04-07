@@ -3111,7 +3111,7 @@
                     var detail = document.getElementById('persona-inline-detail');
                     detail.innerHTML = '<p style="color:#888;">Loading persona...</p>';
                     detail.style.display = 'block';
-                    fetch('/api/persona-detail/' + encodeURIComponent(pid) + '?token=' + encodeURIComponent(_pToken))
+                    fetch('/_bapi/persona-detail/' + encodeURIComponent(pid) + '?token=' + encodeURIComponent(_pToken))
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                         if (!data.ok) {
@@ -3192,7 +3192,7 @@
                 }
 
                 function loadPersonasPage(page, q) {
-                    var url = '/api/personas-list?token=' + encodeURIComponent(_pToken) + '&page=' + page;
+                    var url = '/_bapi/personas-list?token=' + encodeURIComponent(_pToken) + '&page=' + page;
                     if (q) url += '&q=' + encodeURIComponent(q);
                     fetch(url)
                     .then(function(r) { return r.json(); })

@@ -8221,7 +8221,7 @@ def create_persona():
     return redirect(url_for("index", token=token, view_persona=new_instance_id))
 
 
-@app.route("/api/personas-list", methods=["GET"])
+@app.route("/_bapi/personas-list", methods=["GET"])
 def api_personas_list():
     token = get_token()
     user, _ = get_session_data(token)
@@ -8271,7 +8271,7 @@ def api_personas_list():
     })
 
 
-@app.route("/api/persona-detail/<path:instance_id>", methods=["GET"])
+@app.route("/_bapi/persona-detail/<path:instance_id>", methods=["GET"])
 def api_persona_detail(instance_id):
     token = get_token()
     user, _ = get_session_data(token)
