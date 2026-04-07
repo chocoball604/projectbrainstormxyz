@@ -759,30 +759,41 @@ def _mlg_tier1_user_uploads(conn, study_id, user_id):
     snippets = []
     for r in rows:
         excerpt = (r["retained_excerpt_text"] or "").strip()
-        sources.append({
-            "name": r["filename"],
-            "url": "",
-            "category": "Uploaded Document",
-            "origin": "User-Uploaded",
-        })
-        if excerpt:
+        if excerpt and len(excerpt) > 30:
+            sources.append({
+                "name": r["filename"],
+                "url": "",
+                "category": "Uploaded Document",
+                "origin": "User-Uploaded",
+            })
             snippets.append(f"[User Doc: {r['filename']}] {excerpt[:500]}")
     return sources, snippets
 
 
 def _mlg_tier2_admin_uploads(conn):
     rows = conn.execute(
-        "SELECT id, filename FROM admin_uploads WHERE status = 'active'"
+        "SELECT id, filename, storage_path FROM admin_uploads WHERE status = 'active'"
     ).fetchall()
     sources = []
+    snippets = []
     for r in rows:
-        sources.append({
-            "name": r["filename"],
-            "url": "",
-            "category": "Uploaded Document",
-            "origin": "Admin-Public",
-        })
-    return sources, []
+        storage_path = (r["storage_path"] or "").strip()
+        excerpt = ""
+        if storage_path and os.path.exists(storage_path):
+            try:
+                with open(storage_path, "r", errors="ignore") as f:
+                    excerpt = f.read(2000).strip()
+            except Exception:
+                pass
+        if excerpt and len(excerpt) > 30:
+            sources.append({
+                "name": r["filename"],
+                "url": "",
+                "category": "Uploaded Document",
+                "origin": "Admin-Public",
+            })
+            snippets.append(f"[Admin Doc: {r['filename']}] {excerpt[:500]}")
+    return sources, snippets
 
 
 def _mlg_is_safe_url(url):
@@ -946,7 +957,7 @@ def _mlg_synthesize_summary(raw_snippets, study_dict):
                         "into a concise market/consumer context summary for persona creation. "
                         "Rules:\n"
                         "1. Output ONLY key facts relevant to the market, consumer behaviour, and product context.\n"
-                        "2. Maximum 400 words. Be concise and factual.\n"
+                        "2. Maximum 300 words. Be concise and factual.\n"
                         "3. Do NOT copy text verbatim — distill and paraphrase.\n"
                         "4. Do NOT add opinions or speculation.\n"
                         "5. Do NOT include source URLs or citations — just the synthesized facts."
@@ -965,7 +976,13 @@ def _mlg_synthesize_summary(raw_snippets, study_dict):
             purpose="mlg_grounding_synthesis",
             timeout_seconds=30,
         )
-        return (summary or "").strip()
+        result = (summary or "").strip()
+        words = result.split()
+        if len(words) > 400:
+            result = " ".join(words[:400])
+        if len(result) > 3200:
+            result = result[:3200]
+        return result
     except Exception as e:
         print(f"MLG_SYNTHESIZE_FAIL err={e}", flush=True)
         return ""
@@ -1026,6 +1043,7 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
         t2_sources, t2_snippets = _mlg_tier2_admin_uploads(conn)
         tier_stats["admin_uploads"] = {"found": len(t2_sources)}
         all_sources.extend(t2_sources)
+        all_snippets.extend(t2_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
 
         admin_web_sources = get_admin_web_sources(conn, status_filter="active")
     finally:
@@ -6783,8 +6801,14 @@ def run_study(study_id):
                         "sources": [],
                         "synthesized_summary": "",
                         "grounding_sources_text": "No live sources retrieved; persona relies on model priors and/or uploaded documents.",
-                        "tier_stats": {},
-                        "reason_code": "mlg_retrieval_error",
+                        "tier_stats": {
+                            "user_uploads": {"found": 0},
+                            "admin_uploads": {"found": 0},
+                            "admin_web": {"attempted": 0, "matched": 0},
+                            "local_web": {"attempted": 0, "matched": 0},
+                            "general_web": {"attempted": 0, "matched": 0},
+                        },
+                        "reason_code": "user_uploads:none;admin_uploads:none;admin_web:error;local_web:error;general_web:error",
                         "admin_web_configured": 0,
                     }
 
