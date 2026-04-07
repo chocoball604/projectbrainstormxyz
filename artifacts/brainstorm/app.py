@@ -764,7 +764,7 @@ def _mlg_tier1_user_uploads(conn, study_id, user_id):
                 "name": r["filename"],
                 "url": "",
                 "category": "Uploaded Document",
-                "origin": "User-Uploaded",
+                "origin": "Uploaded Document",
             })
             snippets.append(f"[User Doc: {r['filename']}] {excerpt[:500]}")
     return sources, snippets
@@ -790,7 +790,7 @@ def _mlg_tier2_admin_uploads(conn):
                 "name": r["filename"],
                 "url": "",
                 "category": "Uploaded Document",
-                "origin": "Admin-Public",
+                "origin": "Uploaded Document",
             })
             snippets.append(f"[Admin Doc: {r['filename']}] {excerpt[:500]}")
     return sources, snippets
@@ -891,7 +891,7 @@ def _mlg_tier4_local_web(market_geo, lang_name, product_context):
                             "name": title or href,
                             "url": href,
                             "category": "News/Market Data",
-                            "origin": "Local-Non-English",
+                            "origin": "Local Non-English",
                         })
                         snippets.append(f"[Local Web: {title}] {body[:400]}")
             except Exception as e:
@@ -929,7 +929,7 @@ def _mlg_tier5_general_web(product_context, target_audience):
                     "name": title or href,
                     "url": href,
                     "category": "News/Market Data",
-                    "origin": "General-Web",
+                    "origin": "General Web",
                 })
                 snippets.append(f"[General Web: {title}] {body[:400]}")
     except Exception as e:
