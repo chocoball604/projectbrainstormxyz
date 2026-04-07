@@ -1037,12 +1037,12 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     try:
         t1_sources, t1_snippets = _mlg_tier1_user_uploads(conn, study_id, user_id)
         tier_stats["user_uploads"] = {"found": len(t1_sources)}
-        all_sources.extend(t1_sources)
+        all_sources.extend(t1_sources[:MLG_MAX_SNIPPETS_PER_TIER])
         all_snippets.extend(t1_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
 
         t2_sources, t2_snippets = _mlg_tier2_admin_uploads(conn)
         tier_stats["admin_uploads"] = {"found": len(t2_sources)}
-        all_sources.extend(t2_sources)
+        all_sources.extend(t2_sources[:MLG_MAX_SNIPPETS_PER_TIER])
         all_snippets.extend(t2_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
 
         admin_web_sources = get_admin_web_sources(conn, status_filter="active")
@@ -1051,7 +1051,7 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
 
     t3_sources, t3_snippets, t3_attempted, t3_matched = _mlg_tier3_admin_web(admin_web_sources)
     tier_stats["admin_web"] = {"attempted": t3_attempted, "matched": t3_matched}
-    all_sources.extend(t3_sources)
+    all_sources.extend(t3_sources[:MLG_MAX_SNIPPETS_PER_TIER])
     all_snippets.extend(t3_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
 
     market_geo = (study_dict.get("study_fit") or "").strip()
@@ -1064,32 +1064,43 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
         market_geo, lang_name, product_ctx
     )
     tier_stats["local_web"] = {"attempted": t4_attempted, "matched": t4_matched}
-    all_sources.extend(t4_sources)
+    all_sources.extend(t4_sources[:MLG_MAX_SNIPPETS_PER_TIER])
     all_snippets.extend(t4_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
 
     t5_sources, t5_snippets, t5_attempted, t5_matched = _mlg_tier5_general_web(
         product_ctx, target_aud
     )
     tier_stats["general_web"] = {"attempted": t5_attempted, "matched": t5_matched}
-    all_sources.extend(t5_sources)
+    all_sources.extend(t5_sources[:MLG_MAX_SNIPPETS_PER_TIER])
     all_snippets.extend(t5_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
 
     synthesized_summary = _mlg_synthesize_summary(all_snippets, study_dict)
 
-    total_sources_used = len(all_sources)
+    grounding_used = bool(synthesized_summary)
+    if grounding_used:
+        sources_for_dossier = all_sources[:MLG_MAX_SNIPPETS_PER_TIER * 5]
+        grounding_sources_text = _mlg_format_grounding_sources_text(sources_for_dossier)
+    else:
+        sources_for_dossier = []
+        grounding_sources_text = (
+            "No live sources retrieved; persona relies on model priors and/or uploaded documents."
+        )
+
     reason_code = _mlg_build_reason_code(tier_stats)
-    grounding_sources_text = _mlg_format_grounding_sources_text(all_sources)
+    if not grounding_used and all_sources:
+        reason_code += ";synthesis:failed"
 
     print(
-        f"MLG_RETRIEVE_DONE study={study_id} total_sources={total_sources_used} "
-        f"summary_len={len(synthesized_summary)} reason={reason_code}",
+        f"MLG_RETRIEVE_DONE study={study_id} total_sources={len(all_sources)} "
+        f"grounding_used={grounding_used} summary_len={len(synthesized_summary)} reason={reason_code}",
         flush=True,
     )
 
     return {
-        "sources": all_sources,
+        "sources": sources_for_dossier,
         "synthesized_summary": synthesized_summary,
         "grounding_sources_text": grounding_sources_text,
+        "grounding_used": grounding_used,
         "tier_stats": tier_stats,
         "reason_code": reason_code,
         "admin_web_configured": len(admin_web_sources),
@@ -2113,10 +2124,11 @@ def create_grounding_trace(conn, trigger_event, study_id=None, persona_id=None, 
         admin_web_stats = tier_stats.get("admin_web", {})
         admin_queried_count = admin_web_stats.get("attempted", 0)
         admin_matched_count = admin_web_stats.get("matched", 0)
+        grounding_used = mlg_data.get("grounding_used", False)
         flag_configured = 1 if admin_cfg_count > 0 else 0
         flag_queried = 1 if admin_queried_count > 0 else 0
         flag_matched = 1 if admin_matched_count > 0 else 0
-        flag_used = 1 if admin_matched_count > 0 else 0
+        flag_used = 1 if (admin_matched_count > 0 and grounding_used) else 0
         reason_code = mlg_data.get("reason_code", "")
     else:
         active_sources = get_admin_web_sources(conn, status_filter="active")
