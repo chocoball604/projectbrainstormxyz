@@ -4726,12 +4726,13 @@ def generate_report_pdf(study, sections, translated_sections=None, translation_l
             pdf.set_font("Helvetica", "BI", 10)
             pdf.set_text_color(30, 80, 180)
             pdf.cell(0, 7, f"  Translated ({translation_lang_name})", new_x="LMARGIN", new_y="NEXT")
-            pdf.set_text_color(0, 0, 0)
             pdf.set_draw_color(0, 0, 0)
             pdf.ln(2)
+            pdf.set_text_color(30, 80, 180)
             _pdf_write_text(
                 pdf, trans, 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5
             )
+            pdf.set_text_color(0, 0, 0)
             pdf.set_fill_color(240, 240, 240)
 
         pdf.ln(4)
@@ -4805,9 +4806,11 @@ def generate_report_pdf(study, sections, translated_sections=None, translation_l
         pdf.cell(0, 10, f"Appendix: Translated Transcript ({translation_lang_name})", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
         pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(30, 80, 180)
         _pdf_write_text(
             pdf, sections["translated_transcript"], 9, cjk_available=cjk_ok, method="multi_cell", w=0, h=4
         )
+        pdf.set_text_color(0, 0, 0)
 
     return pdf.output()
 
