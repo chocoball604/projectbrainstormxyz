@@ -8451,6 +8451,21 @@ def api_persona_detail(instance_id):
     if "persona_model=" in prov_raw:
         model_name = prov_raw.split("persona_model=")[1].split(";")[0]
 
+    content_lang = p.get("content_language") or "en"
+    user_lang = request.cookies.get("pb_lang", "en")
+    if user_lang not in VALID_LANGS:
+        user_lang = "en"
+    needs_translation = content_lang != user_lang
+
+    translated_fields = None
+    if needs_translation and p.get("translated_content"):
+        try:
+            _tc = json.loads(p["translated_content"])
+            if isinstance(_tc, dict) and _tc.get("lang") == user_lang:
+                translated_fields = _tc.get("fields", {})
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     return jsonify({
         "ok": True,
         "persona": {
@@ -8466,7 +8481,12 @@ def api_persona_detail(instance_id):
             "provenance": prov_raw,
             "grounding_sources": p.get("grounding_sources", ""),
             "confidence_and_limits": p.get("confidence_and_limits", ""),
-            "content_language": p.get("content_language", "en"),
+            "content_language": content_lang,
+            "needs_translation": needs_translation,
+            "user_lang": user_lang,
+            "user_lang_name": LANG_CODE_TO_NAME.get(user_lang, user_lang),
+            "content_lang_name": LANG_CODE_TO_NAME.get(content_lang, content_lang),
+            "translated_fields": translated_fields,
         },
     })
 

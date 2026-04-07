@@ -2316,8 +2316,9 @@
             </div>
 
             <script>
-            function _fillTranslatedSections(sections) {
+            function _fillTranslatedSections(sections, langName) {
                 if (!sections) return;
+                var lbl = langName || 'Translated';
                 var slots = document.querySelectorAll('.translated-section-slot');
                 slots.forEach(function(slot) {
                     var key = slot.getAttribute('data-section-key');
@@ -2336,25 +2337,25 @@
                                 html += '<div style="margin-bottom: 4px;">' + escaped + '</div>';
                             }
                         }
-                        slot.innerHTML = '<details style="margin-top: 8px;" open>'
-                            + '<summary style="cursor:pointer;font-size:13px;color:#2e7d32;font-weight:500;">Translated</summary>'
-                            + '<div style="background:#f0fdf4;border:1px solid #c8e6c9;border-radius:6px;padding:12px;font-size:13px;line-height:1.6;margin-top:6px;border-left:4px solid #66bb6a;">'
-                            + html + '</div></details>';
+                        slot.innerHTML = '<div style="margin-top: 10px;">'
+                            + '<div style="font-size:12px;color:#2e7d32;font-weight:600;margin-bottom:4px;">&#127759; ' + lbl + '</div>'
+                            + '<div style="background:#f0fdf4;border:1px solid #c8e6c9;border-radius:6px;padding:12px;font-size:13px;line-height:1.6;border-left:4px solid #66bb6a;">'
+                            + html + '</div></div>';
                     }
                 });
             }
             </script>
 
             {% if view_study_output.translation_cached and view_study_output.translated_text %}
-            <details style="margin-bottom: 16px;" open>
-                <summary style="cursor: pointer; font-size: 14px; color: #2e7d32; font-weight: 500; padding: 8px 0;">&#128221; Translated Version ({{ view_study_output.user_lang_name }})</summary>
+            <details style="margin-bottom: 16px;">
+                <summary style="cursor: pointer; font-size: 14px; color: #2e7d32; font-weight: 500; padding: 8px 0;">&#128221; Full Translated Transcript ({{ view_study_output.user_lang_name }}) — click to expand</summary>
                 <pre style="background: #f0fdf4; border: 1px solid #c8e6c9; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.7; margin-top: 8px; border-left: 4px solid #66bb6a;">{{ view_study_output.translated_text }}</pre>
             </details>
             <script>
             (function() {
                 var sections = {{ view_study_output.translated_sections|tojson }};
                 document.addEventListener('DOMContentLoaded', function() {
-                    _fillTranslatedSections(sections);
+                    _fillTranslatedSections(sections, '{{ view_study_output.user_lang_name }}');
                 });
             })();
             </script>
@@ -2380,12 +2381,7 @@
                             status.textContent = '';
                             return;
                         }
-                        document.getElementById('translated-output-text').textContent = data.translated;
-                        document.getElementById('translated-output-container').style.display = '';
-                        status.textContent = '';
-                        if (data.sections) {
-                            _fillTranslatedSections(data.sections);
-                        }
+                        window.location.reload();
                     } else {
                         status.textContent = 'Translation unavailable: ' + (data.error || 'failed');
                         status.style.color = '#c0392b';
@@ -3107,9 +3103,23 @@
                     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
                 }
 
-                function renderPersonaField(num, label, value) {
-                    return '<div style="margin-bottom:16px;"><strong style="color:#1a1a2e;">' + num + '. ' + escHtml(label) + '</strong>'
-                        + '<p style="margin-top:4px;color:#555;white-space:pre-wrap;">' + escHtml(value || '') + '</p></div>';
+                function renderPersonaField(num, label, value, tf, fieldName, contentLangName, userLangName) {
+                    var html = '<div style="margin-bottom:16px;"><strong style="color:#1a1a2e;">' + num + '. ' + escHtml(label) + '</strong>';
+                    if (tf && tf[fieldName]) {
+                        html += '<div style="display:flex;gap:16px;margin-top:4px;flex-wrap:wrap;">';
+                        html += '<div style="flex:1;min-width:200px;">';
+                        html += '<div style="font-size:11px;color:#999;margin-bottom:2px;">' + escHtml(contentLangName) + '</div>';
+                        html += '<p style="color:#555;white-space:pre-wrap;background:#f8f9fa;padding:8px;border-radius:4px;border-left:3px solid #ddd;margin:0;">' + escHtml(value || '') + '</p>';
+                        html += '</div>';
+                        html += '<div style="flex:1;min-width:200px;">';
+                        html += '<div style="font-size:11px;color:#2e7d32;margin-bottom:2px;">' + escHtml(userLangName) + '</div>';
+                        html += '<p style="color:#333;white-space:pre-wrap;background:#f0fdf4;padding:8px;border-radius:4px;border-left:3px solid #66bb6a;margin:0;">' + escHtml(tf[fieldName]) + '</p>';
+                        html += '</div></div>';
+                    } else {
+                        html += '<p style="margin-top:4px;color:#555;white-space:pre-wrap;">' + escHtml(value || '') + '</p>';
+                    }
+                    html += '</div>';
+                    return html;
                 }
 
                 function showPersonaDetail(pid) {
@@ -3124,17 +3134,31 @@
                             return;
                         }
                         var p = data.persona;
+                        var tf = p.translated_fields || null;
+                        var clName = p.content_lang_name || '';
+                        var ulName = p.user_lang_name || '';
+                        function rpf(num, label, fieldName) {
+                            return renderPersonaField(num, label, p[fieldName], tf, fieldName, clName, ulName);
+                        }
                         var html = '<div style="background:#f8f9fa;border-radius:6px;padding:20px;font-size:14px;line-height:1.6;border:1px solid #e0e0e0;">';
                         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
                         html += '<h3 style="margin:0;color:#1a1a2e;">' + escHtml(p.name) + '</h3>';
                         html += '<button type="button" class="btn btn-secondary btn-small" id="persona-detail-close">Close</button>';
                         html += '</div>';
                         html += '<p style="font-size:13px;color:#999;margin-bottom:16px;">Persona ID: <code>' + escHtml(p.persona_instance_id) + '</code> | Created: ' + escHtml(p.created_at) + '</p>';
-                        html += renderPersonaField(1, 'Persona Summary', p.persona_summary);
-                        html += renderPersonaField(2, 'Demographic Frame', p.demographic_frame);
-                        html += renderPersonaField(3, 'Psychographic Profile', p.psychographic_profile);
-                        html += renderPersonaField(4, 'Contextual Constraints', p.contextual_constraints);
-                        html += renderPersonaField(5, 'Behavioural Tendencies', p.behavioural_tendencies);
+                        if (p.needs_translation) {
+                            html += '<div id="persona-translate-status-inline" style="margin-bottom:12px;padding:8px 12px;background:#f0f4ff;border:1px solid #d0d8e8;border-radius:6px;">';
+                            html += '<span style="font-size:13px;color:#555;">Content language: <strong>' + escHtml(clName) + '</strong></span>';
+                            if (!tf) {
+                                html += ' <span style="font-size:12px;color:#888;" id="persona-inline-trans-status">Auto-translating to ' + escHtml(ulName) + '...</span>';
+                            }
+                            html += '</div>';
+                        }
+                        html += rpf(1, 'Persona Summary', 'persona_summary');
+                        html += rpf(2, 'Demographic Frame', 'demographic_frame');
+                        html += rpf(3, 'Psychographic Profile', 'psychographic_profile');
+                        html += rpf(4, 'Contextual Constraints', 'contextual_constraints');
+                        html += rpf(5, 'Behavioural Tendencies', 'behavioural_tendencies');
                         html += '<div style="margin-bottom:16px;"><strong style="color:#1a1a2e;">6. Persona Generation Model</strong>';
                         if (p.model_name) {
                             html += '<p style="margin-top:4px;color:#555;white-space:pre-wrap;">' + escHtml(p.model_name) + '</p>';
@@ -3143,8 +3167,8 @@
                             html += '<p style="margin-top:4px;color:#555;white-space:pre-wrap;">' + escHtml(p.provenance) + '</p>';
                         }
                         html += '</div>';
-                        html += renderPersonaField(7, 'Grounding Sources', p.grounding_sources);
-                        html += renderPersonaField(8, 'Confidence and Limits', p.confidence_and_limits);
+                        html += rpf(7, 'Grounding Sources', 'grounding_sources');
+                        html += rpf(8, 'Confidence and Limits', 'confidence_and_limits');
                         html += '</div>';
                         detail.innerHTML = html;
                         document.getElementById('persona-detail-close').addEventListener('click', function() {
@@ -3152,6 +3176,29 @@
                             detail.innerHTML = '';
                         });
                         detail.scrollIntoView({behavior: 'smooth', block: 'start'});
+
+                        if (p.needs_translation && !tf) {
+                            var tfd = new FormData();
+                            tfd.append('token', _pToken);
+                            tfd.append('target_lang', p.user_lang);
+                            fetch('/translate-persona/' + encodeURIComponent(pid), { method: 'POST', body: tfd })
+                            .then(function(r) { return r.json(); })
+                            .then(function(tdata) {
+                                if (tdata.ok && tdata.fields) {
+                                    showPersonaDetail(pid);
+                                } else if (tdata.ok && tdata.skip) {
+                                    var st = document.getElementById('persona-inline-trans-status');
+                                    if (st) st.textContent = '';
+                                } else {
+                                    var st = document.getElementById('persona-inline-trans-status');
+                                    if (st) { st.textContent = 'Translation unavailable'; st.style.color = '#c0392b'; }
+                                }
+                            })
+                            .catch(function() {
+                                var st = document.getElementById('persona-inline-trans-status');
+                                if (st) { st.textContent = 'Translation failed'; st.style.color = '#c0392b'; }
+                            });
+                        }
                     })
                     .catch(function() {
                         detail.innerHTML = '<p style="color:#c0392b;">Failed to load persona (network error).</p>';
