@@ -1251,8 +1251,6 @@ def lisa_generate_personas(study_dict, n, lisa_model_id, grounding_summary=""):
                 f"model={lisa_model_id} err={e}",
                 flush=True,
             )
-            if attempt == 0:
-                continue
             raise
 
         try:
