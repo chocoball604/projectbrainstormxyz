@@ -3054,7 +3054,7 @@
                 <tbody>
                     {% for p in personas_list %}
                     <tr>
-                        <td>{{ p.name }}</td>
+                        <td>{% if p.translated_name %}{{ p.translated_name }} <span style="color:#999;font-size:12px;">({{ p.name }})</span>{% else %}{{ p.name }}{% endif %}</td>
                         <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ p.persona_instance_id }}</code></td>
                         <td>
                             <button type="button" class="btn btn-primary btn-small persona-view-btn" data-pid="{{ p.persona_instance_id }}">View</button>
@@ -3221,7 +3221,11 @@
                     }
                     var html = '<table><thead><tr><th>Name</th><th>Persona ID</th><th>Action</th></tr></thead><tbody>';
                     data.personas.forEach(function(p) {
-                        html += '<tr><td>' + escHtml(p.name) + '</td>'
+                        var nameCell = escHtml(p.name);
+                        if (p.translated_name) {
+                            nameCell = escHtml(p.translated_name) + ' <span style="color:#999;font-size:12px;">(' + escHtml(p.name) + ')</span>';
+                        }
+                        html += '<tr><td>' + nameCell + '</td>'
                             + '<td><code style="font-size:12px;background:#f0f0f0;padding:2px 6px;border-radius:3px;">' + escHtml(p.persona_instance_id) + '</code></td>'
                             + '<td><button type="button" class="btn btn-primary btn-small persona-view-btn" data-pid="' + escHtml(p.persona_instance_id) + '">View</button>'
                             + ' <form action="/delete-persona/' + encodeURIComponent(p.persona_instance_id) + '" method="POST" style="display:inline;" onsubmit="return confirm(\'Delete this persona?\');">'

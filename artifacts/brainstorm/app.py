@@ -6355,6 +6355,25 @@ def translate_output(study_id):
     })
 
 
+def _extract_translated_name(translated_summary, original_name):
+    if not translated_summary:
+        return original_name
+    first_line = translated_summary.strip().split("\n")[0]
+    for sep in [" is ", " is a ", ", a ", ", an "]:
+        idx = first_line.find(sep)
+        if idx > 0:
+            candidate = first_line[:idx].strip().rstrip(",").strip()
+            if 1 < len(candidate) < 60 and not candidate.startswith("("):
+                return candidate
+    first_sentence = first_line.split(".")[0].strip()
+    words = first_sentence.split()
+    if 2 <= len(words) <= 5:
+        return first_sentence
+    if len(words) > 5:
+        return " ".join(words[:3])
+    return original_name
+
+
 @app.route("/translate-persona/<persona_pid>", methods=["POST"])
 def translate_persona(persona_pid):
     token = get_token()
@@ -6386,12 +6405,21 @@ def translate_persona(persona_pid):
         try:
             ex_data = json.loads(existing)
             if isinstance(ex_data, dict) and ex_data.get("lang") == target_lang:
+                _ex_fields = ex_data.get("fields", {})
+                if "name" not in _ex_fields and _ex_fields.get("persona_summary"):
+                    _ex_fields["name"] = _extract_translated_name(_ex_fields["persona_summary"], p_dict.get("name", ""))
+                    ex_data["fields"] = _ex_fields
+                    conn.execute(
+                        "UPDATE personas SET translated_content = ? WHERE persona_instance_id = ? AND user_id = ?",
+                        (json.dumps(ex_data), persona_pid, user["id"]),
+                    )
+                    conn.commit()
                 conn.close()
-                return jsonify({"ok": True, "fields": ex_data.get("fields", {}), "lang": target_lang, "cached": True})
+                return jsonify({"ok": True, "fields": _ex_fields, "lang": target_lang, "cached": True})
         except (json.JSONDecodeError, TypeError):
             pass
 
-    translate_fields = ["persona_summary", "demographic_frame", "psychographic_profile",
+    translate_fields = ["name", "persona_summary", "demographic_frame", "psychographic_profile",
                         "contextual_constraints", "behavioural_tendencies",
                         "confidence_and_limits"]
     original_text = ""
@@ -8406,19 +8434,39 @@ def api_personas_list():
     page = min(page, total_pages)
     offset = (page - 1) * ps
 
+    _sel_cols = "persona_instance_id, name, created_at, content_language, translated_content"
     if q:
         rows = conn.execute(
-            "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
+            f"SELECT {_sel_cols} FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
             (user["id"], f"%{q}%", f"%{q}%", ps, offset),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+            f"SELECT {_sel_cols} FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
             (user["id"], ps, offset),
         ).fetchall()
+
+    _user_lang = request.cookies.get("pb_lang", "en")
+    if _user_lang not in VALID_LANGS:
+        _user_lang = "en"
     conn.close()
 
-    personas = [{"persona_instance_id": r[0], "name": r[1], "created_at": r[2]} for r in rows]
+    personas = []
+    for r in rows:
+        p_item = {"persona_instance_id": r[0], "name": r[1], "created_at": r[2]}
+        _p_clang = r[3] or "en"
+        if _p_clang != _user_lang and r[4]:
+            try:
+                _tc = json.loads(r[4])
+                if isinstance(_tc, dict) and _tc.get("lang") == _user_lang:
+                    _tname = _tc.get("fields", {}).get("name")
+                    if not _tname and _tc.get("fields", {}).get("persona_summary"):
+                        _tname = _extract_translated_name(_tc["fields"]["persona_summary"], r[1])
+                    if _tname:
+                        p_item["translated_name"] = _tname
+            except (json.JSONDecodeError, TypeError):
+                pass
+        personas.append(p_item)
     return jsonify({
         "ok": True,
         "personas": personas,
@@ -8458,11 +8506,15 @@ def api_persona_detail(instance_id):
     needs_translation = content_lang != user_lang
 
     translated_fields = None
+    translated_name = None
     if needs_translation and p.get("translated_content"):
         try:
             _tc = json.loads(p["translated_content"])
             if isinstance(_tc, dict) and _tc.get("lang") == user_lang:
                 translated_fields = _tc.get("fields", {})
+                translated_name = translated_fields.get("name")
+                if not translated_name and translated_fields.get("persona_summary"):
+                    translated_name = _extract_translated_name(translated_fields["persona_summary"], p.get("name", ""))
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -8487,6 +8539,7 @@ def api_persona_detail(instance_id):
             "user_lang_name": LANG_CODE_TO_NAME.get(user_lang, user_lang),
             "content_lang_name": LANG_CODE_TO_NAME.get(content_lang, content_lang),
             "translated_fields": translated_fields,
+            "translated_name": translated_name,
         },
     })
 
