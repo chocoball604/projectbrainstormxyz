@@ -5680,42 +5680,27 @@ def translate_output(study_id):
     translated_text = translated.strip()
     translated_sections = {}
 
-    if sections_to_translate:
-        sections_prompt = json.dumps(sections_to_translate, ensure_ascii=False)
-        sections_system = (
-            f"You are a professional translator specializing in market research documents. "
-            f"Translate the following JSON object from {source_lang_name} to {target_lang_name}. "
-            f"Each key maps to a report section. Translate every value faithfully. "
-            f"Preserve all formatting, line breaks, bullet points, and structure within each value. "
-            f"Return ONLY a valid JSON object with the same keys and translated values. "
-            f"Do not add commentary, explanations, or extra keys."
-        )
+    section_system = (
+        f"You are a professional translator specializing in market research documents. "
+        f"Translate the following text from {source_lang_name} to {target_lang_name}. "
+        f"Preserve all formatting, line breaks, bullet points, and structure exactly. "
+        f"Do not add commentary or explanations. Output ONLY the translated text."
+    )
+    for skey, sval in sections_to_translate.items():
         try:
-            sections_raw = call_llm(
+            section_translated = call_llm(
                 translate_model,
                 [
-                    {"role": "system", "content": sections_system},
-                    {"role": "user", "content": sections_prompt},
+                    {"role": "system", "content": section_system},
+                    {"role": "user", "content": sval},
                 ],
-                purpose="translate_study_sections",
-                timeout_seconds=120,
+                purpose="translate_study_section",
+                timeout_seconds=90,
             )
-            if sections_raw and sections_raw.strip():
-                cleaned = sections_raw.strip()
-                if cleaned.startswith("```"):
-                    cleaned = "\n".join(cleaned.split("\n")[1:])
-                    if cleaned.endswith("```"):
-                        cleaned = cleaned[:-3]
-                    cleaned = cleaned.strip()
-                brace_idx = cleaned.find("{")
-                if brace_idx > 0:
-                    cleaned = cleaned[brace_idx:]
-                last_brace = cleaned.rfind("}")
-                if last_brace >= 0 and last_brace < len(cleaned) - 1:
-                    cleaned = cleaned[:last_brace + 1]
-                translated_sections = json.loads(cleaned)
+            if section_translated and section_translated.strip():
+                translated_sections[skey] = section_translated.strip()
         except Exception as e:
-            app.logger.warning(f"Section translation failed for study {study_id}: {e}")
+            app.logger.warning(f"Section translation failed for study {study_id} key={skey}: {e}")
 
     translation_data = json.dumps({
         "lang": target_lang,
