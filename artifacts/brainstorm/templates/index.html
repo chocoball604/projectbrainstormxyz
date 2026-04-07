@@ -3061,7 +3061,7 @@
                         <td>{{ p.name }}</td>
                         <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ p.persona_instance_id }}</code></td>
                         <td>
-                            <a href="/?token={{ token }}&view_persona={{ p.persona_instance_id }}" class="btn btn-primary btn-small">View</a>
+                            <button type="button" class="btn btn-primary btn-small persona-view-btn" data-pid="{{ p.persona_instance_id }}">View</button>
                             <form action="/delete-persona/{{ p.persona_instance_id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this persona?');">
                                 <input type="hidden" name="token" value="{{ token }}">
                                 <button type="submit" class="btn btn-danger btn-small">Delete</button>
@@ -3076,10 +3076,10 @@
                 <span>{{ personas_total }} personas total — Page {{ personas_page }} of {{ personas_total_pages }}</span>
                 <div style="display: flex; gap: 6px;">
                     {% if personas_page > 1 %}
-                    <a href="#" class="btn btn-secondary btn-small personas-page-link" data-page="{{ personas_page - 1 }}">Prev</a>
+                    <button type="button" class="btn btn-secondary btn-small personas-page-btn" data-page="{{ personas_page - 1 }}">Prev</button>
                     {% endif %}
                     {% if personas_page < personas_total_pages %}
-                    <a href="#" class="btn btn-secondary btn-small personas-page-link" data-page="{{ personas_page + 1 }}">Next</a>
+                    <button type="button" class="btn btn-secondary btn-small personas-page-btn" data-page="{{ personas_page + 1 }}">Next</button>
                     {% endif %}
                 </div>
             </div>
@@ -3094,14 +3094,70 @@
             {% endif %}
             </div>
 
+            <div id="persona-inline-detail" style="display:none; margin-top: 16px;"></div>
+
             <script>
             (function() {
                 var _pToken = '{{ token }}';
                 var _pQuery = '{{ personas_q }}';
                 var _pPage = {{ personas_page }};
 
+                function renderPersonaField(num, label, value) {
+                    return '<div style="margin-bottom:16px;"><strong style="color:#1a1a2e;">' + num + '. ' + escHtml(label) + '</strong>'
+                        + '<p style="margin-top:4px;color:#555;white-space:pre-wrap;">' + escHtml(value || '') + '</p></div>';
+                }
+
+                function showPersonaDetail(pid) {
+                    var detail = document.getElementById('persona-inline-detail');
+                    detail.innerHTML = '<p style="color:#888;">Loading persona...</p>';
+                    detail.style.display = 'block';
+                    fetch('/api/persona-detail/' + encodeURIComponent(pid) + '?token=' + encodeURIComponent(_pToken))
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (!data.ok) {
+                            detail.innerHTML = '<p style="color:#c0392b;">Error: ' + escHtml(data.error || 'Unknown') + '</p>';
+                            return;
+                        }
+                        var p = data.persona;
+                        var html = '<div style="background:#f8f9fa;border-radius:6px;padding:20px;font-size:14px;line-height:1.6;border:1px solid #e0e0e0;">';
+                        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
+                        html += '<h3 style="margin:0;color:#1a1a2e;">' + escHtml(p.name) + '</h3>';
+                        html += '<button type="button" class="btn btn-secondary btn-small" id="persona-detail-close">Close</button>';
+                        html += '</div>';
+                        html += '<p style="font-size:13px;color:#999;margin-bottom:16px;">Persona ID: <code>' + escHtml(p.persona_instance_id) + '</code> | Created: ' + escHtml(p.created_at) + '</p>';
+                        html += renderPersonaField(1, 'Persona Summary', p.persona_summary);
+                        html += renderPersonaField(2, 'Demographic Frame', p.demographic_frame);
+                        html += renderPersonaField(3, 'Psychographic Profile', p.psychographic_profile);
+                        html += renderPersonaField(4, 'Contextual Constraints', p.contextual_constraints);
+                        html += renderPersonaField(5, 'Behavioural Tendencies', p.behavioural_tendencies);
+                        html += '<div style="margin-bottom:16px;"><strong style="color:#1a1a2e;">6. Persona Generation Model</strong>';
+                        if (p.model_name) {
+                            html += '<p style="margin-top:4px;color:#555;white-space:pre-wrap;">' + escHtml(p.model_name) + '</p>';
+                            html += '<p style="margin-top:2px;color:#999;font-size:12px;white-space:pre-wrap;">Full provenance: ' + escHtml(p.provenance) + '</p>';
+                        } else {
+                            html += '<p style="margin-top:4px;color:#555;white-space:pre-wrap;">' + escHtml(p.provenance) + '</p>';
+                        }
+                        html += '</div>';
+                        html += renderPersonaField(7, 'Grounding Sources', p.grounding_sources);
+                        html += renderPersonaField(8, 'Confidence and Limits', p.confidence_and_limits);
+                        html += '</div>';
+                        detail.innerHTML = html;
+                        document.getElementById('persona-detail-close').addEventListener('click', function() {
+                            detail.style.display = 'none';
+                            detail.innerHTML = '';
+                        });
+                        detail.scrollIntoView({behavior: 'smooth', block: 'start'});
+                    })
+                    .catch(function() {
+                        detail.innerHTML = '<p style="color:#c0392b;">Failed to load persona (network error).</p>';
+                    });
+                }
+
                 function renderPersonasList(data) {
                     var container = document.getElementById('personas-list-container');
+                    var detail = document.getElementById('persona-inline-detail');
+                    detail.style.display = 'none';
+                    detail.innerHTML = '';
                     if (!data.personas || data.personas.length === 0) {
                         var msg = data.q
                             ? 'No personas matching "' + escHtml(data.q) + '". <a href="#" id="personas-search-clear-empty">Clear search</a>'
@@ -3115,7 +3171,7 @@
                     data.personas.forEach(function(p) {
                         html += '<tr><td>' + escHtml(p.name) + '</td>'
                             + '<td><code style="font-size:12px;background:#f0f0f0;padding:2px 6px;border-radius:3px;">' + escHtml(p.persona_instance_id) + '</code></td>'
-                            + '<td><a href="/?token=' + encodeURIComponent(_pToken) + '&view_persona=' + encodeURIComponent(p.persona_instance_id) + '" class="btn btn-primary btn-small">View</a>'
+                            + '<td><button type="button" class="btn btn-primary btn-small persona-view-btn" data-pid="' + escHtml(p.persona_instance_id) + '">View</button>'
                             + ' <form action="/delete-persona/' + encodeURIComponent(p.persona_instance_id) + '" method="POST" style="display:inline;" onsubmit="return confirm(\'Delete this persona?\');">'
                             + '<input type="hidden" name="token" value="' + escHtml(_pToken) + '">'
                             + '<button type="submit" class="btn btn-danger btn-small">Delete</button></form>'
@@ -3125,11 +3181,12 @@
                     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:#777;">';
                     html += '<span>' + data.total + ' personas total — Page ' + data.page + ' of ' + data.total_pages + '</span>';
                     html += '<div style="display:flex;gap:6px;">';
-                    if (data.page > 1) html += '<a href="#" class="btn btn-secondary btn-small personas-page-link" data-page="' + (data.page - 1) + '">Prev</a>';
-                    if (data.page < data.total_pages) html += '<a href="#" class="btn btn-secondary btn-small personas-page-link" data-page="' + (data.page + 1) + '">Next</a>';
+                    if (data.page > 1) html += '<button type="button" class="btn btn-secondary btn-small personas-page-btn" data-page="' + (data.page - 1) + '">Prev</button>';
+                    if (data.page < data.total_pages) html += '<button type="button" class="btn btn-secondary btn-small personas-page-btn" data-page="' + (data.page + 1) + '">Next</button>';
                     html += '</div></div>';
                     container.innerHTML = html;
-                    bindPageLinks();
+                    bindPageBtns();
+                    bindViewBtns();
                     _pPage = data.page;
                     _pQuery = data.q || '';
                 }
@@ -3140,21 +3197,37 @@
                     fetch(url)
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
-                        if (data.ok) renderPersonasList(data);
+                        if (data.ok) {
+                            renderPersonasList(data);
+                            var container = document.getElementById('personas-list-container');
+                            container.scrollIntoView({behavior: 'smooth', block: 'start'});
+                        }
                     })
                     .catch(function() {});
                 }
 
-                function bindPageLinks() {
-                    document.querySelectorAll('.personas-page-link').forEach(function(link) {
-                        link.addEventListener('click', function(ev) {
+                function bindPageBtns() {
+                    document.querySelectorAll('.personas-page-btn').forEach(function(btn) {
+                        btn.addEventListener('click', function(ev) {
                             ev.preventDefault();
-                            var pg = parseInt(link.getAttribute('data-page'));
-                            loadPersonasPage(pg, _pQuery);
+                            var pg = parseInt(btn.getAttribute('data-page'));
+                            if (pg) loadPersonasPage(pg, _pQuery);
                         });
                     });
                 }
-                bindPageLinks();
+
+                function bindViewBtns() {
+                    document.querySelectorAll('.persona-view-btn').forEach(function(btn) {
+                        btn.addEventListener('click', function(ev) {
+                            ev.preventDefault();
+                            var pid = btn.getAttribute('data-pid');
+                            if (pid) showPersonaDetail(pid);
+                        });
+                    });
+                }
+
+                bindPageBtns();
+                bindViewBtns();
 
                 function clearPersonasSearch() {
                     document.getElementById('personas-search-input').value = '';
@@ -3361,7 +3434,10 @@
                     <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ prov_raw }}</p>
                     {% endif %}
                 </div>
-                {{ persona_field(7, "Grounding Sources", "grounding_sources") }}
+                <div style="margin-bottom: 16px;">
+                    <strong style="color: #1a1a2e;">7. Grounding Sources</strong>
+                    <p style="margin-top: 4px; color: #555; white-space: pre-wrap;">{{ view_persona.grounding_sources }}</p>
+                </div>
                 {{ persona_field(8, "Confidence and Limits", "confidence_and_limits") }}
             </div>
 

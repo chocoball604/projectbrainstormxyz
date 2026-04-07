@@ -6239,7 +6239,7 @@ def translate_persona(persona_pid):
 
     translate_fields = ["persona_summary", "demographic_frame", "psychographic_profile",
                         "contextual_constraints", "behavioural_tendencies",
-                        "grounding_sources", "confidence_and_limits"]
+                        "confidence_and_limits"]
     original_text = ""
     for f in translate_fields:
         val = p_dict.get(f, "") or ""
@@ -8268,6 +8268,48 @@ def api_personas_list():
         "total_pages": total_pages,
         "total": total,
         "q": q,
+    })
+
+
+@app.route("/api/persona-detail/<path:instance_id>", methods=["GET"])
+def api_persona_detail(instance_id):
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return jsonify({"ok": False, "error": "Not authenticated."}), 403
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM personas WHERE persona_instance_id = ? AND user_id = ?",
+        (instance_id, user["id"]),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"ok": False, "error": "Persona not found."}), 404
+
+    p = dict(row)
+    prov_raw = p.get("ai_model_provenance") or ""
+    model_name = ""
+    if "persona_model=" in prov_raw:
+        model_name = prov_raw.split("persona_model=")[1].split(";")[0]
+
+    return jsonify({
+        "ok": True,
+        "persona": {
+            "name": p.get("name", ""),
+            "persona_instance_id": p.get("persona_instance_id", ""),
+            "created_at": p.get("created_at", ""),
+            "persona_summary": p.get("persona_summary", ""),
+            "demographic_frame": p.get("demographic_frame", ""),
+            "psychographic_profile": p.get("psychographic_profile", ""),
+            "contextual_constraints": p.get("contextual_constraints", ""),
+            "behavioural_tendencies": p.get("behavioural_tendencies", ""),
+            "model_name": model_name,
+            "provenance": prov_raw,
+            "grounding_sources": p.get("grounding_sources", ""),
+            "confidence_and_limits": p.get("confidence_and_limits", ""),
+            "content_language": p.get("content_language", "en"),
+        },
     })
 
 
