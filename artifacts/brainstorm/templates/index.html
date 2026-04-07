@@ -3102,6 +3102,11 @@
                 var _pQuery = '{{ personas_q }}';
                 var _pPage = {{ personas_page }};
 
+                function escHtml(s) {
+                    if (!s) return '';
+                    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+                }
+
                 function renderPersonaField(num, label, value) {
                     return '<div style="margin-bottom:16px;"><strong style="color:#1a1a2e;">' + num + '. ' + escHtml(label) + '</strong>'
                         + '<p style="margin-top:4px;color:#555;white-space:pre-wrap;">' + escHtml(value || '') + '</p></div>';
