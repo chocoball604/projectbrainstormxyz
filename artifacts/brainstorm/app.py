@@ -2193,12 +2193,27 @@ def get_token():
     return request.args.get("token") or request.form.get("token") or ""
 
 
-def get_user_personas_list(conn, user_id):
+def get_user_personas_list(conn, user_id, user_lang=None):
     rows = conn.execute(
-        "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? ORDER BY id DESC",
+        "SELECT persona_instance_id, name, created_at, content_language, translated_content FROM personas WHERE user_id = ? ORDER BY id DESC",
         (user_id,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        item = {"persona_instance_id": r["persona_instance_id"], "name": r["name"], "created_at": r["created_at"]}
+        if user_lang and user_lang != (r["content_language"] or "en") and r["translated_content"]:
+            try:
+                _tc = json.loads(r["translated_content"])
+                if isinstance(_tc, dict) and _tc.get("lang") == user_lang:
+                    _tname = _tc.get("fields", {}).get("name")
+                    if not _tname and _tc.get("fields", {}).get("persona_summary"):
+                        _tname = _extract_translated_name(_tc["fields"]["persona_summary"], r["name"])
+                    if _tname:
+                        item["translated_name"] = _tname
+            except (json.JSONDecodeError, TypeError):
+                pass
+        result.append(item)
+    return result
 
 
 def get_admin_web_sources(conn, status_filter=None):
@@ -2694,7 +2709,10 @@ def index():
                     print(
                         f"Cleaned dangling persona references from study {configure_study['id']}"
                     )
-                all_personas = get_user_personas_list(conn, user["id"])
+                _cfg_ulang = request.cookies.get("pb_lang", "en")
+                if _cfg_ulang not in VALID_LANGS:
+                    _cfg_ulang = "en"
+                all_personas = get_user_personas_list(conn, user["id"], user_lang=_cfg_ulang)
                 attached_ids = set(cleaned_ids)
                 available_personas = [
                     p
@@ -2780,28 +2798,36 @@ def index():
         personas_total_pages = max(1, (personas_total + PAGE_SIZE - 1) // PAGE_SIZE)
         personas_page = min(personas_page, personas_total_pages)
         p_offset = (personas_page - 1) * PAGE_SIZE
+        _p_sel = "persona_instance_id, name, created_at, content_language, translated_content"
         if personas_q:
-            personas_list = [
-                dict(r)
-                for r in conn.execute(
-                    "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
-                    (
-                        user["id"],
-                        f"%{personas_q}%",
-                        f"%{personas_q}%",
-                        PAGE_SIZE,
-                        p_offset,
-                    ),
-                ).fetchall()
-            ]
+            _p_rows = conn.execute(
+                f"SELECT {_p_sel} FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
+                (user["id"], f"%{personas_q}%", f"%{personas_q}%", PAGE_SIZE, p_offset),
+            ).fetchall()
         else:
-            personas_list = [
-                dict(r)
-                for r in conn.execute(
-                    "SELECT persona_instance_id, name, created_at FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
-                    (user["id"], PAGE_SIZE, p_offset),
-                ).fetchall()
-            ]
+            _p_rows = conn.execute(
+                f"SELECT {_p_sel} FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                (user["id"], PAGE_SIZE, p_offset),
+            ).fetchall()
+        _p_user_lang = request.cookies.get("pb_lang", "en")
+        if _p_user_lang not in VALID_LANGS:
+            _p_user_lang = "en"
+        personas_list = []
+        for _pr in _p_rows:
+            _pi = {"persona_instance_id": _pr["persona_instance_id"], "name": _pr["name"], "created_at": _pr["created_at"]}
+            _pcl = _pr["content_language"] or "en"
+            if _pcl != _p_user_lang and _pr["translated_content"]:
+                try:
+                    _ptc = json.loads(_pr["translated_content"])
+                    if isinstance(_ptc, dict) and _ptc.get("lang") == _p_user_lang:
+                        _ptn = _ptc.get("fields", {}).get("name")
+                        if not _ptn and _ptc.get("fields", {}).get("persona_summary"):
+                            _ptn = _extract_translated_name(_ptc["fields"]["persona_summary"], _pr["name"])
+                        if _ptn:
+                            _pi["translated_name"] = _ptn
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            personas_list.append(_pi)
 
         user_storage_used = conn.execute(
             "SELECT COALESCE(SUM(file_size_bytes), 0) FROM user_uploads WHERE user_id = ? AND status = 'active'",
@@ -6358,19 +6384,14 @@ def translate_output(study_id):
 def _extract_translated_name(translated_summary, original_name):
     if not translated_summary:
         return original_name
+    _pronouns = {"he", "she", "they", "it", "his", "her", "this", "that", "the"}
     first_line = translated_summary.strip().split("\n")[0]
     for sep in [" is ", " is a ", ", a ", ", an "]:
         idx = first_line.find(sep)
         if idx > 0:
             candidate = first_line[:idx].strip().rstrip(",").strip()
-            if 1 < len(candidate) < 60 and not candidate.startswith("("):
+            if 1 < len(candidate) < 60 and not candidate.startswith("(") and candidate.lower() not in _pronouns:
                 return candidate
-    first_sentence = first_line.split(".")[0].strip()
-    words = first_sentence.split()
-    if 2 <= len(words) <= 5:
-        return first_sentence
-    if len(words) > 5:
-        return " ".join(words[:3])
     return original_name
 
 
@@ -8926,7 +8947,10 @@ def render_error(message, show_new_research=False, show_new_persona=False):
                 (user["id"],),
             ).fetchall()
         ]
-        personas_list = get_user_personas_list(conn, user["id"])
+        _ul = request.cookies.get("pb_lang", "en")
+        if _ul not in VALID_LANGS:
+            _ul = "en"
+        personas_list = get_user_personas_list(conn, user["id"], user_lang=_ul)
         conn.close()
     if not show_new_persona:
         show_new_persona = request.args.get("new_persona") == "1"

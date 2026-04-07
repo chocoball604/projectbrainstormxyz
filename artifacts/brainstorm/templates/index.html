@@ -938,7 +938,7 @@
                     <select name="persona_instance_id" required style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff;">
                         <option value="">— Choose —</option>
                         {% for p in available_personas %}
-                        <option value="{{ p.persona_instance_id }}">{{ p.name }} ({{ p.persona_instance_id }})</option>
+                        <option value="{{ p.persona_instance_id }}">{% if p.translated_name %}{{ p.translated_name }} ({{ p.name }}){% else %}{{ p.name }}{% endif %} ({{ p.persona_instance_id }})</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -3140,9 +3140,13 @@
                         function rpf(num, label, fieldName) {
                             return renderPersonaField(num, label, p[fieldName], tf, fieldName, clName, ulName);
                         }
+                        var _detailName = escHtml(p.name);
+                        if (p.translated_name && p.translated_name !== p.name) {
+                            _detailName = escHtml(p.translated_name) + ' <span style="color:#999;font-size:16px;font-weight:normal;">(' + escHtml(p.name) + ')</span>';
+                        }
                         var html = '<div style="background:#f8f9fa;border-radius:6px;padding:20px;font-size:14px;line-height:1.6;border:1px solid #e0e0e0;">';
                         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
-                        html += '<h3 style="margin:0;color:#1a1a2e;">' + escHtml(p.name) + '</h3>';
+                        html += '<h3 style="margin:0;color:#1a1a2e;">' + _detailName + '</h3>';
                         html += '<button type="button" class="btn btn-secondary btn-small" id="persona-detail-close">Close</button>';
                         html += '</div>';
                         html += '<p style="font-size:13px;color:#999;margin-bottom:16px;">Persona ID: <code>' + escHtml(p.persona_instance_id) + '</code> | Created: ' + escHtml(p.created_at) + '</p>';
@@ -3186,6 +3190,7 @@
                             .then(function(tdata) {
                                 if (tdata.ok && tdata.fields) {
                                     showPersonaDetail(pid);
+                                    loadPersonasPage(_pPage, _pQuery);
                                 } else if (tdata.ok && tdata.skip) {
                                     var st = document.getElementById('persona-inline-trans-status');
                                     if (st) st.textContent = '';
