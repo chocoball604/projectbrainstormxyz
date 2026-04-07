@@ -1,0 +1,112 @@
+REPLIT CODING AGENT — MLG STEP 1.1 PATCH (V1A)
+Topic: Improve MLG persona grounding quality (quality > quantity) AND persona name plausibility without hard-coded locale rules
+
+PRD Alignment (must hold)
+- Align to [PRD_Mark-PBXYZ_V1A_V4.13 (4.7)], Appendix 7: Minimal Live Grounding (MLG).
+- MLG is bounded, auditable, and prioritizes trust/quality over raw scale. 
+- No schema changes. No background jobs. No knowledge graph. No ingestion pipeline.
+
+Context / Problem
+1) Quality-over-quantity:
+MLG Step 1 currently surfaces too many low-quality sources in persona dossiers (e.g., vendor blogs, marketing pages). This harms trust. We need a policy that prefers a small number of high-quality sources for persona grounding.
+2) Plausibility:
+Generated personas sometimes have low-plausibility names (e.g., single-word names for HK Chinese personas). Fix must be generative and market-aware, not hard-coded “Chinese names must be 2–3 words”.
+
+Hard constraints (NON‑NEGOTIABLE)
+1) DO NOT change SQLite schema (no CREATE/ALTER/DROP; no new columns; no migrations).
+2) DO NOT modify brainstorm_v1_replit_singlepage_pack/ or brainstorm.db.
+3) Never hold DB connection open during any HTTP or LLM call; commit+close first, reopen only for writes.
+4) Minimal edits only—touch only MLG retrieval output shaping + persona generation prompt/post-check.
+5) Do NOT implement Step 2 (execution grounding, report citations, Ben QA enforcement changes).
+6) Do NOT add hard-coded locale rules (no regex “Chinese length rules”, no name dictionaries).
+
+================================================
+STEP 0 (MANDATORY): Job List
+Before writing any code, output a numbered checklist titled exactly:
+“Job List — MLG Step 1.1 (Quality + Plausibility)”
+Include: what functions changed, what new helpers added, and how you will test.
+
+================================================
+A) QUALITY OVER QUANTITY (Persona dossier grounding sources)
+
+Goal:
+Persona dossiers should surface a SMALL number of HIGH-quality sources, while still recording full retrieval telemetry in the Grounding Trace.
+
+Requirements:
+1) Implement a source quality scoring + filtering step after retrieval, before dossier rendering.
+2) Enforce a strict cap on sources shown in persona dossier:
+   - MAX_SOURCES_SHOWN_PER_PERSONA = 3 (prefer 2 if possible)
+3) Prefer source types by quality and origin:
+   Priority for being SHOWN in dossier:
+   (1) Uploaded Documents
+   (2) Admin-Directed (trusted publishers)
+   (3) Local / Non-English reputable sources
+   (4) General Web (ONLY if high-quality)
+4) Exclude or strongly down-rank low-quality sources from being shown (but keep them in trace telemetry):
+   - pure marketing/vendor lead-gen pages
+   - “how to start a business” generic blogs
+   - affiliate/SEO listicles
+5) “Quality score” must be deterministic and explainable (no ML).
+   Example criteria (you decide exact logic):
+   - trusted domain allowlist via Admin-Directed Web Sources (strong boost)
+   - academic/government/NGO domains (boost)
+   - reputable news domains (boost)
+   - vendor marketing domains (penalty)
+   - pages with excessive ads/affiliate patterns (penalty if detectable)
+6) Dossier must show only the top N sources by quality score (and reflect correct Origin taxonomy labels).
+7) Grounding Trace should still record attempted/matched counts across tiers (no loss of auditability).
+
+Acceptance checks for A:
+- Persona dossiers show ≤3 sources, biased toward Admin-Directed / reputable sources.
+- Low-quality sources are not surfaced unless no better alternatives exist.
+- Grounding Trace telemetry still reflects retrieval attempts.
+
+================================================
+B) PLAUSIBILITY (Persona names market-aware, no hard-coded rules)
+
+Goal:
+Persona names must be culturally/socially plausible for the target market and language, without hard-coded formatting rules.
+
+Requirements:
+1) Update the persona generation prompt (Lisa persona creation) with a single, market-aware realism constraint:
+   - “Persona name must be culturally and socially plausible for the target market and language, consistent with how real people in that market are commonly named.”
+   - Do NOT specify “2–3 words” or any rigid structure.
+2) Add a lightweight post-generation plausibility check that is NOT hard-coded by locale:
+   - Use a short LLM self-check (or deterministic heuristic that is market-agnostic) to assess if the name is plausible for the specified market/language context.
+   - If name plausibility is low, regenerate NAME ONLY (do not regenerate the whole persona), keeping all other persona fields unchanged.
+   - Limit to 1 retry for safety/cost.
+3) Preserve auditability:
+   - If name was regenerated, log a simple internal note in server logs (not user-visible).
+   - Do not change persona provenance rules.
+
+Acceptance checks for B:
+- HK personas do not come out as single token “Man/Wing/Chun” style names when the persona is intended to be HK Chinese.
+- Japanese / Thai / Western markets still produce plausible names without locale hardcoding.
+- Only the name changes on retry; persona content remains stable.
+
+================================================
+Explicit non-goals (DO NOT do)
+- Do NOT introduce country/name dictionaries.
+- Do NOT implement locale-specific regex rules.
+- Do NOT add Step 2 grounding/citations work.
+- Do NOT change Ben QA enforcement logic.
+
+================================================
+MANDATORY RESPONSE FORMAT
+At the end of your response, include exactly:
+(a) Files changed
+(b) What changed
+(c) How to test (step-by-step)
+
+Testing must include:
+1) Run IDI in Hong Kong with no uploaded docs and with Admin-Directed sources configured:
+   - Verify persona dossier shows ≤3 high-quality sources (preferably Admin-Directed + reputable local).
+   - Verify persona name looks culturally plausible (not a single generic token).
+2) Run FG in HK:
+   - Verify all 4–6 personas have plausible names.
+   - Verify low-quality SEO/vendor sources are not surfaced in dossier.
+3) Run IDI in a Western market:
+   - Verify name plausibility still holds without rigid formatting rules.
+4) Confirm Grounding Trace still records attempted/matched tiers (audit unchanged).
+
+

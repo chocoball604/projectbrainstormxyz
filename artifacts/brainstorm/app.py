@@ -747,6 +747,7 @@ MLG_SYNTHESIZER_MODEL = "google/gemini-2.0-flash-001"
 MLG_MAX_SUMMARY_WORDS = 400
 MLG_MAX_SUMMARY_CHARS = 3200
 MLG_MIN_RELEVANCE_KEYWORDS = 1
+MLG_MAX_SOURCES_SHOWN = 3
 
 
 def _mlg_tier1_user_uploads(conn, study_id, user_id):
@@ -1012,6 +1013,73 @@ def _mlg_synthesize_summary(raw_snippets, study_dict):
         return ""
 
 
+_MLG_REPUTABLE_DOMAINS = {
+    ".gov", ".gov.hk", ".gov.sg", ".gov.au", ".gov.uk", ".gov.jp", ".go.jp", ".go.th",
+    ".edu", ".edu.hk", ".edu.sg", ".edu.au", ".ac.uk", ".ac.jp",
+    ".org",
+    ".int",
+}
+
+_MLG_LOW_QUALITY_PATTERNS = [
+    "how-to-start", "how to start", "affiliate", "listicle",
+    "best-vending-machine", "top-10", "top-5",
+    "/blog/how-to", "/blog/best-", "/blog/top-",
+    "shopify.com/blog", "entrepreneur.com/starting",
+    "bizfluent.com", "wikihow.com",
+]
+
+
+def _mlg_score_source(source):
+    from urllib.parse import urlparse
+
+    origin = (source.get("origin") or "").strip()
+    url = (source.get("url") or "").strip()
+    name = (source.get("name") or "").strip()
+    score = 50
+
+    if origin == "Uploaded Document":
+        score = 95
+    elif origin == "Admin-Directed":
+        score = 90
+    elif origin == "Local Non-English":
+        score = 60
+    elif origin == "General Web":
+        score = 40
+
+    if url:
+        try:
+            host = urlparse(url).hostname or ""
+            host_lower = host.lower()
+            for rep in _MLG_REPUTABLE_DOMAINS:
+                if host_lower.endswith(rep):
+                    score += 15
+                    break
+            url_lower = url.lower()
+            name_lower = name.lower()
+            for pat in _MLG_LOW_QUALITY_PATTERNS:
+                if pat in url_lower or pat in name_lower:
+                    score -= 30
+                    break
+        except Exception:
+            pass
+
+    return max(0, min(100, score))
+
+
+def _mlg_select_top_sources(all_sources, max_shown=MLG_MAX_SOURCES_SHOWN):
+    if not all_sources:
+        return []
+    scored = []
+    for s in all_sources:
+        scored.append((s, _mlg_score_source(s)))
+    scored.sort(key=lambda x: x[1], reverse=True)
+    selected = []
+    for s, sc in scored[:max_shown]:
+        s["_quality_score"] = sc
+        selected.append(s)
+    return selected
+
+
 def _mlg_format_grounding_sources_text(sources):
     if not sources:
         return "No live sources retrieved; persona relies on model priors and/or uploaded documents."
@@ -1103,16 +1171,22 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
 
     grounding_used = bool(synthesized_summary)
     if grounding_used:
-        sources_for_dossier = all_sources[:MLG_MAX_SNIPPETS_PER_TIER * 5]
-        grounding_sources_text = _mlg_format_grounding_sources_text(sources_for_dossier)
+        top_sources = _mlg_select_top_sources(all_sources, MLG_MAX_SOURCES_SHOWN)
+        grounding_sources_text = _mlg_format_grounding_sources_text(top_sources)
+        shown_scores = [(s.get("name","?"), s.get("_quality_score", 0)) for s in top_sources]
+        print(
+            f"MLG_QUALITY_FILTER study={study_id} total_retrieved={len(all_sources)} "
+            f"shown={len(top_sources)} scores={shown_scores}",
+            flush=True,
+        )
     elif all_sources:
-        sources_for_dossier = []
+        top_sources = []
         grounding_sources_text = (
             "Sources were retrieved but could not be synthesized into grounding context; "
             "persona relies on model priors and/or uploaded documents."
         )
     else:
-        sources_for_dossier = []
+        top_sources = []
         grounding_sources_text = (
             "No live sources retrieved; persona relies on model priors and/or uploaded documents."
         )
@@ -1120,6 +1194,7 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     reason_code = _mlg_build_reason_code(tier_stats)
     if not grounding_used and all_sources:
         reason_code += ";synthesis:failed"
+    reason_code += f";shown={len(top_sources)}/{len(all_sources)}"
 
     print(
         f"MLG_RETRIEVE_DONE study={study_id} total_sources={len(all_sources)} "
@@ -1128,7 +1203,7 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     )
 
     return {
-        "sources": sources_for_dossier,
+        "sources": top_sources,
         "synthesized_summary": synthesized_summary,
         "grounding_sources_text": grounding_sources_text,
         "grounding_used": grounding_used,
@@ -1195,7 +1270,9 @@ def lisa_generate_personas(study_dict, n, lisa_model_id, grounding_summary=""):
         f"1. Generate exactly {n} persona(s).\n"
         "2. Each persona must be distinct in demographics, psychographics, and behaviour.\n"
         "3. Personas should be grounded in the target audience and research context.\n"
-        "4. Use realistic names appropriate for the target market.\n"
+        "4. Each persona name must be culturally and socially plausible for the target market "
+        "and language, consistent with how real people in that market are commonly named. "
+        "Use full given name and family name as appropriate for the culture.\n"
         "5. Be culturally grounded for Asia-Pacific markets where relevant.\n"
         "6. Each field must be substantive (50-200 words), not placeholder text."
         + _persona_lang_rule
@@ -1274,6 +1351,83 @@ def lisa_generate_personas(study_dict, n, lisa_model_id, grounding_summary=""):
                 "Auto-persona generation failed due to invalid generator output. "
                 "Please try again or attach personas manually."
             )
+
+
+def _check_and_fix_name_plausibility(personas, study_dict, lisa_model_id):
+    market_geo = (study_dict.get("study_fit") or "").strip()
+    target_aud = (study_dict.get("target_audience") or "").strip()
+    if not market_geo and not target_aud:
+        return personas
+    study_id = study_dict.get("id", "?")
+
+    names_list = [p.get("name", "") for p in personas]
+    names_str = ", ".join(f'"{n}"' for n in names_list)
+
+    try:
+        check_result = call_llm(
+            MLG_SYNTHESIZER_MODEL,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a cultural naming expert. Evaluate whether each persona name is "
+                        "culturally and socially plausible for the specified market.\n"
+                        "Return STRICT JSON only — no markdown, no commentary.\n"
+                        'Schema: {"results": [{"name": "...", "plausible": true/false, "better_name": "..."}]}\n'
+                        "Rules:\n"
+                        "1. A name is plausible if it sounds like a real person's name in that market/culture.\n"
+                        "2. Single-token generic words (e.g., 'Man', 'Wing', 'Chun' alone) are NOT plausible "
+                        "as full names in Chinese-speaking markets — they need a family name.\n"
+                        "3. If plausible=false, provide a better_name that IS plausible for that market.\n"
+                        "4. Do NOT apply rigid formatting rules. Judge naturally.\n"
+                        "5. If plausible=true, set better_name to the same name."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Market/Geography: {market_geo}\n"
+                        f"Target Audience: {target_aud}\n"
+                        f"Names to check: {names_str}"
+                    ),
+                },
+            ],
+            purpose="persona_name_plausibility_check",
+            timeout_seconds=30,
+        )
+    except Exception as e:
+        print(f"NAME_PLAUSIBILITY_CHECK_FAIL study={study_id} err={e}", flush=True)
+        return personas
+
+    try:
+        cleaned = (check_result or "").strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        parsed = json.loads(cleaned)
+        results = parsed.get("results", [])
+        if not isinstance(results, list) or len(results) != len(personas):
+            print(f"NAME_PLAUSIBILITY_PARSE_MISMATCH study={study_id} expected={len(personas)} got={len(results)}", flush=True)
+            return personas
+
+        any_fixed = False
+        for i, r in enumerate(results):
+            if not r.get("plausible", True):
+                better = (r.get("better_name") or "").strip()
+                if better and better != names_list[i]:
+                    old_name = personas[i]["name"]
+                    personas[i]["name"] = better
+                    any_fixed = True
+                    print(
+                        f"NAME_PLAUSIBILITY_FIX study={study_id} idx={i} "
+                        f"old={old_name} new={better} market={market_geo}",
+                        flush=True,
+                    )
+        if not any_fixed:
+            print(f"NAME_PLAUSIBILITY_ALL_OK study={study_id} count={len(personas)}", flush=True)
+    except (json.JSONDecodeError, TypeError, KeyError) as e:
+        print(f"NAME_PLAUSIBILITY_PARSE_FAIL study={study_id} err={e}", flush=True)
+
+    return personas
 
 
 def get_monthly_usage(conn, user_id):
@@ -6867,6 +7021,10 @@ def run_study(study_id):
                             print(f"PERSONA_TRYING_NEXT_MODEL study={study_id}", flush=True)
                             continue
                         raise
+                try:
+                    generated = _check_and_fix_name_plausibility(generated, study_snapshot, persona_gen_model)
+                except Exception as _np_err:
+                    print(f"NAME_PLAUSIBILITY_OUTER_FAIL study={study_id} err={_np_err}", flush=True)
                 conn = get_db()
                 new_persona_ids = []
                 _mlg_grounding_text = (mlg_data or {}).get("grounding_sources_text", "")
