@@ -50,7 +50,8 @@ The project is structured as a pnpm workspace monorepo. It leverages Node.js 24 
 - **Database**: Uses SQLite with a predefined set of tables for users, sessions, studies, personas, chat messages, cost telemetry, and more.
 - **Study Types**: Supports `synthetic_survey`, `synthetic_idi`, and `synthetic_focus_group`, each with specific configurations and limits.
 - **Persona Management**: Immutable personas with unique `persona_instance_id`s; cloning creates new instances.
-- **Grounding Traces**: Records detailed traces of AI model interactions, including sources used.
+- **Grounding Traces**: Records detailed traces of AI model interactions, including sources used. MLG Step 1 populates traces with real retrieval data (tier-level reason codes) for persona creation.
+- **MLG (Minimal Live Grounding)**: Step 1 implemented — live web retrieval during persona creation (IDI/FG only). Uses 5-tier priority: user uploads → admin uploads → admin web sources → local web search → general web search. Produces synthesized grounding summaries (≤800 tokens) for Lisa's persona prompt. Uses `ddgs` (DuckDuckGo) for web search and `requests` for admin URL fetching. SSRF guards block private/localhost URLs.
 - **Admin Features**: Includes capabilities for managing admin web sources, configuring AI models (`mark_model`, `lisa_model`, `ben_model`), managing allowed models, and editing persona model pools.
 - **Reporting**: Generates structured reports with confidence labels and supports PDF download.
 - **Follow-ups**: Allows up to two follow-up rounds for completed IDI/FG studies.

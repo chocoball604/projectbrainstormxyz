@@ -740,7 +740,345 @@ def _validate_persona_list(parsed, n_required):
     return personas
 
 
-def lisa_generate_personas(study_dict, n, lisa_model_id):
+MLG_MAX_SUMMARY_TOKENS = 800
+MLG_MAX_SNIPPETS_PER_TIER = 3
+MLG_WEB_FETCH_TIMEOUT = 8
+MLG_SEARCH_RESULTS_LIMIT = 5
+MLG_SYNTHESIZER_MODEL = "google/gemini-2.0-flash-001"
+
+
+def _mlg_tier1_user_uploads(conn, study_id, user_id):
+    rows = conn.execute(
+        """SELECT u.id, u.filename, u.retained_excerpt_text
+           FROM study_documents sd
+           JOIN user_uploads u ON u.id = sd.user_doc_id
+           WHERE sd.study_id = ? AND u.user_id = ? AND u.status = 'active'""",
+        (study_id, user_id),
+    ).fetchall()
+    sources = []
+    snippets = []
+    for r in rows:
+        excerpt = (r["retained_excerpt_text"] or "").strip()
+        sources.append({
+            "name": r["filename"],
+            "url": "",
+            "category": "Uploaded Document",
+            "origin": "User-Uploaded",
+        })
+        if excerpt:
+            snippets.append(f"[User Doc: {r['filename']}] {excerpt[:500]}")
+    return sources, snippets
+
+
+def _mlg_tier2_admin_uploads(conn):
+    rows = conn.execute(
+        "SELECT id, filename FROM admin_uploads WHERE status = 'active'"
+    ).fetchall()
+    sources = []
+    for r in rows:
+        sources.append({
+            "name": r["filename"],
+            "url": "",
+            "category": "Uploaded Document",
+            "origin": "Admin-Public",
+        })
+    return sources, []
+
+
+def _mlg_is_safe_url(url):
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = (parsed.hostname or "").lower()
+        if not host:
+            return False
+        blocked = ("localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254", "[::1]", "metadata.google.internal")
+        for b in blocked:
+            if host == b or host.endswith("." + b):
+                return False
+        if host.startswith("10.") or host.startswith("192.168.") or host.startswith("172."):
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def _mlg_tier3_admin_web(admin_web_sources):
+    import requests as _req
+
+    sources = []
+    snippets = []
+    attempted = 0
+    matched = 0
+    for src in admin_web_sources[:MLG_MAX_SNIPPETS_PER_TIER]:
+        url = (src.get("url") or "").strip()
+        name = src.get("name") or url
+        if not url:
+            continue
+        if not _mlg_is_safe_url(url):
+            print(f"MLG_TIER3_BLOCKED_URL url={url}", flush=True)
+            continue
+        attempted += 1
+        try:
+            resp = _req.get(url, timeout=MLG_WEB_FETCH_TIMEOUT, headers={"User-Agent": "ProjectBrainstorm/1.0"}, allow_redirects=False)
+            resp.raise_for_status()
+            text = resp.text[:3000]
+            import re
+            text = re.sub(r"<[^>]+>", " ", text)
+            text = re.sub(r"\s+", " ", text).strip()
+            if len(text) > 50:
+                matched += 1
+                sources.append({
+                    "name": name,
+                    "url": url,
+                    "category": "News/Government/Census",
+                    "origin": "Admin-Directed",
+                })
+                snippets.append(f"[Admin Web: {name}] {text[:500]}")
+        except Exception as e:
+            print(f"MLG_TIER3_FETCH_FAIL url={url} err={e}", flush=True)
+    return sources, snippets, attempted, matched
+
+
+def _mlg_tier4_local_web(market_geo, lang_name, product_context):
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        try:
+            from duckduckgo_search import DDGS
+        except ImportError:
+            print("MLG_TIER4_SKIP ddgs not installed", flush=True)
+            return [], [], 0, 0
+
+    queries = []
+    geo_clean = (market_geo or "").strip()
+    if geo_clean and lang_name and lang_name != "English":
+        queries.append(f"{product_context} market trends {geo_clean}")
+        queries.append(f"{geo_clean} consumer behaviour {product_context}")
+    if not queries:
+        return [], [], 0, 0
+
+    sources = []
+    snippets = []
+    attempted = 0
+    matched = 0
+    try:
+        ddgs = DDGS()
+        for q in queries[:2]:
+            attempted += 1
+            try:
+                results = list(ddgs.text(q, max_results=MLG_SEARCH_RESULTS_LIMIT))
+                for r in results[:MLG_MAX_SNIPPETS_PER_TIER]:
+                    body = (r.get("body") or "").strip()
+                    title = (r.get("title") or "").strip()
+                    href = (r.get("href") or "").strip()
+                    if body and len(body) > 30:
+                        matched += 1
+                        sources.append({
+                            "name": title or href,
+                            "url": href,
+                            "category": "News/Market Data",
+                            "origin": "Local-Non-English",
+                        })
+                        snippets.append(f"[Local Web: {title}] {body[:400]}")
+            except Exception as e:
+                print(f"MLG_TIER4_SEARCH_FAIL query={q} err={e}", flush=True)
+    except Exception as e:
+        print(f"MLG_TIER4_INIT_FAIL err={e}", flush=True)
+    return sources, snippets, attempted, matched
+
+
+def _mlg_tier5_general_web(product_context, target_audience):
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        try:
+            from duckduckgo_search import DDGS
+        except ImportError:
+            print("MLG_TIER5_SKIP ddgs not installed", flush=True)
+            return [], [], 0, 0
+
+    query = f"{product_context} {target_audience} consumer research"
+    sources = []
+    snippets = []
+    attempted = 1
+    matched = 0
+    try:
+        ddgs = DDGS()
+        results = list(ddgs.text(query, max_results=MLG_SEARCH_RESULTS_LIMIT))
+        for r in results[:MLG_MAX_SNIPPETS_PER_TIER]:
+            body = (r.get("body") or "").strip()
+            title = (r.get("title") or "").strip()
+            href = (r.get("href") or "").strip()
+            if body and len(body) > 30:
+                matched += 1
+                sources.append({
+                    "name": title or href,
+                    "url": href,
+                    "category": "News/Market Data",
+                    "origin": "General-Web",
+                })
+                snippets.append(f"[General Web: {title}] {body[:400]}")
+    except Exception as e:
+        print(f"MLG_TIER5_SEARCH_FAIL err={e}", flush=True)
+    return sources, snippets, attempted, matched
+
+
+def _mlg_synthesize_summary(raw_snippets, study_dict):
+    if not raw_snippets:
+        return ""
+    combined = "\n".join(raw_snippets[:12])
+    if len(combined) > 4000:
+        combined = combined[:4000]
+    market = (study_dict.get("study_fit") or "").strip()
+    product = (study_dict.get("known_vs_unknown") or "").strip()
+    audience = (study_dict.get("target_audience") or "").strip()
+    try:
+        summary = call_llm(
+            MLG_SYNTHESIZER_MODEL,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a research grounding assistant. Synthesize the following source excerpts "
+                        "into a concise market/consumer context summary for persona creation. "
+                        "Rules:\n"
+                        "1. Output ONLY key facts relevant to the market, consumer behaviour, and product context.\n"
+                        "2. Maximum 400 words. Be concise and factual.\n"
+                        "3. Do NOT copy text verbatim — distill and paraphrase.\n"
+                        "4. Do NOT add opinions or speculation.\n"
+                        "5. Do NOT include source URLs or citations — just the synthesized facts."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Market/Geography: {market}\n"
+                        f"Product/Concept: {product}\n"
+                        f"Target Audience: {audience}\n\n"
+                        f"Source excerpts to synthesize:\n{combined}"
+                    ),
+                },
+            ],
+            purpose="mlg_grounding_synthesis",
+            timeout_seconds=30,
+        )
+        return (summary or "").strip()
+    except Exception as e:
+        print(f"MLG_SYNTHESIZE_FAIL err={e}", flush=True)
+        return ""
+
+
+def _mlg_format_grounding_sources_text(sources):
+    if not sources:
+        return "No live sources retrieved; persona relies on model priors and/or uploaded documents."
+    lines = []
+    for s in sources:
+        name = s.get("name", "Unknown")
+        url = s.get("url", "")
+        cat = s.get("category", "")
+        origin = s.get("origin", "")
+        entry = f"- {name}"
+        if url:
+            entry += f" ({url})"
+        if cat:
+            entry += f" [{cat}]"
+        if origin:
+            entry += f" Origin: {origin}"
+        lines.append(entry)
+    return "\n".join(lines)
+
+
+def _mlg_build_reason_code(tier_stats):
+    parts = []
+    for tier_name in ["user_uploads", "admin_uploads", "admin_web", "local_web", "general_web"]:
+        t = tier_stats.get(tier_name, {})
+        found = t.get("found", 0)
+        attempted = t.get("attempted", 0)
+        matched = t.get("matched", 0)
+        if tier_name in ("user_uploads", "admin_uploads"):
+            if found > 0:
+                parts.append(f"{tier_name}:found={found}")
+            else:
+                parts.append(f"{tier_name}:none")
+        else:
+            if attempted > 0:
+                parts.append(f"{tier_name}:attempted={attempted},matched={matched}")
+            else:
+                parts.append(f"{tier_name}:skipped")
+    return ";".join(parts)
+
+
+def mlg_retrieve_for_persona(study_dict, study_id, user_id):
+    all_sources = []
+    all_snippets = []
+    tier_stats = {}
+
+    conn = get_db()
+    try:
+        t1_sources, t1_snippets = _mlg_tier1_user_uploads(conn, study_id, user_id)
+        tier_stats["user_uploads"] = {"found": len(t1_sources)}
+        all_sources.extend(t1_sources)
+        all_snippets.extend(t1_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
+
+        t2_sources, t2_snippets = _mlg_tier2_admin_uploads(conn)
+        tier_stats["admin_uploads"] = {"found": len(t2_sources)}
+        all_sources.extend(t2_sources)
+
+        admin_web_sources = get_admin_web_sources(conn, status_filter="active")
+    finally:
+        conn.close()
+
+    t3_sources, t3_snippets, t3_attempted, t3_matched = _mlg_tier3_admin_web(admin_web_sources)
+    tier_stats["admin_web"] = {"attempted": t3_attempted, "matched": t3_matched}
+    all_sources.extend(t3_sources)
+    all_snippets.extend(t3_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
+
+    market_geo = (study_dict.get("study_fit") or "").strip()
+    product_ctx = (study_dict.get("known_vs_unknown") or "").strip()
+    target_aud = (study_dict.get("target_audience") or "").strip()
+    _g_admin_srcs = admin_web_sources
+    _, lang_name = infer_market_language(market_geo, _g_admin_srcs)
+
+    t4_sources, t4_snippets, t4_attempted, t4_matched = _mlg_tier4_local_web(
+        market_geo, lang_name, product_ctx
+    )
+    tier_stats["local_web"] = {"attempted": t4_attempted, "matched": t4_matched}
+    all_sources.extend(t4_sources)
+    all_snippets.extend(t4_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
+
+    t5_sources, t5_snippets, t5_attempted, t5_matched = _mlg_tier5_general_web(
+        product_ctx, target_aud
+    )
+    tier_stats["general_web"] = {"attempted": t5_attempted, "matched": t5_matched}
+    all_sources.extend(t5_sources)
+    all_snippets.extend(t5_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
+
+    synthesized_summary = _mlg_synthesize_summary(all_snippets, study_dict)
+
+    total_sources_used = len(all_sources)
+    reason_code = _mlg_build_reason_code(tier_stats)
+    grounding_sources_text = _mlg_format_grounding_sources_text(all_sources)
+
+    print(
+        f"MLG_RETRIEVE_DONE study={study_id} total_sources={total_sources_used} "
+        f"summary_len={len(synthesized_summary)} reason={reason_code}",
+        flush=True,
+    )
+
+    return {
+        "sources": all_sources,
+        "synthesized_summary": synthesized_summary,
+        "grounding_sources_text": grounding_sources_text,
+        "tier_stats": tier_stats,
+        "reason_code": reason_code,
+        "admin_web_configured": len(admin_web_sources),
+    }
+
+
+def lisa_generate_personas(study_dict, n, lisa_model_id, grounding_summary=""):
     brief_fields = [
         ("business_problem", "Business Problem"),
         ("decision_to_support", "Decision to Support"),
@@ -802,6 +1140,13 @@ def lisa_generate_personas(study_dict, n, lisa_model_id):
         "6. Each field must be substantive (50-200 words), not placeholder text."
         + _persona_lang_rule
     )
+
+    if grounding_summary:
+        system_prompt += (
+            "\n\nGROUNDING CONTEXT (synthesized from live sources — use as contextual signal "
+            "to inform persona realism, do NOT copy verbatim):\n"
+            + grounding_summary
+        )
 
     oc_block, oc_keys = _extract_optional_context(study_dict)
     if oc_block:
@@ -1743,17 +2088,25 @@ def infer_market_language(study_fit_text, admin_sources=None):
     return "en", "English"
 
 
-def create_grounding_trace(conn, trigger_event, study_id=None, persona_id=None):
-    active_sources = get_admin_web_sources(conn, status_filter="active")
-    has_active = len(active_sources) > 0
-
-    admin_sources_configured = has_active
-    admin_sources_queried = has_active
-    admin_sources_matched = False
-    admin_sources_used_in_output = False
-
-    reason_code = None
-    if not admin_sources_used_in_output:
+def create_grounding_trace(conn, trigger_event, study_id=None, persona_id=None, mlg_data=None):
+    if mlg_data:
+        admin_cfg_count = mlg_data.get("admin_web_configured", 0)
+        tier_stats = mlg_data.get("tier_stats", {})
+        admin_web_stats = tier_stats.get("admin_web", {})
+        admin_queried_count = admin_web_stats.get("attempted", 0)
+        admin_matched_count = admin_web_stats.get("matched", 0)
+        flag_configured = 1 if admin_cfg_count > 0 else 0
+        flag_queried = 1 if admin_queried_count > 0 else 0
+        flag_matched = 1 if admin_matched_count > 0 else 0
+        flag_used = 1 if admin_matched_count > 0 else 0
+        reason_code = mlg_data.get("reason_code", "")
+    else:
+        active_sources = get_admin_web_sources(conn, status_filter="active")
+        has_active = len(active_sources) > 0
+        flag_configured = 1 if has_active else 0
+        flag_queried = 1 if has_active else 0
+        flag_matched = 0
+        flag_used = 0
         if has_active:
             reason_code = "ADMIN_SOURCE_NOT_RELEVANT"
         else:
@@ -1772,10 +2125,10 @@ def create_grounding_trace(conn, trigger_event, study_id=None, persona_id=None):
             study_id,
             persona_id,
             trigger_event,
-            1 if admin_sources_configured else 0,
-            1 if admin_sources_queried else 0,
-            1 if admin_sources_matched else 0,
-            1 if admin_sources_used_in_output else 0,
+            flag_configured,
+            flag_queried,
+            flag_matched,
+            flag_used,
             reason_code,
             ts,
         ),
@@ -6419,12 +6772,29 @@ def run_study(study_id):
                 persona_gen_model = None
                 study_snapshot = dict(study)
                 conn.close()
+
+                mlg_data = None
+                try:
+                    mlg_data = mlg_retrieve_for_persona(study_snapshot, study_id, user["id"])
+                    print(f"MLG_COMPLETE study={study_id} sources={len(mlg_data.get('sources', []))} reason={mlg_data.get('reason_code', '')}", flush=True)
+                except Exception as _mlg_err:
+                    print(f"MLG_FAILED study={study_id} err={_mlg_err}", flush=True)
+                    mlg_data = {
+                        "sources": [],
+                        "synthesized_summary": "",
+                        "grounding_sources_text": "No live sources retrieved; persona relies on model priors and/or uploaded documents.",
+                        "tier_stats": {},
+                        "reason_code": "mlg_retrieval_error",
+                        "admin_web_configured": 0,
+                    }
+
+                _mlg_summary = (mlg_data or {}).get("synthesized_summary", "")
                 models_to_try = healthy_models[:3]
                 for _model_idx, _try_model in enumerate(models_to_try):
                     persona_gen_model = _try_model
                     print(f"PERSONA_POOL_MODEL_SELECTED={persona_gen_model} study={study_id} pool_attempt={_model_idx+1}/{len(models_to_try)}", flush=True)
                     try:
-                        generated = lisa_generate_personas(study_snapshot, auto_n, persona_gen_model)
+                        generated = lisa_generate_personas(study_snapshot, auto_n, persona_gen_model, grounding_summary=_mlg_summary)
                         break
                     except Exception as _model_err:
                         print(f"PERSONA_MODEL_FAILED study={study_id} model={persona_gen_model} err={_model_err}", flush=True)
@@ -6434,6 +6804,7 @@ def run_study(study_id):
                         raise
                 conn = get_db()
                 new_persona_ids = []
+                _mlg_grounding_text = (mlg_data or {}).get("grounding_sources_text", "")
                 def _pstr(val):
                     if val is None:
                         return ""
@@ -6469,18 +6840,17 @@ def run_study(study_id):
                             _pstr(p_data.get("contextual_constraints", "")),
                             _pstr(p_data.get("behavioural_tendencies", "")),
                             provenance,
-                            _pstr(p_data.get("grounding_sources", "")),
+                            _mlg_grounding_text if _mlg_grounding_text else _pstr(p_data.get("grounding_sources", "")),
                             _pstr(p_data.get("confidence_and_limits", "")),
                             _persona_content_lang,
                         ),
                     )
-                    conn.execute(
-                        """INSERT INTO grounding_traces
-                           (study_id, persona_id, trigger_event,
-                            admin_sources_configured, admin_sources_queried,
-                            admin_sources_matched, admin_sources_used_in_output)
-                           VALUES (?, ?, 'persona_created', 0, 0, 0, 0)""",
-                        (str(study_id), p_instance_id),
+                    create_grounding_trace(
+                        conn,
+                        trigger_event="persona_created",
+                        study_id=str(study_id),
+                        persona_id=p_instance_id,
+                        mlg_data=mlg_data,
                     )
                     new_persona_ids.append(p_instance_id)
 
