@@ -740,11 +740,13 @@ def _validate_persona_list(parsed, n_required):
     return personas
 
 
-MLG_MAX_SUMMARY_TOKENS = 800
 MLG_MAX_SNIPPETS_PER_TIER = 3
 MLG_WEB_FETCH_TIMEOUT = 8
 MLG_SEARCH_RESULTS_LIMIT = 5
 MLG_SYNTHESIZER_MODEL = "google/gemini-2.0-flash-001"
+MLG_MAX_SUMMARY_WORDS = 400
+MLG_MAX_SUMMARY_CHARS = 3200
+MLG_MIN_RELEVANCE_KEYWORDS = 1
 
 
 def _mlg_tier1_user_uploads(conn, study_id, user_id):
@@ -796,6 +798,26 @@ def _mlg_tier2_admin_uploads(conn):
     return sources, snippets
 
 
+def _mlg_build_relevance_keywords(study_dict):
+    parts = []
+    for key in ("known_vs_unknown", "target_audience", "study_fit", "business_problem"):
+        val = (study_dict.get(key) or "").strip()
+        if val:
+            for word in val.lower().split():
+                word = word.strip(".,;:!?\"'()[]{}")
+                if len(word) >= 3 and word not in ("the", "and", "for", "with", "that", "this", "from", "are", "was"):
+                    parts.append(word)
+    return list(set(parts))
+
+
+def _mlg_is_relevant(text, keywords, min_hits=MLG_MIN_RELEVANCE_KEYWORDS):
+    if not keywords:
+        return True
+    text_lower = text.lower()
+    hits = sum(1 for kw in keywords if kw in text_lower)
+    return hits >= min_hits
+
+
 def _mlg_is_safe_url(url):
     from urllib.parse import urlparse
     try:
@@ -816,8 +838,9 @@ def _mlg_is_safe_url(url):
         return False
 
 
-def _mlg_tier3_admin_web(admin_web_sources):
+def _mlg_tier3_admin_web(admin_web_sources, relevance_keywords=None):
     import requests as _req
+    import re as _re
 
     sources = []
     snippets = []
@@ -836,10 +859,9 @@ def _mlg_tier3_admin_web(admin_web_sources):
             resp = _req.get(url, timeout=MLG_WEB_FETCH_TIMEOUT, headers={"User-Agent": "ProjectBrainstorm/1.0"}, allow_redirects=False)
             resp.raise_for_status()
             text = resp.text[:3000]
-            import re
-            text = re.sub(r"<[^>]+>", " ", text)
-            text = re.sub(r"\s+", " ", text).strip()
-            if len(text) > 50:
+            text = _re.sub(r"<[^>]+>", " ", text)
+            text = _re.sub(r"\s+", " ", text).strip()
+            if len(text) > 50 and _mlg_is_relevant(text, relevance_keywords):
                 matched += 1
                 sources.append({
                     "name": name,
@@ -848,12 +870,14 @@ def _mlg_tier3_admin_web(admin_web_sources):
                     "origin": "Admin-Directed",
                 })
                 snippets.append(f"[Admin Web: {name}] {text[:500]}")
+            elif len(text) > 50:
+                print(f"MLG_TIER3_NOT_RELEVANT url={url}", flush=True)
         except Exception as e:
             print(f"MLG_TIER3_FETCH_FAIL url={url} err={e}", flush=True)
     return sources, snippets, attempted, matched
 
 
-def _mlg_tier4_local_web(market_geo, lang_name, product_context):
+def _mlg_tier4_local_web(market_geo, lang_name, product_context, relevance_keywords=None):
     try:
         from ddgs import DDGS
     except ImportError:
@@ -885,7 +909,7 @@ def _mlg_tier4_local_web(market_geo, lang_name, product_context):
                     body = (r.get("body") or "").strip()
                     title = (r.get("title") or "").strip()
                     href = (r.get("href") or "").strip()
-                    if body and len(body) > 30:
+                    if body and len(body) > 30 and _mlg_is_relevant(body + " " + title, relevance_keywords):
                         matched += 1
                         sources.append({
                             "name": title or href,
@@ -901,7 +925,7 @@ def _mlg_tier4_local_web(market_geo, lang_name, product_context):
     return sources, snippets, attempted, matched
 
 
-def _mlg_tier5_general_web(product_context, target_audience):
+def _mlg_tier5_general_web(product_context, target_audience, relevance_keywords=None):
     try:
         from ddgs import DDGS
     except ImportError:
@@ -923,7 +947,7 @@ def _mlg_tier5_general_web(product_context, target_audience):
             body = (r.get("body") or "").strip()
             title = (r.get("title") or "").strip()
             href = (r.get("href") or "").strip()
-            if body and len(body) > 30:
+            if body and len(body) > 30 and _mlg_is_relevant(body + " " + title, relevance_keywords):
                 matched += 1
                 sources.append({
                     "name": title or href,
@@ -978,10 +1002,10 @@ def _mlg_synthesize_summary(raw_snippets, study_dict):
         )
         result = (summary or "").strip()
         words = result.split()
-        if len(words) > 400:
-            result = " ".join(words[:400])
-        if len(result) > 3200:
-            result = result[:3200]
+        if len(words) > MLG_MAX_SUMMARY_WORDS:
+            result = " ".join(words[:MLG_MAX_SUMMARY_WORDS])
+        if len(result) > MLG_MAX_SUMMARY_CHARS:
+            result = result[:MLG_MAX_SUMMARY_CHARS]
         return result
     except Exception as e:
         print(f"MLG_SYNTHESIZE_FAIL err={e}", flush=True)
@@ -1032,6 +1056,7 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     all_sources = []
     all_snippets = []
     tier_stats = {}
+    relevance_kw = _mlg_build_relevance_keywords(study_dict)
 
     conn = get_db()
     try:
@@ -1049,7 +1074,7 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     finally:
         conn.close()
 
-    t3_sources, t3_snippets, t3_attempted, t3_matched = _mlg_tier3_admin_web(admin_web_sources)
+    t3_sources, t3_snippets, t3_attempted, t3_matched = _mlg_tier3_admin_web(admin_web_sources, relevance_kw)
     tier_stats["admin_web"] = {"attempted": t3_attempted, "matched": t3_matched}
     all_sources.extend(t3_sources[:MLG_MAX_SNIPPETS_PER_TIER])
     all_snippets.extend(t3_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
@@ -1061,14 +1086,14 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     _, lang_name = infer_market_language(market_geo, _g_admin_srcs)
 
     t4_sources, t4_snippets, t4_attempted, t4_matched = _mlg_tier4_local_web(
-        market_geo, lang_name, product_ctx
+        market_geo, lang_name, product_ctx, relevance_kw
     )
     tier_stats["local_web"] = {"attempted": t4_attempted, "matched": t4_matched}
     all_sources.extend(t4_sources[:MLG_MAX_SNIPPETS_PER_TIER])
     all_snippets.extend(t4_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
 
     t5_sources, t5_snippets, t5_attempted, t5_matched = _mlg_tier5_general_web(
-        product_ctx, target_aud
+        product_ctx, target_aud, relevance_kw
     )
     tier_stats["general_web"] = {"attempted": t5_attempted, "matched": t5_matched}
     all_sources.extend(t5_sources[:MLG_MAX_SNIPPETS_PER_TIER])
@@ -1080,6 +1105,12 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     if grounding_used:
         sources_for_dossier = all_sources[:MLG_MAX_SNIPPETS_PER_TIER * 5]
         grounding_sources_text = _mlg_format_grounding_sources_text(sources_for_dossier)
+    elif all_sources:
+        sources_for_dossier = []
+        grounding_sources_text = (
+            "Sources were retrieved but could not be synthesized into grounding context; "
+            "persona relies on model priors and/or uploaded documents."
+        )
     else:
         sources_for_dossier = []
         grounding_sources_text = (
