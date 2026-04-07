@@ -6228,7 +6228,21 @@ def run_study(study_id):
         (study_id, user["id"]),
     ).fetchone()
     if not study:
+        any_study = conn.execute(
+            "SELECT id, status FROM studies WHERE id = ? AND user_id = ?",
+            (study_id, user["id"]),
+        ).fetchone()
         conn.close()
+        if any_study:
+            st = any_study["status"]
+            if st == "running":
+                if ajax:
+                    return jsonify({"ok": True, "running": True, "message": "Study is already running."}), 200
+                return redirect(url_for("index", token=token, view_output=study_id))
+            if st in ("completed", "qa_blocked"):
+                if ajax:
+                    return jsonify({"ok": True, "already_done": True, "message": "Study already completed."}), 200
+                return redirect(url_for("index", token=token, view_output=study_id))
         if ajax:
             return jsonify({"ok": False, "error": "Draft study not found or already executed."}), 404
         return render_error("Draft study not found or already executed.")

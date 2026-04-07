@@ -1535,10 +1535,16 @@
                     return resp.json();
                 })
                 .then(function(data) {
-                    clearInterval(pollIv);
-                    if (data && data.ok) {
+                    if (data && data.ok && data.already_done) {
+                        clearInterval(pollIv);
+                        finishSuccess();
+                    } else if (data && data.ok && data.running) {
+                        /* noop — study already running, let poll handle it */
+                    } else if (data && data.ok) {
+                        clearInterval(pollIv);
                         finishSuccess();
                     } else if (!_resolved) {
+                        clearInterval(pollIv);
                         renderExecError(ob, sid, (data && data.error) || 'Execution failed.');
                     }
                 })
