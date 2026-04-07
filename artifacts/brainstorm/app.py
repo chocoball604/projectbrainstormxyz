@@ -4638,7 +4638,7 @@ class BrainstormPDF(FPDF):
         self.set_text_color(0, 0, 0)
 
 
-def generate_report_pdf(study, sections):
+def generate_report_pdf(study, sections, translated_sections=None, translation_lang_name=None):
     pdf = BrainstormPDF()
     pdf.set_auto_page_break(auto=True, margin=38)
     pdf.add_page()
@@ -4669,6 +4669,18 @@ def generate_report_pdf(study, sections):
     pdf.set_text_color(0, 0, 0)
     pdf.ln(4)
 
+    if translated_sections and translation_lang_name:
+        output_lang_name = LANG_CODE_TO_NAME.get(study.get("output_language", "en"), "Original")
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.set_text_color(80, 80, 80)
+        pdf.cell(
+            0, 6,
+            f"Bilingual report: {output_lang_name} (original) + {translation_lang_name} (translated)",
+            new_x="LMARGIN", new_y="NEXT", align="C",
+        )
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(2)
+
     title_text = study.get("title", "Untitled Study")
     _pdf_write_text(pdf, title_text, 14, style="B", cjk_available=cjk_ok, h=10)
     st_label = STUDY_TYPE_LABELS.get(
@@ -4678,19 +4690,22 @@ def generate_report_pdf(study, sections):
     _pdf_write_text(pdf, status_line, 10, cjk_available=cjk_ok, h=6)
     pdf.ln(6)
 
+    _ts = translated_sections or {}
+
     heading_sections = [
-        ("1. Executive Summary", sections.get("executive_summary", "")),
-        ("2. Why This Study Type Was Chosen", sections.get("why_study_type", "")),
-        ("3. What Was Studied", sections.get("what_was_studied", "")),
-        ("4. Key Findings", sections.get("key_findings", "")),
-        ("5. What Surprised Us", sections.get("what_surprised_us", "")),
-        ("6. Risks, Limits, and Unknowns", sections.get("risks_limits", "")),
-        ("7. Grounding Coverage Summary", sections.get("grounding_coverage", "")),
-        ("8. Sources and Citations", sections.get("sources_citations", "")),
-        ("9. Persona Summaries", sections.get("persona_summaries", "")),
+        ("1. Executive Summary", sections.get("executive_summary", ""), None),
+        ("2. Why This Study Type Was Chosen", sections.get("why_study_type", ""), None),
+        ("3. What Was Studied", sections.get("what_was_studied", ""), None),
+        ("4. Key Findings", sections.get("key_findings", ""), _ts.get("key_findings")),
+        ("5. What Surprised Us", sections.get("what_surprised_us", ""), _ts.get("what_surprised_us")),
+        ("6. Risks, Limits, and Unknowns", sections.get("risks_limits", ""), _ts.get("risks_limits")),
+        ("7. Grounding Coverage Summary", sections.get("grounding_coverage", ""), _ts.get("grounding_coverage")),
+        ("8. Sources and Citations", sections.get("sources_citations", ""), _ts.get("sources_citations")),
+        ("9. Persona Summaries", sections.get("persona_summaries", ""), _ts.get("persona_summaries")),
     ]
 
-    for heading, content in heading_sections:
+    for item in heading_sections:
+        heading, content, trans = item
         if not content:
             continue
         pdf.set_font("Helvetica", "B", 12)
@@ -4700,6 +4715,25 @@ def generate_report_pdf(study, sections):
         _pdf_write_text(
             pdf, content, 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5
         )
+        pdf.ln(2)
+
+        if trans and translation_lang_name:
+            pdf.set_draw_color(66, 133, 244)
+            pdf.set_fill_color(235, 243, 254)
+            x_start = pdf.get_x()
+            y_start = pdf.get_y()
+            pdf.rect(x_start, y_start, pdf.w - pdf.l_margin - pdf.r_margin, 7, style="DF")
+            pdf.set_font("Helvetica", "BI", 10)
+            pdf.set_text_color(30, 80, 180)
+            pdf.cell(0, 7, f"  Translated ({translation_lang_name})", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_draw_color(0, 0, 0)
+            pdf.ln(2)
+            _pdf_write_text(
+                pdf, trans, 10, cjk_available=cjk_ok, method="multi_cell", w=0, h=5
+            )
+            pdf.set_fill_color(240, 240, 240)
+
         pdf.ln(4)
 
     fu_sections = sections.get("followup_sections", [])
@@ -4763,6 +4797,16 @@ def generate_report_pdf(study, sections):
         pdf.set_font("Helvetica", "", 9)
         _pdf_write_text(
             pdf, sections["transcript_appendix"], 9, cjk_available=cjk_ok, method="multi_cell", w=0, h=4
+        )
+
+    if sections.get("translated_transcript") and translation_lang_name:
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 10, f"Appendix: Translated Transcript ({translation_lang_name})", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(4)
+        pdf.set_font("Helvetica", "", 9)
+        _pdf_write_text(
+            pdf, sections["translated_transcript"], 9, cjk_available=cjk_ok, method="multi_cell", w=0, h=4
         )
 
     return pdf.output()
@@ -5315,7 +5359,25 @@ def download_pdf(study_id):
         uploaded_filenames=all_upload_names,
         persona_data=_pdf_persona_data,
     )
-    pdf_bytes = generate_report_pdf(study_dict, sections)
+
+    _pdf_trans_sections = None
+    _pdf_trans_lang_name = None
+    _user_lang = request.cookies.get("pb_lang", "en")
+    _output_lang = study_dict.get("output_language") or "en"
+    if _output_lang != _user_lang:
+        _trans_raw = study_dict.get("translated_output")
+        if _trans_raw:
+            try:
+                _tdata = json.loads(_trans_raw)
+                if isinstance(_tdata, dict) and _tdata.get("lang") == _user_lang and _tdata.get("sections"):
+                    _pdf_trans_sections = _tdata["sections"]
+                    _pdf_trans_lang_name = LANG_CODE_TO_NAME.get(_user_lang, _user_lang)
+                    if _tdata.get("text"):
+                        sections["translated_transcript"] = _tdata["text"]
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    pdf_bytes = generate_report_pdf(study_dict, sections, translated_sections=_pdf_trans_sections, translation_lang_name=_pdf_trans_lang_name)
     report_version = sections.get("version", 1)
     safe_title = (
         "".join(
