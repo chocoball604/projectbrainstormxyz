@@ -1430,6 +1430,88 @@ def _check_and_fix_name_plausibility(personas, study_dict, lisa_model_id):
     return personas
 
 
+def _detect_actual_content_language(personas, expected_lang_code):
+    if expected_lang_code == "en":
+        return "en"
+    sample_text = ""
+    for p in personas:
+        for fld in ("persona_summary", "demographic_frame", "psychographic_profile"):
+            val = p.get(fld, "")
+            if isinstance(val, str) and len(val) > 30:
+                sample_text += val + " "
+                if len(sample_text) > 400:
+                    break
+        if len(sample_text) > 400:
+            break
+    if not sample_text:
+        return expected_lang_code
+    ascii_chars = sum(1 for c in sample_text if c.isascii() and c.isalpha())
+    total_alpha = sum(1 for c in sample_text if c.isalpha())
+    if total_alpha == 0:
+        return expected_lang_code
+    ascii_ratio = ascii_chars / total_alpha
+    if ascii_ratio > 0.85:
+        return "en"
+    return expected_lang_code
+
+
+_JSON_FIELD_LABELS = {
+    "age": "Age", "gender": "Gender", "location": "Location",
+    "education": "Education", "income_level": "Income Level",
+    "family_structure": "Family Structure", "occupation": "Occupation",
+    "personality": "Personality", "interests": "Interests",
+    "values": "Values", "lifestyle": "Lifestyle", "attitudes": "Attitudes",
+    "market_segment": "Market Segment", "competitive_context": "Competitive Context",
+    "adoption_barriers": "Adoption Barriers", "cultural_considerations": "Cultural Considerations",
+    "shopping_habits": "Shopping Habits", "product_preferences": "Product Preferences",
+    "brand_loyalty": "Brand Loyalty", "social_influence": "Social Influence",
+    "decision_making": "Decision Making", "media_consumption": "Media Consumption",
+    "motivations": "Motivations", "pain_points": "Pain Points",
+    "trigger_events": "Trigger Events", "goals": "Goals",
+}
+
+
+def _json_to_prose(json_str):
+    try:
+        obj = json.loads(json_str)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(obj, dict):
+        return None
+    lines = []
+    for k, v in obj.items():
+        label = _JSON_FIELD_LABELS.get(k, k.replace("_", " ").title())
+        val = str(v).strip() if v else ""
+        if val:
+            lines.append(f"{label}: {val}")
+    if not lines:
+        return None
+    return ". ".join(lines) + "."
+
+
+def _fix_json_structured_fields(personas, study_id="?"):
+    prose_fields = [
+        "demographic_frame", "psychographic_profile",
+        "contextual_constraints", "behavioural_tendencies",
+        "confidence_and_limits",
+    ]
+    any_fixed = False
+    for i, p in enumerate(personas):
+        for fld in prose_fields:
+            val = p.get(fld, "")
+            if not isinstance(val, str):
+                continue
+            stripped = val.strip()
+            if stripped.startswith("{") and stripped.endswith("}"):
+                prose = _json_to_prose(stripped)
+                if prose:
+                    p[fld] = prose
+                    any_fixed = True
+    if any_fixed:
+        print(f"JSON_TO_PROSE_FIX study={study_id} fixed_personas={sum(1 for p in personas for f in prose_fields if not (p.get(f,'') or '').strip().startswith('{'))}", flush=True)
+    return personas
+
+
 def get_monthly_usage(conn, user_id):
     import calendar
 
@@ -7074,6 +7156,14 @@ def run_study(study_id):
                     generated = _check_and_fix_name_plausibility(generated, study_snapshot, persona_gen_model)
                 except Exception as _np_err:
                     print(f"NAME_PLAUSIBILITY_OUTER_FAIL study={study_id} err={_np_err}", flush=True)
+                try:
+                    generated = _fix_json_structured_fields(generated, study_id=study_id)
+                except Exception as _jsf_err:
+                    print(f"JSON_TO_PROSE_OUTER_FAIL study={study_id} err={_jsf_err}", flush=True)
+                _actual_lang = _detect_actual_content_language(generated, _persona_content_lang)
+                if _actual_lang != _persona_content_lang:
+                    print(f"LANG_DETECT_OVERRIDE study={study_id} expected={_persona_content_lang} actual={_actual_lang}", flush=True)
+                    _persona_content_lang = _actual_lang
                 conn = get_db()
                 new_persona_ids = []
                 _mlg_grounding_text = (mlg_data or {}).get("grounding_sources_text", "")
@@ -7081,7 +7171,8 @@ def run_study(study_id):
                     if val is None:
                         return ""
                     if isinstance(val, dict):
-                        return json.dumps(val)
+                        prose = _json_to_prose(json.dumps(val))
+                        return prose if prose else json.dumps(val)
                     if isinstance(val, list):
                         return json.dumps(val)
                     return str(val)
