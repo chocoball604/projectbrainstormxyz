@@ -735,7 +735,7 @@
                     <li><strong>Decision to Support:</strong> {{ configure_study.decision_to_support }}</li>
                     <li><strong>Market / Geography:</strong> {{ configure_study.study_fit }}</li>
                     <li><strong>Product / Concept:</strong> {{ configure_study.known_vs_unknown }}</li>
-                    <li><strong>Target Audience:</strong> {{ configure_study.target_audience }}</li>
+                    <li><strong>Target Audience (Demographics / Socio-economics):</strong> {{ configure_study.target_audience }}</li>
                     {% if has_dui %}<li><strong>Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}</li>{% endif %}
                 </ul>
             </div>
@@ -784,14 +784,14 @@
                 <div id="anchor-slot-target_audience">
                 {% if has_ta %}
                 <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
-                    <strong style="color: #27ae60;">&#10003; 5. Target Audience:</strong> {{ configure_study.target_audience }}
+                    <strong style="color: #27ae60;">&#10003; 5. Target Audience (Demographics / Socio-economics):</strong> {{ configure_study.target_audience }}
                 </div>
                 {% else %}
                 <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="target_audience">
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="hidden" name="anchor_key" value="target_audience">
                     <div class="form-group" style="margin-bottom: 6px;">
-                        <label>5. Target Audience</label>
+                        <label>5. Target Audience (Demographics / Socio-economics)</label>
                         <textarea name="anchor_value" rows="2" required maxlength="300" placeholder="Who is the target audience for this research?"></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary btn-small">Save Target Audience</button>
@@ -1176,7 +1176,7 @@
                         {{ '✓' if has_pc_panel else '✗' }} Product / Concept
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_ta_panel else '#e74c3c' }};">
-                        {{ '✓' if has_ta_panel else '✗' }} Target Audience
+                        {{ '✓' if has_ta_panel else '✗' }} Target Audience (Demographics / Socio-economics)
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_dui_panel else '#999' }};">
                         {{ '✓' if has_dui_panel else '–' }} Definition of Useful Insight <span style="font-size:11px;color:#999;">(optional)</span>
@@ -1214,7 +1214,7 @@
                         {{ '✓' if has_pc_panel else '✗' }} Product / Concept
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_ta_panel else '#e74c3c' }};">
-                        {{ '✓' if has_ta_panel else '✗' }} Target Audience
+                        {{ '✓' if has_ta_panel else '✗' }} Target Audience (Demographics / Socio-economics)
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_dui_panel else '#999' }};">
                         {{ '✓' if has_dui_panel else '–' }} Definition of Useful Insight <span style="font-size:11px;color:#999;">(optional)</span>
@@ -1271,7 +1271,7 @@
             var anchorLabels = {
                 'market_geography': '3. Market / Geography',
                 'product_concept': '4. Product / Concept',
-                'target_audience': '5. Target Audience'
+                'target_audience': '5. Target Audience (Demographics / Socio-economics)'
             };
 
             var discoveryLabels = {
@@ -1294,7 +1294,7 @@
                         {key: 'has_ds', label: 'Decision to Support', optional: false},
                         {key: 'has_mg', label: 'Market / Geography', optional: false},
                         {key: 'has_pc', label: 'Product / Concept', optional: false},
-                        {key: 'has_ta', label: 'Target Audience', optional: false},
+                        {key: 'has_ta', label: 'Target Audience (Demographics / Socio-economics)', optional: false},
                         {key: 'has_dui', label: 'Definition of Useful Insight', optional: true}
                     ];
                     for (var i = 0; i < sFields.length && i < items.length; i++) {
@@ -1331,7 +1331,7 @@
                         {key: 'has_ds', label: 'Decision to Support', optional: false},
                         {key: 'has_mg', label: 'Market / Geography', optional: false},
                         {key: 'has_pc', label: 'Product / Concept', optional: false},
-                        {key: 'has_ta', label: 'Target Audience', optional: false},
+                        {key: 'has_ta', label: 'Target Audience (Demographics / Socio-economics)', optional: false},
                         {key: 'has_dui', label: 'Definition of Useful Insight', optional: true}
                     ];
                     for (var i = 0; i < fields.length && i < items.length; i++) {
@@ -2690,7 +2690,7 @@
                     <textarea id="sv-ds" name="decision_to_support" rows="2" required></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="sv-ta">Target Audience</label>
+                    <label for="sv-ta">Target Audience (Demographics / Socio-economics)</label>
                     <textarea id="sv-ta" name="target_audience" rows="2" required></textarea>
                 </div>
                 <div class="form-group">
@@ -2792,7 +2792,7 @@
                     <textarea id="brief-ku" name="known_vs_unknown" rows="3" required></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="brief-ta">4. Target Audience</label>
+                    <label for="brief-ta">4. Target Audience (Demographics / Socio-economics)</label>
                     <textarea id="brief-ta" name="target_audience" rows="3" required></textarea>
                 </div>
                 <div class="form-group">
