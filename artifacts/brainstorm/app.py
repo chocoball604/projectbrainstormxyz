@@ -6401,6 +6401,233 @@ def get_coaching_nudge(study, persona_count):
     return "Thanks for your message! I've noted your input — we'll use this as we shape the study together."
 
 
+def _sync_translate_study_output(study_id, user_id, target_lang, output_lang):
+    if output_lang == target_lang:
+        return
+    target_lang_name = LANG_CODE_TO_NAME.get(target_lang, target_lang)
+    source_lang_name = LANG_CODE_TO_NAME.get(output_lang, output_lang)
+
+    conn = get_db()
+    study_dict = dict(conn.execute("SELECT * FROM studies WHERE id = ? AND user_id = ?", (study_id, user_id)).fetchone())
+    existing = study_dict.get("translated_output")
+    if existing:
+        try:
+            existing_data = json.loads(existing)
+            if isinstance(existing_data, dict) and existing_data.get("lang") == target_lang and existing_data.get("sections"):
+                conn.close()
+                print(f"SYNC_TRANSLATE_SKIP study={study_id} reason=already_cached", flush=True)
+                return
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    raw_output = study_dict.get("final_report") or study_dict.get("study_output") or ""
+    if not raw_output.strip():
+        conn.close()
+        return
+
+    mc = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM model_config").fetchall()}
+    translate_model = mc.get("mark_model", "")
+    if not translate_model:
+        conn.close()
+        print(f"SYNC_TRANSLATE_SKIP study={study_id} reason=no_model", flush=True)
+        return
+
+    followup_rows = conn.execute("SELECT * FROM followups WHERE study_id = ? ORDER BY followup_round ASC", (study_id,)).fetchall()
+    followups = [dict(f) for f in followup_rows]
+    _personas_used_raw = study_dict.get("personas_used")
+    _persona_data_for_report = []
+    if _personas_used_raw:
+        try:
+            _pids = json.loads(_personas_used_raw) if isinstance(_personas_used_raw, str) else _personas_used_raw
+            if _pids:
+                _ph = ",".join("?" for _ in _pids)
+                _persona_data_for_report = [
+                    dict(r) for r in conn.execute(
+                        f"SELECT persona_id, persona_instance_id, name, persona_summary, demographic_frame, psychographic_profile, contextual_constraints, behavioural_tendencies FROM personas WHERE (persona_instance_id IN ({_ph}) OR persona_id IN ({_ph})) AND user_id = ? ORDER BY name",
+                        _pids + _pids + [user_id],
+                    ).fetchall()
+                ]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    report = build_structured_report(study_dict, followups=followups, uploaded_filenames=[], persona_data=_persona_data_for_report)
+
+    sections_to_translate = {}
+    for skey in ("key_findings", "what_surprised_us", "risks_limits",
+                 "grounding_coverage", "sources_citations", "persona_summaries"):
+        val = report.get(skey) or ""
+        if val.strip():
+            sections_to_translate[skey] = val
+    for fus in report.get("followup_sections", []):
+        fkey = f"followup_{fus['round']}"
+        if fus.get("content", "").strip():
+            sections_to_translate[fkey] = fus["content"]
+
+    conn.close()
+
+    translate_system = (
+        f"You are a professional translator specializing in market research documents. "
+        f"Translate the following research output from {source_lang_name} to {target_lang_name}. "
+        f"Preserve all formatting, section headers, speaker labels, and structure exactly. "
+        f"Do not add commentary or explanations. "
+        f"Translate the content faithfully, maintaining the analytical tone and research terminology."
+    )
+
+    try:
+        translated = call_llm(
+            translate_model,
+            [{"role": "system", "content": translate_system}, {"role": "user", "content": raw_output}],
+            purpose="sync_translate_study_output",
+            timeout_seconds=120,
+        )
+    except Exception as e:
+        print(f"SYNC_TRANSLATE_FAIL study={study_id} stage=full_output err={e}", flush=True)
+        return
+
+    if not translated or not translated.strip():
+        print(f"SYNC_TRANSLATE_FAIL study={study_id} stage=full_output err=empty_result", flush=True)
+        return
+
+    translated_text = translated.strip()
+    translated_sections = {}
+
+    section_system = (
+        f"You are a professional translator specializing in market research documents. "
+        f"Translate the following text from {source_lang_name} to {target_lang_name}. "
+        f"Preserve all formatting, line breaks, bullet points, and structure exactly. "
+        f"Do not add commentary or explanations. Output ONLY the translated text."
+    )
+    for skey, sval in sections_to_translate.items():
+        try:
+            section_translated = call_llm(
+                translate_model,
+                [{"role": "system", "content": section_system}, {"role": "user", "content": sval}],
+                purpose="sync_translate_study_section",
+                timeout_seconds=90,
+            )
+            if section_translated and section_translated.strip():
+                translated_sections[skey] = section_translated.strip()
+        except Exception as e:
+            print(f"SYNC_TRANSLATE_SECTION_FAIL study={study_id} key={skey} err={e}", flush=True)
+
+    translation_data = json.dumps({"lang": target_lang, "text": translated_text, "sections": translated_sections})
+    conn = get_db()
+    conn.execute("UPDATE studies SET translated_output = ? WHERE id = ? AND user_id = ?", (translation_data, study_id, user_id))
+    conn.commit()
+    conn.close()
+    print(f"SYNC_TRANSLATE_DONE study={study_id} from={output_lang} to={target_lang} sections={len(translated_sections)}", flush=True)
+
+
+def _sync_translate_personas(study_id, user_id, target_lang):
+    conn = get_db()
+    study_row = conn.execute("SELECT personas_used FROM studies WHERE id = ? AND user_id = ?", (study_id, user_id)).fetchone()
+    if not study_row:
+        conn.close()
+        return
+    personas_used_raw = study_row["personas_used"]
+    if not personas_used_raw:
+        conn.close()
+        return
+    try:
+        pids = json.loads(personas_used_raw) if isinstance(personas_used_raw, str) else personas_used_raw
+    except (json.JSONDecodeError, TypeError):
+        conn.close()
+        return
+    if not pids:
+        conn.close()
+        return
+
+    mc = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM model_config").fetchall()}
+    translate_model = mc.get("mark_model", "")
+    if not translate_model:
+        conn.close()
+        print(f"SYNC_TRANSLATE_PERSONAS_SKIP study={study_id} reason=no_model", flush=True)
+        return
+
+    _ph = ",".join("?" for _ in pids)
+    persona_rows = conn.execute(
+        f"SELECT persona_instance_id, name, content_language, translated_content, persona_summary, demographic_frame, psychographic_profile, contextual_constraints, behavioural_tendencies, confidence_and_limits FROM personas WHERE persona_instance_id IN ({_ph}) AND user_id = ?",
+        pids + [user_id],
+    ).fetchall()
+    conn.close()
+
+    target_lang_name = LANG_CODE_TO_NAME.get(target_lang, target_lang)
+    translate_fields = ["name", "persona_summary", "demographic_frame", "psychographic_profile",
+                        "contextual_constraints", "behavioural_tendencies", "confidence_and_limits"]
+
+    section_system_tpl = (
+        "You are a professional translator. Translate the following persona dossier sections "
+        "from {source} to {target}. "
+        "Preserve the === section_name === headers exactly as-is (in English). "
+        "Translate only the content within each section. "
+        "Maintain professional market research tone."
+    )
+
+    for pr in persona_rows:
+        p_dict = dict(pr)
+        pid = p_dict["persona_instance_id"]
+        content_lang = p_dict.get("content_language") or "en"
+        if content_lang == target_lang:
+            continue
+        existing = p_dict.get("translated_content")
+        if existing:
+            try:
+                ex_data = json.loads(existing)
+                if isinstance(ex_data, dict) and ex_data.get("lang") == target_lang:
+                    continue
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        source_lang_name = LANG_CODE_TO_NAME.get(content_lang, content_lang)
+        original_text = ""
+        for f in translate_fields:
+            val = p_dict.get(f, "") or ""
+            original_text += f"=== {f} ===\n{val}\n\n"
+
+        if not original_text.strip():
+            continue
+
+        section_system = section_system_tpl.format(source=source_lang_name, target=target_lang_name)
+        try:
+            translated_raw = call_llm(
+                translate_model,
+                [{"role": "system", "content": section_system}, {"role": "user", "content": original_text}],
+                purpose="sync_translate_persona",
+                timeout_seconds=90,
+            )
+        except Exception as e:
+            print(f"SYNC_TRANSLATE_PERSONA_FAIL study={study_id} pid={pid} err={e}", flush=True)
+            continue
+
+        if not translated_raw or not translated_raw.strip():
+            continue
+
+        translated_fields = {}
+        for f in translate_fields:
+            marker = f"=== {f} ==="
+            idx = translated_raw.find(marker)
+            if idx >= 0:
+                start = idx + len(marker)
+                next_marker_idx = translated_raw.find("===", start + 1)
+                if next_marker_idx > 0:
+                    section_text = translated_raw[start:next_marker_idx].strip()
+                    if section_text.startswith("\n"):
+                        section_text = section_text[1:]
+                    last_newline = section_text.rfind("\n")
+                    if last_newline > 0 and section_text[last_newline:].strip() == "":
+                        section_text = section_text[:last_newline].strip()
+                else:
+                    section_text = translated_raw[start:].strip()
+                translated_fields[f] = section_text
+
+        translation_data = json.dumps({"lang": target_lang, "fields": translated_fields})
+        conn2 = get_db()
+        conn2.execute("UPDATE personas SET translated_content = ? WHERE persona_instance_id = ? AND user_id = ?", (translation_data, pid, user_id))
+        conn2.commit()
+        conn2.close()
+        print(f"SYNC_TRANSLATE_PERSONA_DONE study={study_id} pid={pid} from={content_lang} to={target_lang}", flush=True)
+
+
 @app.route("/translate-output/<int:study_id>", methods=["POST"])
 def translate_output(study_id):
     token = get_token()
@@ -7855,6 +8082,25 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
     )
 
     conn.commit()
+    conn.close()
+    _active_conn[0] = get_db()
+
+    if final_status == "completed":
+        _user_iface_lang = request.cookies.get("pb_lang", "en")
+        if _user_iface_lang not in VALID_LANGS:
+            _user_iface_lang = "en"
+        if _user_iface_lang != _study_lang_code:
+            print(f"SYNC_TRANSLATE_START study={study_id} output_lang={_study_lang_code} user_lang={_user_iface_lang}", flush=True)
+            try:
+                _sync_translate_personas(study_id, user["id"], _user_iface_lang)
+            except Exception as _tp_err:
+                print(f"SYNC_TRANSLATE_PERSONAS_ERR study={study_id} err={_tp_err}", flush=True)
+            try:
+                _sync_translate_study_output(study_id, user["id"], _user_iface_lang, _study_lang_code)
+            except Exception as _to_err:
+                print(f"SYNC_TRANSLATE_OUTPUT_ERR study={study_id} err={_to_err}", flush=True)
+
+    conn = _active_conn[0]
 
     if ajax:
         result = {
@@ -9449,7 +9695,23 @@ def admin_dev_run_study(study_id):
     )
 
     conn.commit()
+    _dev_user_id = study["user_id"]
     conn.close()
+
+    if final_status == "completed":
+        _user_iface_lang = request.cookies.get("pb_lang", "en")
+        if _user_iface_lang not in VALID_LANGS:
+            _user_iface_lang = "en"
+        if _user_iface_lang != _dev_lang_code:
+            print(f"SYNC_TRANSLATE_START study={study_id} output_lang={_dev_lang_code} user_lang={_user_iface_lang}", flush=True)
+            try:
+                _sync_translate_personas(study_id, _dev_user_id, _user_iface_lang)
+            except Exception as _tp_err:
+                print(f"SYNC_TRANSLATE_PERSONAS_ERR study={study_id} err={_tp_err}", flush=True)
+            try:
+                _sync_translate_study_output(study_id, _dev_user_id, _user_iface_lang, _dev_lang_code)
+            except Exception as _to_err:
+                print(f"SYNC_TRANSLATE_OUTPUT_ERR study={study_id} err={_to_err}", flush=True)
 
     user, _ = get_session_data(token)
     if user:
