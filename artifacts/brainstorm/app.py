@@ -3852,6 +3852,15 @@ def create_study():
 
     if not title:
         return render_error("Title is required.")
+
+    _dup_conn = get_db()
+    _dup = _dup_conn.execute(
+        "SELECT id FROM studies WHERE user_id = ? AND LOWER(title) = LOWER(?)",
+        (user["id"], title),
+    ).fetchone()
+    _dup_conn.close()
+    if _dup:
+        return render_error(f'A study titled "{title}" already exists. Please choose a different title.')
     if study_type not in VALID_STUDY_TYPES:
         return render_error("Please select a valid study type.")
 
@@ -3973,6 +3982,15 @@ def create_study_tbd():
     title = (request.form.get("title") or "").strip()
     if not title:
         return render_error("Title is required.")
+
+    _dup_conn2 = get_db()
+    _dup2 = _dup_conn2.execute(
+        "SELECT id FROM studies WHERE user_id = ? AND LOWER(title) = LOWER(?)",
+        (user["id"], title),
+    ).fetchone()
+    _dup_conn2.close()
+    if _dup2:
+        return render_error(f'A study titled "{title}" already exists. Please choose a different title.')
 
     conn = get_db()
     conn.execute(
