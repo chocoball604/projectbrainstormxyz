@@ -2124,6 +2124,8 @@ def migrate_db(conn):
         conn.execute("ALTER TABLE studies ADD COLUMN output_language TEXT")
     if "translated_output" not in study_cols:
         conn.execute("ALTER TABLE studies ADD COLUMN translated_output TEXT")
+    if "exec_grounding_data" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN exec_grounding_data TEXT")
 
     fu_info = conn.execute("PRAGMA table_info(followups)").fetchall()
     fu_cols = [r[1] for r in fu_info]
@@ -5082,6 +5084,14 @@ def build_structured_report(
                 risk_lines.append(f"  {line.strip()}")
     sections["risks_limits"] = "\n".join(risk_lines)
 
+    _exec_gd = None
+    _exec_gd_raw = study.get("exec_grounding_data")
+    if _exec_gd_raw:
+        try:
+            _exec_gd = json.loads(_exec_gd_raw) if isinstance(_exec_gd_raw, str) else _exec_gd_raw
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     grounding_lines = []
     covered = []
     not_covered = []
@@ -5101,7 +5111,7 @@ def build_structured_report(
             grounding_lines.append(f"  \u2717 {nc}")
     grounding_lines.append("")
     grounding_lines.append("Grounding Mode: Population-Grounded Discovery")
-    grounding_lines.append("Population grounding serves as calibration context — informing persona realism,")
+    grounding_lines.append("Population grounding serves as calibration context \u2014 informing persona realism,")
     grounding_lines.append("cultural tone, and feasibility constraints. It is NOT evidentiary support for")
     grounding_lines.append("specific claims or findings.")
     grounding_lines.append("")
@@ -5111,6 +5121,29 @@ def build_structured_report(
         grounding_lines.append("Partial grounding coverage. Most anchors were defined but some gaps remain which may limit insight quality.")
     else:
         grounding_lines.append("Low grounding coverage. Several anchors were missing, which may significantly limit the quality and actionability of findings.")
+
+    grounding_lines.append("")
+    grounding_lines.append("Execution-Level Calibration:")
+    if _exec_gd and _exec_gd.get("grounding_used"):
+        _eg_sources = _exec_gd.get("sources", [])
+        _eg_ts = _exec_gd.get("tier_stats", {})
+        _eg_local = _eg_ts.get("local_web", {})
+        _eg_general = _eg_ts.get("general_web", {})
+        _total_retrieved = _eg_local.get("matched", 0) + _eg_general.get("matched", 0)
+        grounding_lines.append(f"  Population calibration context was provided to the execution model.")
+        grounding_lines.append(f"  Sources retrieved: {_total_retrieved} (shown: {len(_eg_sources)})")
+        if _eg_sources:
+            grounding_lines.append("  Calibration sources (used for realism, NOT cited as evidence):")
+            for _egs in _eg_sources[:MLG_MAX_SOURCES_SHOWN]:
+                _egs_title = _egs.get("title", "Untitled")
+                _egs_url = _egs.get("url", "")
+                if _egs_url:
+                    grounding_lines.append(f"    - {_egs_title} ({_egs_url})")
+                else:
+                    grounding_lines.append(f"    - {_egs_title}")
+    else:
+        grounding_lines.append("  No execution-level calibration context was available for this study.")
+
     sections["grounding_coverage"] = "\n".join(grounding_lines)
 
     source_lines = [
@@ -5145,6 +5178,16 @@ def build_structured_report(
     source_lines.append("any specific finding. Only objective, verifiable population-level facts")
     source_lines.append("(e.g., regulations, demographic statistics, historical events) may be cited")
     source_lines.append("as external evidence.")
+    if _exec_gd and _exec_gd.get("grounding_used") and _exec_gd.get("sources"):
+        source_lines.append("")
+        source_lines.append("Execution Calibration Sources (NOT evidence \u2014 used for population realism only):")
+        for _egs in _exec_gd["sources"][:MLG_MAX_SOURCES_SHOWN]:
+            _egs_title = _egs.get("title", "Untitled")
+            _egs_url = _egs.get("url", "")
+            if _egs_url:
+                source_lines.append(f"  - {_egs_title} ({_egs_url})")
+            else:
+                source_lines.append(f"  - {_egs_title}")
     source_lines.append("")
     sections["sources_citations"] = "\n".join(source_lines)
 
@@ -8048,9 +8091,27 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             f"Budget ceiling exceeded: {tokens_total} tokens > {ceiling} ceiling."
         )
 
+    _exec_grounding_json = None
+    if _exec_mlg_data:
+        try:
+            _eg_save = {
+                "sources": [
+                    {"title": s.get("name", s.get("title", "")), "url": s.get("url", ""), "score": s.get("_quality_score", s.get("score", 0))}
+                    for s in (_exec_mlg_data.get("sources") or [])
+                ],
+                "synthesized_summary": (_exec_mlg_data.get("synthesized_summary") or "")[:500],
+                "reason_code": _exec_mlg_data.get("reason_code", ""),
+                "grounding_used": _exec_mlg_data.get("grounding_used", False),
+                "tier_stats": _exec_mlg_data.get("tier_stats", {}),
+            }
+            _exec_grounding_json = json.dumps(_eg_save)
+        except Exception:
+            pass
+
     conn.execute(
         """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
-           confidence_summary = ?, final_report = ?, output_language = ? WHERE id = ?""",
+           confidence_summary = ?, final_report = ?, output_language = ?,
+           exec_grounding_data = ? WHERE id = ?""",
         (
             final_status,
             output,
@@ -8059,6 +8120,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             confidence_summary,
             final_report,
             _study_lang_code,
+            _exec_grounding_json,
             study_id,
         ),
     )
