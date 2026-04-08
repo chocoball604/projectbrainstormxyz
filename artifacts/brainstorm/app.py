@@ -284,6 +284,7 @@ os.makedirs(BLOG_STATIC_DIR, exist_ok=True)
 def call_llm(model_id, messages, purpose="", timeout_seconds=60):
     """Single wrapper for all LLM calls via Replit AI Integrations (OpenRouter)."""
     import openai as _openai
+    import concurrent.futures
 
     base_url = os.environ.get("AI_INTEGRATIONS_OPENROUTER_BASE_URL")
     api_key = os.environ.get("AI_INTEGRATIONS_OPENROUTER_API_KEY")
@@ -291,13 +292,22 @@ def call_llm(model_id, messages, purpose="", timeout_seconds=60):
         raise NotImplementedError("LLM integration not connected yet")
 
     client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=timeout_seconds)
-    try:
-        resp = client.chat.completions.create(
+
+    def _do_call():
+        return client.chat.completions.create(
             model=model_id,
             messages=messages,
             max_tokens=8192,
         )
+
+    wall_clock_limit = timeout_seconds + 15
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_do_call)
+            resp = future.result(timeout=wall_clock_limit)
         return resp.choices[0].message.content or ""
+    except concurrent.futures.TimeoutError:
+        raise RuntimeError(f"LLM timeout for {model_id}: Wall-clock limit ({wall_clock_limit}s) exceeded")
     except _openai.APITimeoutError as e:
         raise RuntimeError(f"LLM timeout for {model_id}: {str(e)[:200]}")
     except _openai.APIError as e:
@@ -1361,6 +1371,11 @@ def lisa_generate_personas(study_dict, n, lisa_model_id, grounding_summary=""):
             print(
                 f"PERSONA_GEN_TIMEOUT study={study_id} attempt={attempt_label} "
                 f"model={lisa_model_id} err={e}",
+                flush=True,
+            )
+            print(
+                f"PERSONA_TIMEOUT_NO_RETRY study={study_id} model={lisa_model_id} "
+                f"reason=timeout_is_non_recoverable",
                 flush=True,
             )
             raise
