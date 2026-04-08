@@ -7151,7 +7151,7 @@ def run_study(study_id):
                 if excluded_fail:
                     fail_warning = "Models excluded from persona pool (health check FAIL): " + ", ".join(excluded_fail)
                     print(f"PERSONA_POOL_FAIL_EXCLUSION study={study_id} excluded={excluded_fail}", flush=True)
-                    existing_notes = study.get("qa_notes") or ""
+                    existing_notes = (study["qa_notes"] if "qa_notes" in study.keys() else "") or ""
                     try:
                         notes_list = json.loads(existing_notes) if existing_notes else []
                     except (json.JSONDecodeError, TypeError):
