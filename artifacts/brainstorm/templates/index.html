@@ -1503,6 +1503,7 @@
                 }
 
                 var _resolved = false;
+                var _fetchDone = false;
                 function finishSuccess() {
                     if (_resolved) return;
                     _resolved = true;
@@ -1516,6 +1517,9 @@
                             if (d.done) {
                                 clearInterval(pollIv);
                                 finishSuccess();
+                            } else if (d.status === 'draft' && _fetchDone) {
+                                clearInterval(pollIv);
+                                renderExecError(ob, sid, 'Study execution failed. The study has been reset to draft.');
                             }
                         })
                         .catch(function() {});
@@ -1529,6 +1533,7 @@
                     body: fd
                 })
                 .then(function(resp) {
+                    _fetchDone = true;
                     if (!resp.ok) {
                         return resp.json().catch(function() { return { ok: false, error: 'Server error (HTTP ' + resp.status + ')' }; });
                     }
@@ -1549,18 +1554,36 @@
                     }
                 })
                 .catch(function(err) {
-                    if (!_resolved) {
-                        clearInterval(pollIv);
-                        fetch('/study-status/' + sid + '?token=' + encodeURIComponent(token))
-                            .then(function(r) { return r.json(); })
-                            .then(function(d) {
-                                if (d.done) { finishSuccess(); }
-                                else { renderExecError(ob, sid, 'Network error: ' + err.message); }
-                            })
-                            .catch(function() {
-                                renderExecError(ob, sid, 'Network error: ' + err.message);
-                            });
-                    }
+                    _fetchDone = true;
+                    if (_resolved) return;
+                    fetch('/study-status/' + sid + '?token=' + encodeURIComponent(token))
+                        .then(function(r) { return r.json(); })
+                        .then(function(d) {
+                            if (d.done) {
+                                clearInterval(pollIv);
+                                finishSuccess();
+                            } else if (d.status === 'running') {
+                                if (ob) {
+                                    ob.innerHTML = '<div style="text-align:center;padding:24px;">'
+                                        + '<div style="display:inline-block;width:28px;height:28px;border:3px solid #5C7E8F;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px;"></div>'
+                                        + '<p style="font-size:14px;color:#004085;font-weight:600;margin:0 0 4px;">Study still running\u2026</p>'
+                                        + '<p style="font-size:12px;color:#666;margin:0;">Lisa is generating personas and research output. This may take several minutes for complex studies.</p>'
+                                        + '</div>';
+                                }
+                            } else {
+                                clearInterval(pollIv);
+                                renderExecError(ob, sid, 'Network error during execution. Please reload the page and check your study status.');
+                            }
+                        })
+                        .catch(function() {
+                            if (ob) {
+                                ob.innerHTML = '<div style="text-align:center;padding:24px;">'
+                                    + '<div style="display:inline-block;width:28px;height:28px;border:3px solid #5C7E8F;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px;"></div>'
+                                    + '<p style="font-size:14px;color:#004085;font-weight:600;margin:0 0 4px;">Connection interrupted</p>'
+                                    + '<p style="font-size:12px;color:#666;margin:0;">The study may still be running. Polling will continue\u2026</p>'
+                                    + '</div>';
+                            }
+                        });
                 });
             }
 
