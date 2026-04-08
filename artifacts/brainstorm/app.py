@@ -801,7 +801,7 @@ def _mlg_tier2_admin_uploads(conn):
 
 def _mlg_build_relevance_keywords(study_dict):
     parts = []
-    for key in ("known_vs_unknown", "target_audience", "study_fit", "business_problem"):
+    for key in ("target_audience", "study_fit"):
         val = (study_dict.get(key) or "").strip()
         if val:
             for word in val.lower().split():
@@ -878,7 +878,7 @@ def _mlg_tier3_admin_web(admin_web_sources, relevance_keywords=None):
     return sources, snippets, attempted, matched
 
 
-def _mlg_tier4_local_web(market_geo, lang_name, product_context, relevance_keywords=None):
+def _mlg_tier4_local_web(market_geo, lang_name, target_audience, relevance_keywords=None):
     try:
         from ddgs import DDGS
     except ImportError:
@@ -890,9 +890,11 @@ def _mlg_tier4_local_web(market_geo, lang_name, product_context, relevance_keywo
 
     queries = []
     geo_clean = (market_geo or "").strip()
+    ta_clean = (target_audience or "").strip()
     if geo_clean and lang_name and lang_name != "English":
-        queries.append(f"{product_context} market trends {geo_clean}")
-        queries.append(f"{geo_clean} consumer behaviour {product_context}")
+        queries.append(f"{geo_clean} demographics population socioeconomic")
+        if ta_clean:
+            queries.append(f"{ta_clean} {geo_clean} lifestyle work patterns")
     if not queries:
         return [], [], 0, 0
 
@@ -926,7 +928,7 @@ def _mlg_tier4_local_web(market_geo, lang_name, product_context, relevance_keywo
     return sources, snippets, attempted, matched
 
 
-def _mlg_tier5_general_web(product_context, target_audience, relevance_keywords=None):
+def _mlg_tier5_general_web(market_geo, target_audience, relevance_keywords=None):
     try:
         from ddgs import DDGS
     except ImportError:
@@ -936,7 +938,9 @@ def _mlg_tier5_general_web(product_context, target_audience, relevance_keywords=
             print("MLG_TIER5_SKIP ddgs not installed", flush=True)
             return [], [], 0, 0
 
-    query = f"{product_context} {target_audience} consumer research"
+    ta_clean = (target_audience or "").strip()
+    geo_clean = (market_geo or "").strip()
+    query = f"{ta_clean} {geo_clean} demographics socioeconomic population".strip()
     sources = []
     snippets = []
     attempted = 1
@@ -969,7 +973,6 @@ def _mlg_synthesize_summary(raw_snippets, study_dict):
     if len(combined) > 4000:
         combined = combined[:4000]
     market = (study_dict.get("study_fit") or "").strip()
-    product = (study_dict.get("known_vs_unknown") or "").strip()
     audience = (study_dict.get("target_audience") or "").strip()
     try:
         summary = call_llm(
@@ -978,22 +981,25 @@ def _mlg_synthesize_summary(raw_snippets, study_dict):
                 {
                     "role": "system",
                     "content": (
-                        "You are a research grounding assistant. Synthesize the following source excerpts "
-                        "into a concise market/consumer context summary for persona creation. "
+                        "You are a population-grounding assistant. Synthesize the following source excerpts "
+                        "into a concise population-level context summary. "
                         "Rules:\n"
-                        "1. Output ONLY key facts relevant to the market, consumer behaviour, and product context.\n"
+                        "1. Output ONLY population-level facts: demographics, socio-economic conditions, "
+                        "cultural norms, lifestyle patterns, work/life realities, class dynamics, and "
+                        "economic structure of the defined market segment.\n"
                         "2. Maximum 300 words. Be concise and factual.\n"
                         "3. Do NOT copy text verbatim — distill and paraphrase.\n"
                         "4. Do NOT add opinions or speculation.\n"
-                        "5. Do NOT include source URLs or citations — just the synthesized facts."
+                        "5. Do NOT include source URLs or citations — just the synthesized facts.\n"
+                        "6. Do NOT reference any product, brand, category, or commercial context. "
+                        "Focus exclusively on who these people are, not what they buy."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
                         f"Market/Geography: {market}\n"
-                        f"Product/Concept: {product}\n"
-                        f"Target Audience: {audience}\n\n"
+                        f"Target Audience (Demographics / Socio-economics): {audience}\n\n"
                         f"Source excerpts to synthesize:\n{combined}"
                     ),
                 },
@@ -1148,20 +1154,19 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     all_snippets.extend(t3_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
 
     market_geo = (study_dict.get("study_fit") or "").strip()
-    product_ctx = (study_dict.get("known_vs_unknown") or "").strip()
     target_aud = (study_dict.get("target_audience") or "").strip()
     _g_admin_srcs = admin_web_sources
     _, lang_name = infer_market_language(market_geo, _g_admin_srcs)
 
     t4_sources, t4_snippets, t4_attempted, t4_matched = _mlg_tier4_local_web(
-        market_geo, lang_name, product_ctx, relevance_kw
+        market_geo, lang_name, target_aud, relevance_kw
     )
     tier_stats["local_web"] = {"attempted": t4_attempted, "matched": t4_matched}
     all_sources.extend(t4_sources[:MLG_MAX_SNIPPETS_PER_TIER])
     all_snippets.extend(t4_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
 
     t5_sources, t5_snippets, t5_attempted, t5_matched = _mlg_tier5_general_web(
-        product_ctx, target_aud, relevance_kw
+        market_geo, target_aud, relevance_kw
     )
     tier_stats["general_web"] = {"attempted": t5_attempted, "matched": t5_matched}
     all_sources.extend(t5_sources[:MLG_MAX_SNIPPETS_PER_TIER])
@@ -1214,20 +1219,13 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
 
 
 def lisa_generate_personas(study_dict, n, lisa_model_id, grounding_summary=""):
-    brief_fields = [
-        ("business_problem", "Business Problem"),
-        ("decision_to_support", "Decision to Support"),
-        ("known_vs_unknown", "Product / Concept"),
-        ("target_audience", "Target Audience"),
-        ("study_fit", "Market / Geography"),
-    ]
-    brief_text = ""
-    for field, label in brief_fields:
-        val = (study_dict.get(field) or "").strip()
-        brief_text += f"{label}: {val or 'Not specified'}\n"
-    dui_val = (study_dict.get("definition_useful_insight") or "").strip()
-    if dui_val:
-        brief_text += f"Definition of Useful Insight: {dui_val}\n"
+    _pop_market = (study_dict.get("study_fit") or "").strip()
+    _pop_audience = (study_dict.get("target_audience") or "").strip()
+
+    _interp_product = (study_dict.get("known_vs_unknown") or "").strip()
+    _interp_bp = (study_dict.get("business_problem") or "").strip()
+    _interp_ds = (study_dict.get("decision_to_support") or "").strip()
+    _interp_dui = (study_dict.get("definition_useful_insight") or "").strip()
 
     study_type_label = (
         "In-Depth Interview (IDI)"
@@ -1244,7 +1242,7 @@ def lisa_generate_personas(study_dict, n, lisa_model_id, grounding_summary=""):
         '"confidence_and_limits": "..."}]}\n\n'
     )
 
-    _persona_geo = (study_dict.get("study_fit") or "").strip()
+    _persona_geo = _pop_market
     _persona_admin_srcs = []
     try:
         _p_conn = get_db()
@@ -1256,38 +1254,74 @@ def lisa_generate_personas(study_dict, n, lisa_model_id, grounding_summary=""):
     _persona_lang_rule = ""
     if _p_lang_code != "en":
         _persona_lang_rule = (
-            f"\n7. LANGUAGE: Write persona dossier content (persona_summary, demographic_frame, "
+            f"\nLANGUAGE: Write persona dossier content (persona_summary, demographic_frame, "
             f"psychographic_profile, contextual_constraints, behavioural_tendencies, grounding_sources, "
             f"confidence_and_limits) in {_p_lang_name}, as appropriate for the {_persona_geo} market. "
-            f"Keep JSON keys in English."
+            f"Keep JSON keys in English.\n"
         )
 
     system_prompt = (
-        "You are Lisa, a senior qualitative research analyst at Project Brainstorm. "
-        "Generate realistic, diverse synthetic research personas for a qualitative study.\n\n"
-        + base_json_instruction +
-        "RULES:\n"
+        "You are Lisa, a senior qualitative research analyst at Project Brainstorm.\n\n"
+        "GROUNDING MODE: Population-Grounded Discovery\n\n"
+        "CORE PRINCIPLE: Personas represent who exists in the market segment, "
+        "not who already cares about the product. Find people first. "
+        "Expose them to the idea later.\n\n"
+        "SCOPE SEPARATION (NON-NEGOTIABLE):\n"
+        "- Population grounding answers: 'Who exists in this market segment?'\n"
+        "- Interpretive context answers: 'How might these people interpret or react to an idea?'\n"
+        "These are different concerns and MUST NOT be conflated.\n\n"
+        "FIELD RULES:\n"
+        "- POPULATION-DEFINING (use for identity, background, worldview): "
+        "Market / Geography, Target Audience (Demographics / Socio-economics)\n"
+        "- INTERPRETATION-ONLY (use ONLY for framing reactions/attitudes AFTER identity is set): "
+        "Product / Concept, Business Problem, Decision to Support\n"
+        "- Product / Concept MUST NOT influence whether a person exists, their baseline "
+        "category affinity, or inclusion/exclusion from the population.\n\n"
+        + base_json_instruction
+        + "PERSONA GENERATION RULES:\n"
         f"1. Generate exactly {n} persona(s).\n"
         "2. Each persona must be distinct in demographics, psychographics, and behaviour.\n"
-        "3. Personas should be grounded in the target audience and research context.\n"
-        "4. Each persona name must be culturally and socially plausible for the target market "
-        "and language, consistent with how real people in that market are commonly named. "
-        "Use full given name and family name as appropriate for the culture.\n"
-        "5. Be culturally grounded for Asia-Pacific markets where relevant.\n"
-        "6. Each field must be substantive (50-200 words), not placeholder text."
+        "3. Base identity, background, and worldview on Market / Geography and "
+        "Target Audience ONLY.\n"
+        "4. Do NOT assume prior interest in or familiarity with the Product / Concept.\n"
+        "5. Personas may be indifferent, skeptical, unaware, confused, or negative "
+        "toward the product. This is expected and correct.\n"
+        "6. Do NOT optimize for positive or commercially favourable reactions.\n"
+        "7. Each persona name must be culturally and socially plausible for the target "
+        "market and language. Use full given name and family name as appropriate.\n"
+        "8. Each field must be substantive (50-200 words), not placeholder text.\n"
+        "9. Product / Concept may influence what the person notices, how they interpret "
+        "value or risk, and what questions or doubts they have — but MUST NOT influence "
+        "whether the person exists or their baseline category affinity.\n"
+        "10. Diversity, neutrality, and realism are required.\n"
         + _persona_lang_rule
     )
 
     if grounding_summary:
         system_prompt += (
-            "\n\nGROUNDING CONTEXT (synthesized from live sources — use as contextual signal "
-            "to inform persona realism, do NOT copy verbatim):\n"
+            "\nGROUNDING CONTEXT (population-level facts synthesized from live sources — "
+            "use to inform demographic realism and socio-economic accuracy, do NOT copy verbatim):\n"
             + grounding_summary
         )
 
+    population_section = (
+        "--- POPULATION-DEFINING INPUTS (use for identity) ---\n"
+        f"Market / Geography: {_pop_market or 'Not specified'}\n"
+        f"Target Audience (Demographics / Socio-economics): {_pop_audience or 'Not specified'}\n"
+    )
+
+    interpretation_section = (
+        "--- INTERPRETATION-ONLY CONTEXT (use ONLY for framing reactions, NOT for identity) ---\n"
+        f"Product / Concept: {_interp_product or 'Not specified'}\n"
+        f"Business Problem: {_interp_bp or 'Not specified'}\n"
+        f"Decision to Support: {_interp_ds or 'Not specified'}\n"
+    )
+    if _interp_dui:
+        interpretation_section += f"Definition of Useful Insight: {_interp_dui}\n"
+
     oc_block, oc_keys = _extract_optional_context(study_dict)
     if oc_block:
-        brief_text += f"\n{oc_block}\n"
+        interpretation_section += f"\n{oc_block}\n"
     study_title = study_dict.get("title", "Untitled Study")
     study_id = study_dict.get("id", "?")
     print(f'OPTIONAL_CONTEXT_INJECT_LISA_PERSONA study_title="{study_title}" included={"true" if oc_keys else "false"} keys={",".join(oc_keys)}', flush=True)
@@ -1295,7 +1329,8 @@ def lisa_generate_personas(study_dict, n, lisa_model_id, grounding_summary=""):
     user_prompt = (
         f"Study: {study_title}\n"
         f"Type: {study_type_label}\n\n"
-        f"Research Brief:\n{brief_text}\n"
+        f"{population_section}\n"
+        f"{interpretation_section}\n"
         f"Generate {n} persona(s) for this study."
     )
 
