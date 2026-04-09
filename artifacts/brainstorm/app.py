@@ -6095,13 +6095,23 @@ def run_ben_qa(study_dict):
                     continue
 
                 pt_row = gov_conn.execute(
-                    "SELECT id FROM grounding_traces WHERE trigger_event = 'persona_created' AND persona_id = ?",
+                    "SELECT id, mlg_data FROM grounding_traces WHERE trigger_event = 'persona_created' AND persona_id = ?",
                     (pid,),
                 ).fetchone()
                 if not pt_row:
                     gov_failures.append(
                         f"Missing Grounding Trace for persona_created (persona {pid})."
                     )
+                elif pt_row["mlg_data"]:
+                    try:
+                        _pt_mlg = json.loads(pt_row["mlg_data"]) if isinstance(pt_row["mlg_data"], str) else pt_row["mlg_data"]
+                        if _pt_mlg.get("context_sources"):
+                            gov_failures.append(
+                                f"Persona {pid} grounding trace contains context_sources — "
+                                "context citations must NOT influence persona selection/creation."
+                            )
+                    except (json.JSONDecodeError, TypeError):
+                        pass
 
         _excluded_fields = ["known_vs_unknown", "business_problem", "competitive_context"]
         if gt_row:
@@ -6138,6 +6148,7 @@ def run_ben_qa(study_dict):
             "validated by context sources",
             "context sources validate",
             "supported by context sources",
+            "supported by media",
         ]
         for _cem in _ctx_evidence_markers:
             if _cem in _output_lower:
@@ -6146,6 +6157,31 @@ def run_ben_qa(study_dict):
                     "Context sources are for reaction realism only, NOT evidentiary support."
                 )
                 break
+
+        import re as _re_mod
+        _ctx_ref_patterns = [
+            r"i (?:read|saw|heard|noticed) (?:somewhere|recently|that|about|in the news)",
+            r"(?:news|media|article|report)s? (?:say|said|mention|suggest|show|indicate)",
+            r"according to (?:a |an |the )?(?:news|media|article|report|story)",
+        ]
+        _has_context_tag = "[context — not evidence]" in _output_lower or "[context – not evidence]" in _output_lower
+        _qa_egd_raw_ctx = study_dict.get("exec_grounding_data")
+        _qa_had_ctx_sources = False
+        if _qa_egd_raw_ctx:
+            try:
+                _qa_egd_ctx = json.loads(_qa_egd_raw_ctx) if isinstance(_qa_egd_raw_ctx, str) else _qa_egd_raw_ctx
+                _qa_had_ctx_sources = bool(_qa_egd_ctx.get("context_sources"))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if _qa_had_ctx_sources:
+            for _crp in _ctx_ref_patterns:
+                if _re_mod.search(_crp, _output_lower):
+                    if not _has_context_tag:
+                        gov_failures.append(
+                            "Output contains inline media/context references without the required "
+                            "[Context — NOT evidence] label. All inline context references must carry this tag."
+                        )
+                    break
 
         gov_conn.close()
     except Exception as e:
@@ -8000,9 +8036,17 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             "The following media articles represent narratives consumers may have encountered.",
             "They provide CONTEXT for reaction realism ONLY. They are NOT evidence, NOT",
             "validation, and must NOT be cited as supporting any specific finding.",
-            "You may optionally reference 1-2 of these in persona dialogue where a persona",
-            "would plausibly have encountered the narrative (e.g. 'I read somewhere that...').",
-            "Never for personal preferences or emotional reactions.",
+            "",
+            "INLINE CITATION RULES (MANDATORY):",
+            "- You may reference at most 1-2 of these in persona dialogue where a persona",
+            "  would plausibly have encountered the narrative (e.g. 'I read somewhere that...').",
+            "- Every such inline reference MUST be immediately followed by the exact tag:",
+            "  [Context — NOT evidence]",
+            "- Do NOT omit this tag. Any inline reference to media narratives without the",
+            "  explicit [Context — NOT evidence] label is a violation.",
+            "- Never use context sources for personal preferences or emotional reactions.",
+            "- Never describe context sources as 'evidence', 'proof', 'validation', or",
+            "  'support' for any finding.",
             "",
         ]
         for _cs in _exec_context_sources:
