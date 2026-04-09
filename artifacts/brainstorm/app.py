@@ -8382,8 +8382,27 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
     if output is None:
         output = generate_placeholder_output(study_type, dict(study), persona_names)
 
+    _exec_grounding_json = None
+    if _exec_mlg_data or _exec_context_sources:
+        try:
+            _eg_save = {
+                "sources": [
+                    {"title": s.get("name", s.get("title", "")), "url": s.get("url", ""), "score": s.get("_quality_score", s.get("score", 0)), "source_class": s.get("_source_class", "")}
+                    for s in ((_exec_mlg_data or {}).get("sources") or [])
+                ],
+                "synthesized_summary": ((_exec_mlg_data or {}).get("synthesized_summary") or "")[:500],
+                "reason_code": (_exec_mlg_data or {}).get("reason_code", ""),
+                "grounding_used": (_exec_mlg_data or {}).get("grounding_used", False),
+                "tier_stats": (_exec_mlg_data or {}).get("tier_stats", {}),
+                "context_sources": _exec_context_sources or [],
+            }
+            _exec_grounding_json = json.dumps(_eg_save)
+        except Exception:
+            pass
+
     study_data = dict(study)
     study_data["study_output"] = output
+    study_data["exec_grounding_data"] = _exec_grounding_json
 
     create_grounding_trace(
         conn,
@@ -8439,24 +8458,6 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         qa_notes = (
             f"Budget ceiling exceeded: {tokens_total} tokens > {ceiling} ceiling."
         )
-
-    _exec_grounding_json = None
-    if _exec_mlg_data or _exec_context_sources:
-        try:
-            _eg_save = {
-                "sources": [
-                    {"title": s.get("name", s.get("title", "")), "url": s.get("url", ""), "score": s.get("_quality_score", s.get("score", 0)), "source_class": s.get("_source_class", "")}
-                    for s in ((_exec_mlg_data or {}).get("sources") or [])
-                ],
-                "synthesized_summary": ((_exec_mlg_data or {}).get("synthesized_summary") or "")[:500],
-                "reason_code": (_exec_mlg_data or {}).get("reason_code", ""),
-                "grounding_used": (_exec_mlg_data or {}).get("grounding_used", False),
-                "tier_stats": (_exec_mlg_data or {}).get("tier_stats", {}),
-                "context_sources": _exec_context_sources or [],
-            }
-            _exec_grounding_json = json.dumps(_eg_save)
-        except Exception:
-            pass
 
     conn.execute(
         """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
