@@ -6607,6 +6607,8 @@ def _sync_translate_study_output(study_id, user_id, target_lang, output_lang):
     translate_system = (
         f"You are a professional translator specializing in market research documents. "
         f"Translate the following research output from {source_lang_name} to {target_lang_name}. "
+        f"Translate EVERYTHING including direct quotes, speaker dialogue, and supporting excerpts — "
+        f"do NOT leave any quoted speech in the original language. "
         f"Preserve all formatting, section headers, speaker labels, and structure exactly. "
         f"Do not add commentary or explanations. "
         f"Translate the content faithfully, maintaining the analytical tone and research terminology."
@@ -6633,6 +6635,8 @@ def _sync_translate_study_output(study_id, user_id, target_lang, output_lang):
     section_system = (
         f"You are a professional translator specializing in market research documents. "
         f"Translate the following text from {source_lang_name} to {target_lang_name}. "
+        f"Translate EVERYTHING including direct quotes, speaker dialogue, and supporting excerpts — "
+        f"do NOT leave any quoted speech in the original language. "
         f"Preserve all formatting, line breaks, bullet points, and structure exactly. "
         f"Do not add commentary or explanations. Output ONLY the translated text."
     )
@@ -6870,6 +6874,8 @@ def translate_output(study_id):
     translate_system = (
         f"You are a professional translator specializing in market research documents. "
         f"Translate the following research output from {source_lang_name} to {target_lang_name}. "
+        f"Translate EVERYTHING including direct quotes, speaker dialogue, and supporting excerpts — "
+        f"do NOT leave any quoted speech in the original language. "
         f"Preserve all formatting, section headers, speaker labels, and structure exactly. "
         f"Do not add commentary or explanations. "
         f"Translate the content faithfully, maintaining the analytical tone and research terminology."
@@ -6898,6 +6904,8 @@ def translate_output(study_id):
     section_system = (
         f"You are a professional translator specializing in market research documents. "
         f"Translate the following text from {source_lang_name} to {target_lang_name}. "
+        f"Translate EVERYTHING including direct quotes, speaker dialogue, and supporting excerpts — "
+        f"do NOT leave any quoted speech in the original language. "
         f"Preserve all formatting, line breaks, bullet points, and structure exactly. "
         f"Do not add commentary or explanations. Output ONLY the translated text."
     )
