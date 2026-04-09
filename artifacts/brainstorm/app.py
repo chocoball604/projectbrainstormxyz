@@ -1300,13 +1300,13 @@ CTX_CITATION_MODEL = "gpt-4o-mini"
 CTX_CITATION_MAX_SOURCES = 5
 
 
-def retrieve_context_citations(product_concept, business_problem, competitive_context=""):
+def retrieve_context_citations(product_concept, business_problem):
     """Retrieve context citations via OpenAI Responses API with web_search_preview.
 
-    Uses Product/Concept and Business Problem ONLY (never Market/Geography or
-    Target Audience demographics).  All search, retrieval, and ranking is
-    delegated to the model — the application only parses and labels returned
-    citations as Context (NOT evidence).
+    Uses Product/Concept and Business Problem ONLY (never Market/Geography,
+    Target Audience demographics, or Competitive Context).  All search,
+    retrieval, and ranking is delegated to the model — the application only
+    parses and labels returned citations as Context (NOT evidence).
     """
     import openai as _openai
 
@@ -1318,7 +1318,6 @@ def retrieve_context_citations(product_concept, business_problem, competitive_co
 
     pc = (product_concept or "").strip()
     bp = (business_problem or "").strip()
-    cc = (competitive_context or "").strip()
     if not pc and not bp:
         print("CTX_CITATION_SKIP reason=no_inputs", flush=True)
         return []
@@ -1328,8 +1327,6 @@ def retrieve_context_citations(product_concept, business_problem, competitive_co
         topic_parts.append(f"Product/Concept: {pc}")
     if bp:
         topic_parts.append(f"Business Problem: {bp}")
-    if cc:
-        topic_parts.append(f"Competitive/Narrative Context: {cc}")
     topic_block = "\n".join(topic_parts)
 
     prompt = (
@@ -5386,6 +5383,9 @@ def build_structured_report(
         ctx_src_lines.append("")
         ctx_src_lines.append("These sources were used for context calibration only and must not be")
         ctx_src_lines.append("cited as evidence or validation for any finding in this report.")
+        ctx_src_lines.append("Context sources did not influence population definition, persona")
+        ctx_src_lines.append("selection, or persona creation. They were retrieved after population")
+        ctx_src_lines.append("grounding was complete and were used solely to inform reaction realism.")
     sections["context_sources"] = "\n".join(ctx_src_lines)
 
     persona_summary_lines = []
@@ -6159,12 +6159,11 @@ def run_ben_qa(study_dict):
                 break
 
         import re as _re_mod
-        _ctx_ref_patterns = [
-            r"i (?:read|saw|heard|noticed) (?:somewhere|recently|that|about|in the news)",
-            r"(?:news|media|article|report)s? (?:say|said|mention|suggest|show|indicate)",
-            r"according to (?:a |an |the )?(?:news|media|article|report|story)",
-        ]
-        _has_context_tag = "[context — not evidence]" in _output_lower or "[context – not evidence]" in _output_lower
+        _ctx_ref_combined = (
+            r"i (?:read|saw|heard|noticed) (?:somewhere|recently|that|about|in the news)"
+            r"|(?:news|media|article|report)s? (?:say|said|mention|suggest|show|indicate)"
+            r"|according to (?:a |an |the )?(?:news|media|article|report|story)"
+        )
         _qa_egd_raw_ctx = study_dict.get("exec_grounding_data")
         _qa_had_ctx_sources = False
         if _qa_egd_raw_ctx:
@@ -6174,14 +6173,23 @@ def run_ben_qa(study_dict):
             except (json.JSONDecodeError, TypeError):
                 pass
         if _qa_had_ctx_sources:
-            for _crp in _ctx_ref_patterns:
-                if _re_mod.search(_crp, _output_lower):
-                    if not _has_context_tag:
-                        gov_failures.append(
-                            "Output contains inline media/context references without the required "
-                            "[Context — NOT evidence] label. All inline context references must carry this tag."
-                        )
-                    break
+            _ctx_tag_norm = "[context — not evidence]"
+            _ctx_tag_alt = "[context – not evidence]"
+            _output_lines = output.split("\n")
+            _unlabeled_count = 0
+            for _ol_idx, _ol in enumerate(_output_lines):
+                _ol_lower = _ol.lower()
+                if _re_mod.search(_ctx_ref_combined, _ol_lower):
+                    _nearby_text = "\n".join(
+                        _output_lines[max(0, _ol_idx):min(len(_output_lines), _ol_idx + 3)]
+                    ).lower()
+                    if _ctx_tag_norm not in _nearby_text and _ctx_tag_alt not in _nearby_text:
+                        _unlabeled_count += 1
+            if _unlabeled_count > 0:
+                gov_failures.append(
+                    f"Output contains {_unlabeled_count} inline media/context reference(s) without the required "
+                    "[Context — NOT evidence] label. Each inline context reference must carry this tag."
+                )
 
         gov_conn.close()
     except Exception as e:
@@ -8005,9 +8013,8 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         _ctx_study_snap = dict(study)
         _ctx_pc = (_ctx_study_snap.get("known_vs_unknown") or "").strip()
         _ctx_bp = (_ctx_study_snap.get("business_problem") or "").strip()
-        _ctx_cc = (_ctx_study_snap.get("competitive_context") or "").strip()
         conn.close()
-        _exec_context_sources = retrieve_context_citations(_ctx_pc, _ctx_bp, _ctx_cc)
+        _exec_context_sources = retrieve_context_citations(_ctx_pc, _ctx_bp)
         conn = get_db()
         _active_conn[0] = conn
     except Exception as _ctx_err:
