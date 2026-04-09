@@ -1296,6 +1296,105 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     }
 
 
+CTX_CITATION_MODEL = "gpt-4o-mini"
+CTX_CITATION_MAX_SOURCES = 5
+
+
+def retrieve_context_citations(product_concept, business_problem, competitive_context=""):
+    """Retrieve context citations via OpenAI Responses API with web_search_preview.
+
+    Uses Product/Concept and Business Problem ONLY (never Market/Geography or
+    Target Audience demographics).  All search, retrieval, and ranking is
+    delegated to the model — the application only parses and labels returned
+    citations as Context (NOT evidence).
+    """
+    import openai as _openai
+
+    base_url = os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
+    api_key = os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
+    if not base_url or not api_key:
+        print("CTX_CITATION_SKIP reason=openai_not_configured", flush=True)
+        return []
+
+    pc = (product_concept or "").strip()
+    bp = (business_problem or "").strip()
+    cc = (competitive_context or "").strip()
+    if not pc and not bp:
+        print("CTX_CITATION_SKIP reason=no_inputs", flush=True)
+        return []
+
+    topic_parts = []
+    if pc:
+        topic_parts.append(f"Product/Concept: {pc}")
+    if bp:
+        topic_parts.append(f"Business Problem: {bp}")
+    if cc:
+        topic_parts.append(f"Competitive/Narrative Context: {cc}")
+    topic_block = "\n".join(topic_parts)
+
+    prompt = (
+        "You are a media research assistant. Your task is to find 3 to 5 recent, "
+        "reputable journalism articles (news reports, investigative pieces, feature "
+        "articles, or analytical coverage) that are relevant to the following product "
+        "or business context.\n\n"
+        "PURPOSE: These articles will be used to understand what real-world media "
+        "narratives consumers may have encountered that could shape their reactions "
+        "to this product or business concept. This is for reaction realism in market "
+        "research simulations.\n\n"
+        "PREFERENCES:\n"
+        "- Prefer independent, professionally edited journalism from reputable outlets\n"
+        "- Prefer reporting, analysis, investigation, and feature coverage\n"
+        "- Deprioritize encyclopedic summaries (e.g. Wikipedia), vendor/brand content, "
+        "press releases, and promotional material\n"
+        "- Focus on narratives consumers would plausibly have encountered\n\n"
+        f"TOPIC:\n{topic_block}\n\n"
+        "For each article found, provide:\n"
+        "1. The article title\n"
+        "2. A one-sentence summary of the article's relevance\n\n"
+        "Return between 3 and 5 articles. If fewer than 3 relevant journalism "
+        "articles exist, return what you find."
+    )
+
+    try:
+        client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=45)
+        response = client.responses.create(
+            model=CTX_CITATION_MODEL,
+            tools=[{"type": "web_search_preview"}],
+            input=prompt,
+        )
+
+        context_sources = []
+        seen_urls = set()
+
+        for item in response.output:
+            if item.type == "message":
+                for content_block in item.content:
+                    if content_block.type == "output_text":
+                        for annotation in getattr(content_block, "annotations", []):
+                            if getattr(annotation, "type", "") == "url_citation":
+                                url = getattr(annotation, "url", "")
+                                title = getattr(annotation, "title", "") or url
+                                if url and url not in seen_urls:
+                                    seen_urls.add(url)
+                                    context_sources.append({
+                                        "title": title,
+                                        "url": url,
+                                        "citation_class": "context",
+                                    })
+
+        context_sources = context_sources[:CTX_CITATION_MAX_SOURCES]
+        print(
+            f"CTX_CITATION_DONE count={len(context_sources)} "
+            f"urls={[s['url'][:60] for s in context_sources]}",
+            flush=True,
+        )
+        return context_sources
+
+    except Exception as e:
+        print(f"CTX_CITATION_FAIL err={e}", flush=True)
+        return []
+
+
 def lisa_generate_personas(study_dict, n, lisa_model_id, grounding_summary=""):
     _pop_market = (study_dict.get("study_fit") or "").strip()
     _pop_audience = (study_dict.get("target_audience") or "").strip()
@@ -5267,6 +5366,28 @@ def build_structured_report(
     source_lines.append("")
     sections["sources_citations"] = "\n".join(source_lines)
 
+    ctx_src_lines = []
+    _ctx_sources_data = (_exec_gd or {}).get("context_sources", [])
+    if _ctx_sources_data:
+        ctx_src_lines.append("Context Sources (NOT Evidence)")
+        ctx_src_lines.append("")
+        ctx_src_lines.append("The following media articles were retrieved to provide context for consumer")
+        ctx_src_lines.append("reaction realism. They represent narratives consumers may have encountered.")
+        ctx_src_lines.append("They are NOT evidence, NOT validation, and do NOT support any specific finding.")
+        ctx_src_lines.append("")
+        for _csi, _csv in enumerate(_ctx_sources_data, 1):
+            _csv_title = _csv.get("title", "Untitled")
+            _csv_url = _csv.get("url", "")
+            if _csv_url:
+                ctx_src_lines.append(f"  {_csi}. {_csv_title}")
+                ctx_src_lines.append(f"     {_csv_url}")
+            else:
+                ctx_src_lines.append(f"  {_csi}. {_csv_title}")
+        ctx_src_lines.append("")
+        ctx_src_lines.append("These sources were used for context calibration only and must not be")
+        ctx_src_lines.append("cited as evidence or validation for any finding in this report.")
+    sections["context_sources"] = "\n".join(ctx_src_lines)
+
     persona_summary_lines = []
     if persona_data:
         for p in persona_data:
@@ -5577,6 +5698,7 @@ def generate_report_pdf(study, sections, translated_sections=None, translation_l
         ("6. Risks, Limits, and Unknowns", sections.get("risks_limits", ""), _ts.get("risks_limits")),
         ("7. Grounding Coverage Summary", sections.get("grounding_coverage", ""), _ts.get("grounding_coverage")),
         ("8. Sources and Citations", sections.get("sources_citations", ""), _ts.get("sources_citations")),
+        ("8.5. Context Sources (NOT Evidence)", sections.get("context_sources", ""), _ts.get("context_sources")),
         ("9. Persona Summaries", sections.get("persona_summaries", ""), _ts.get("persona_summaries")),
     ]
 
@@ -5933,6 +6055,24 @@ def run_ben_qa(study_dict):
                     gov_failures.append(
                         "Wikipedia is the sole grounding source when secondary authoritative sources should be available."
                     )
+
+                _qa_ctx_sources = _qa_egd.get("context_sources", [])
+                if _qa_ctx_sources:
+                    _ctx_urls_set = {cs.get("url", "") for cs in _qa_ctx_sources if cs.get("url")}
+                    _grnd_urls_set = {s.get("url", "") for s in _qa_egd_sources if s.get("url")}
+                    _overlap = _ctx_urls_set & _grnd_urls_set
+                    if _overlap:
+                        gov_failures.append(
+                            f"Context sources overlap with population grounding sources ({len(_overlap)} URLs). "
+                            "Context and grounding must be separate."
+                        )
+                    for _cqs in _qa_ctx_sources:
+                        _cq_class = (_cqs.get("citation_class") or "").strip().lower()
+                        if _cq_class != "context":
+                            gov_failures.append(
+                                f"Context source '{_cqs.get('title', '?')}' has citation_class='{_cq_class or '(missing)'}' "
+                                "instead of 'context'."
+                            )
             except (json.JSONDecodeError, TypeError):
                 pass
 
@@ -5987,6 +6127,23 @@ def run_ben_qa(study_dict):
                 gov_failures.append(
                     f"Output implies external evidence via grounding ('{_cm}'). "
                     "Population grounding is calibration context, not evidentiary support."
+                )
+                break
+
+        _ctx_evidence_markers = [
+            "context sources confirm",
+            "context sources prove",
+            "as evidenced by context",
+            "context evidence shows",
+            "validated by context sources",
+            "context sources validate",
+            "supported by context sources",
+        ]
+        for _cem in _ctx_evidence_markers:
+            if _cem in _output_lower:
+                gov_failures.append(
+                    f"Output treats context sources as evidence ('{_cem}'). "
+                    "Context sources are for reaction realism only, NOT evidentiary support."
                 )
                 break
 
@@ -6593,7 +6750,7 @@ def _sync_translate_study_output(study_id, user_id, target_lang, output_lang):
 
     sections_to_translate = {}
     for skey in ("key_findings", "what_surprised_us", "risks_limits",
-                 "grounding_coverage", "sources_citations", "persona_summaries"):
+                 "grounding_coverage", "sources_citations", "context_sources", "persona_summaries"):
         val = report.get(skey) or ""
         if val.strip():
             sections_to_translate[skey] = val
@@ -6860,7 +7017,7 @@ def translate_output(study_id):
 
     sections_to_translate = {}
     for skey in ("key_findings", "what_surprised_us", "risks_limits",
-                 "grounding_coverage", "sources_citations", "persona_summaries"):
+                 "grounding_coverage", "sources_citations", "context_sources", "persona_summaries"):
         val = report.get(skey) or ""
         if val.strip():
             sections_to_translate[skey] = val
@@ -7807,6 +7964,24 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             conn = get_db()
             _active_conn[0] = conn
 
+    _exec_context_sources = []
+    try:
+        _ctx_study_snap = dict(study)
+        _ctx_pc = (_ctx_study_snap.get("known_vs_unknown") or "").strip()
+        _ctx_bp = (_ctx_study_snap.get("business_problem") or "").strip()
+        _ctx_cc = (_ctx_study_snap.get("competitive_context") or "").strip()
+        conn.close()
+        _exec_context_sources = retrieve_context_citations(_ctx_pc, _ctx_bp, _ctx_cc)
+        conn = get_db()
+        _active_conn[0] = conn
+    except Exception as _ctx_err:
+        print(f"CTX_CITATION_EXEC_FAILED study={study_id} err={_ctx_err}", flush=True)
+        try:
+            conn.execute("SELECT 1")
+        except Exception:
+            conn = get_db()
+            _active_conn[0] = conn
+
     _pop_cal_block = ""
     if _exec_grounding_summary.strip():
         _pop_cal_block = (
@@ -7817,6 +7992,23 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             f"{_exec_grounding_summary}\n"
             "=== End Population Calibration Context ===\n"
         )
+
+    _ctx_sources_block = ""
+    if _exec_context_sources:
+        _ctx_lines = [
+            "\n\n=== Context Sources [Context — NOT evidence] ===",
+            "The following media articles represent narratives consumers may have encountered.",
+            "They provide CONTEXT for reaction realism ONLY. They are NOT evidence, NOT",
+            "validation, and must NOT be cited as supporting any specific finding.",
+            "You may optionally reference 1-2 of these in persona dialogue where a persona",
+            "would plausibly have encountered the narrative (e.g. 'I read somewhere that...').",
+            "Never for personal preferences or emotional reactions.",
+            "",
+        ]
+        for _cs in _exec_context_sources:
+            _ctx_lines.append(f"- {_cs.get('title', 'Untitled')} ({_cs.get('url', '')})")
+        _ctx_lines.append("=== End Context Sources ===")
+        _ctx_sources_block = "\n".join(_ctx_lines)
 
     output = None
     if study_type == "synthetic_survey":
@@ -7931,6 +8123,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
                 f"Product / Concept: {pc or 'Not specified'}\n"
                 f"Target Audience: {ta or 'Not specified'}\n"
                 f"{_pop_cal_block}"
+                f"{_ctx_sources_block}"
                 f"Definition of Useful Insight: {dui or 'Not specified'}\n"
                 f"Respondent Count: {r_count}\n"
                 f"Questions ({q_count}):\n{questions_text}\n"
@@ -8102,6 +8295,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
                 f"Type: {'In-Depth Interview (IDI)' if study_type == 'synthetic_idi' else 'Focus Group'}\n\n"
                 f"Research Brief:\n{brief_text}\n"
                 f"{_pop_cal_block}\n"
+                f"{_ctx_sources_block}\n"
                 f"{format_instruction}\n\n"
                 f"Personas:\n{personas_block}"
             )
@@ -8196,17 +8390,18 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         )
 
     _exec_grounding_json = None
-    if _exec_mlg_data:
+    if _exec_mlg_data or _exec_context_sources:
         try:
             _eg_save = {
                 "sources": [
                     {"title": s.get("name", s.get("title", "")), "url": s.get("url", ""), "score": s.get("_quality_score", s.get("score", 0)), "source_class": s.get("_source_class", "")}
-                    for s in (_exec_mlg_data.get("sources") or [])
+                    for s in ((_exec_mlg_data or {}).get("sources") or [])
                 ],
-                "synthesized_summary": (_exec_mlg_data.get("synthesized_summary") or "")[:500],
-                "reason_code": _exec_mlg_data.get("reason_code", ""),
-                "grounding_used": _exec_mlg_data.get("grounding_used", False),
-                "tier_stats": _exec_mlg_data.get("tier_stats", {}),
+                "synthesized_summary": ((_exec_mlg_data or {}).get("synthesized_summary") or "")[:500],
+                "reason_code": (_exec_mlg_data or {}).get("reason_code", ""),
+                "grounding_used": (_exec_mlg_data or {}).get("grounding_used", False),
+                "tier_stats": (_exec_mlg_data or {}).get("tier_stats", {}),
+                "context_sources": _exec_context_sources or [],
             }
             _exec_grounding_json = json.dumps(_eg_save)
         except Exception:
