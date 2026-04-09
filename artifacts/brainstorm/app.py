@@ -3185,7 +3185,6 @@ def index():
                 _user_lang = request.cookies.get("pb_lang", "en")
                 if _user_lang not in VALID_LANGS:
                     _user_lang = "en"
-                view_study_output["show_translate"] = (_out_lang != _user_lang)
                 view_study_output["user_lang"] = _user_lang
                 view_study_output["user_lang_name"] = LANG_CODE_TO_NAME.get(_user_lang, _user_lang)
                 view_study_output["output_lang_name"] = LANG_CODE_TO_NAME.get(_out_lang, _out_lang)
@@ -3194,16 +3193,21 @@ def index():
                 view_study_output["translation_cached"] = False
                 view_study_output["translated_text"] = ""
                 view_study_output["translated_sections"] = {}
+                _trans_display_lang = _user_lang
                 if _translated_raw:
                     try:
                         _tdata = json.loads(_translated_raw)
-                        if isinstance(_tdata, dict) and _tdata.get("lang") == _user_lang:
-                            if _tdata.get("sections"):
+                        if isinstance(_tdata, dict) and _tdata.get("sections"):
+                            _cached_lang = _tdata.get("lang", "en")
+                            if _cached_lang == _user_lang or _cached_lang != _out_lang:
                                 view_study_output["translation_cached"] = True
                                 view_study_output["translated_text"] = _tdata.get("text", "")
                                 view_study_output["translated_sections"] = _tdata.get("sections", {})
+                                _trans_display_lang = _cached_lang
                     except (json.JSONDecodeError, TypeError):
                         pass
+                view_study_output["show_translate"] = (_out_lang != "en") or (_out_lang != _user_lang)
+                view_study_output["translation_lang_name"] = LANG_CODE_TO_NAME.get(_trans_display_lang, _trans_display_lang)
 
         conn.close()
 
@@ -6285,18 +6289,19 @@ def download_pdf(study_id):
     _pdf_trans_lang_name = None
     _user_lang = request.cookies.get("pb_lang", "en")
     _output_lang = study_dict.get("output_language") or "en"
-    if _output_lang != _user_lang:
-        _trans_raw = study_dict.get("translated_output")
-        if _trans_raw:
-            try:
-                _tdata = json.loads(_trans_raw)
-                if isinstance(_tdata, dict) and _tdata.get("lang") == _user_lang and _tdata.get("sections"):
+    _trans_raw = study_dict.get("translated_output")
+    if _trans_raw:
+        try:
+            _tdata = json.loads(_trans_raw)
+            if isinstance(_tdata, dict) and _tdata.get("sections"):
+                _cached_lang = _tdata.get("lang", "en")
+                if _cached_lang == _user_lang or _cached_lang != _output_lang:
                     _pdf_trans_sections = _tdata["sections"]
-                    _pdf_trans_lang_name = LANG_CODE_TO_NAME.get(_user_lang, _user_lang)
+                    _pdf_trans_lang_name = LANG_CODE_TO_NAME.get(_cached_lang, _cached_lang)
                     if _tdata.get("text"):
                         sections["translated_transcript"] = _tdata["text"]
-            except (json.JSONDecodeError, TypeError):
-                pass
+        except (json.JSONDecodeError, TypeError):
+            pass
 
     pdf_bytes = generate_report_pdf(study_dict, sections, translated_sections=_pdf_trans_sections, translation_lang_name=_pdf_trans_lang_name)
     report_version = sections.get("version", 1)
@@ -8242,14 +8247,15 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         _user_iface_lang = request.cookies.get("pb_lang", "en")
         if _user_iface_lang not in VALID_LANGS:
             _user_iface_lang = "en"
-        if _user_iface_lang != _study_lang_code:
-            print(f"SYNC_TRANSLATE_START study={study_id} output_lang={_study_lang_code} user_lang={_user_iface_lang}", flush=True)
+        _translate_target = _user_iface_lang if _user_iface_lang != _study_lang_code else ("en" if _study_lang_code != "en" else None)
+        if _translate_target:
+            print(f"SYNC_TRANSLATE_START study={study_id} output_lang={_study_lang_code} target_lang={_translate_target}", flush=True)
             try:
-                _sync_translate_personas(study_id, user["id"], _user_iface_lang)
+                _sync_translate_personas(study_id, user["id"], _translate_target)
             except Exception as _tp_err:
                 print(f"SYNC_TRANSLATE_PERSONAS_ERR study={study_id} err={_tp_err}", flush=True)
             try:
-                _sync_translate_study_output(study_id, user["id"], _user_iface_lang, _study_lang_code)
+                _sync_translate_study_output(study_id, user["id"], _translate_target, _study_lang_code)
             except Exception as _to_err:
                 print(f"SYNC_TRANSLATE_OUTPUT_ERR study={study_id} err={_to_err}", flush=True)
 
@@ -9855,14 +9861,15 @@ def admin_dev_run_study(study_id):
         _user_iface_lang = request.cookies.get("pb_lang", "en")
         if _user_iface_lang not in VALID_LANGS:
             _user_iface_lang = "en"
-        if _user_iface_lang != _dev_lang_code:
-            print(f"SYNC_TRANSLATE_START study={study_id} output_lang={_dev_lang_code} user_lang={_user_iface_lang}", flush=True)
+        _translate_target = _user_iface_lang if _user_iface_lang != _dev_lang_code else ("en" if _dev_lang_code != "en" else None)
+        if _translate_target:
+            print(f"SYNC_TRANSLATE_START study={study_id} output_lang={_dev_lang_code} target_lang={_translate_target}", flush=True)
             try:
-                _sync_translate_personas(study_id, _dev_user_id, _user_iface_lang)
+                _sync_translate_personas(study_id, _dev_user_id, _translate_target)
             except Exception as _tp_err:
                 print(f"SYNC_TRANSLATE_PERSONAS_ERR study={study_id} err={_tp_err}", flush=True)
             try:
-                _sync_translate_study_output(study_id, _dev_user_id, _user_iface_lang, _dev_lang_code)
+                _sync_translate_study_output(study_id, _dev_user_id, _translate_target, _dev_lang_code)
             except Exception as _to_err:
                 print(f"SYNC_TRANSLATE_OUTPUT_ERR study={study_id} err={_to_err}", flush=True)
 

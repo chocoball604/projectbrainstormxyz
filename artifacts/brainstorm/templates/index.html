@@ -2370,15 +2370,15 @@
             </script>
 
             {% if view_study_output.translation_cached and view_study_output.translated_text %}
-            <details style="margin-bottom: 16px;">
-                <summary style="cursor: pointer; font-size: 14px; color: #2e7d32; font-weight: 500; padding: 8px 0;">&#128221; Full Translated Transcript ({{ view_study_output.user_lang_name }}) — click to expand</summary>
+            <details open style="margin-bottom: 16px;">
+                <summary style="cursor: pointer; font-size: 14px; color: #2e7d32; font-weight: 500; padding: 8px 0;">&#128221; Full Translated Transcript ({{ view_study_output.translation_lang_name or view_study_output.user_lang_name }})</summary>
                 <pre style="background: #f0fdf4; border: 1px solid #c8e6c9; border-radius: 6px; padding: 16px; font-size: 13px; overflow-x: auto; white-space: pre-wrap; line-height: 1.7; margin-top: 8px; border-left: 4px solid #66bb6a;">{{ view_study_output.translated_text }}</pre>
             </details>
             <script>
             (function() {
                 var sections = {{ view_study_output.translated_sections|tojson }};
                 document.addEventListener('DOMContentLoaded', function() {
-                    _fillTranslatedSections(sections, '{{ view_study_output.user_lang_name }}');
+                    _fillTranslatedSections(sections, '{{ view_study_output.translation_lang_name or view_study_output.user_lang_name }}');
                 });
             })();
             </script>
@@ -2392,7 +2392,7 @@
             <script>
             (function() {
                 var status = document.getElementById('translate-status');
-                status.textContent = 'Auto-translating to {{ view_study_output.user_lang_name }}... This may take a few minutes.';
+                status.textContent = 'Loading translation for {{ view_study_output.user_lang_name }}...';
                 var fd = new FormData();
                 fd.append('token', '{{ token }}');
                 fd.append('target_lang', '{{ view_study_output.user_lang }}');
