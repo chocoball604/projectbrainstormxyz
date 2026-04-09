@@ -8039,14 +8039,16 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
     _ctx_sources_block = ""
     if _exec_context_sources:
         _ctx_lines = [
-            "\n\n=== Context Sources [Context — NOT evidence] ===",
+            "\n\n=== Context Sources (NOT evidence — for reaction realism only) ===",
             "The following media articles represent narratives consumers may have encountered.",
             "They provide CONTEXT for reaction realism ONLY. They are NOT evidence, NOT",
             "validation, and must NOT be cited as supporting any specific finding.",
             "",
             "INLINE CITATION RULES (MANDATORY):",
-            "- You may reference at most 1-2 of these in persona dialogue where a persona",
-            "  would plausibly have encountered the narrative (e.g. 'I read somewhere that...').",
+            "- You may reference at most 1-2 of these across the ENTIRE transcript (not per turn).",
+            "- Each persona turn may contain at most 1 inline context reference.",
+            "- Use only where a persona would plausibly have encountered the narrative",
+            "  (e.g. 'I read somewhere that...').",
             "- Every such inline reference MUST be immediately followed by the exact tag:",
             "  [Context — NOT evidence]",
             "- Do NOT omit this tag. Any inline reference to media narratives without the",
