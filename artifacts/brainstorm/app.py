@@ -758,6 +758,54 @@ MLG_MAX_SUMMARY_WORDS = 400
 MLG_MAX_SUMMARY_CHARS = 3200
 MLG_MIN_RELEVANCE_KEYWORDS = 1
 MLG_MAX_SOURCES_SHOWN = 3
+MLG_MAX_WIKIPEDIA_PER_BUNDLE = 1
+
+_MLG_WIKIPEDIA_DOMAINS = {"wikipedia.org", "en.wikipedia.org", "ja.wikipedia.org",
+    "zh.wikipedia.org", "ko.wikipedia.org", "th.wikipedia.org",
+    "en.m.wikipedia.org", "ja.m.wikipedia.org", "zh.m.wikipedia.org",
+    "ko.m.wikipedia.org", "th.m.wikipedia.org"}
+
+_MLG_SECONDARY_AUTHORITATIVE_DOMAINS = {
+    ".gov", ".gov.hk", ".gov.sg", ".gov.au", ".gov.uk", ".gov.jp", ".go.jp", ".go.th",
+    ".edu", ".edu.hk", ".edu.sg", ".edu.au", ".ac.uk", ".ac.jp",
+    ".int",
+    "worldbank.org", "data.worldbank.org",
+    "un.org", "unctad.org", "undp.org",
+    "oecd.org", "oecd-ilibrary.org",
+    "who.int", "imf.org",
+    "stat.go.jp", "e-stat.go.jp",
+    "census.gov", "bls.gov", "bea.gov",
+    "ons.gov.uk", "abs.gov.au",
+}
+
+
+def _mlg_is_wikipedia(url):
+    if not url:
+        return False
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(url).hostname or "").lower()
+        return host in _MLG_WIKIPEDIA_DOMAINS or host.endswith(".wikipedia.org")
+    except Exception:
+        return "wikipedia.org" in (url or "").lower()
+
+
+def _mlg_is_secondary_authoritative(url):
+    if not url:
+        return False
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(url).hostname or "").lower()
+        for dom in _MLG_SECONDARY_AUTHORITATIVE_DOMAINS:
+            if dom.startswith("."):
+                if host.endswith(dom):
+                    return True
+            else:
+                if host == dom or host.endswith("." + dom):
+                    return True
+    except Exception:
+        pass
+    return False
 
 
 def _mlg_tier1_user_uploads(conn, study_id, user_id):
@@ -1032,7 +1080,6 @@ def _mlg_synthesize_summary(raw_snippets, study_dict):
 _MLG_REPUTABLE_DOMAINS = {
     ".gov", ".gov.hk", ".gov.sg", ".gov.au", ".gov.uk", ".gov.jp", ".go.jp", ".go.th",
     ".edu", ".edu.hk", ".edu.sg", ".edu.au", ".ac.uk", ".ac.jp",
-    ".org",
     ".int",
 }
 
@@ -1062,14 +1109,24 @@ def _mlg_score_source(source):
     elif origin == "General Web":
         score = 40
 
+    is_wiki = _mlg_is_wikipedia(url)
+    is_authoritative = _mlg_is_secondary_authoritative(url)
+
     if url:
         try:
             host = urlparse(url).hostname or ""
             host_lower = host.lower()
-            for rep in _MLG_REPUTABLE_DOMAINS:
-                if host_lower.endswith(rep):
-                    score += 15
-                    break
+            if is_wiki:
+                score -= 25
+                source["_source_class"] = "tertiary_calibration"
+            elif is_authoritative:
+                score += 25
+                source["_source_class"] = "secondary_authoritative"
+            else:
+                for rep in _MLG_REPUTABLE_DOMAINS:
+                    if host_lower.endswith(rep):
+                        score += 15
+                        break
             url_lower = url.lower()
             name_lower = name.lower()
             for pat in _MLG_LOW_QUALITY_PATTERNS:
@@ -1090,7 +1147,15 @@ def _mlg_select_top_sources(all_sources, max_shown=MLG_MAX_SOURCES_SHOWN):
         scored.append((s, _mlg_score_source(s)))
     scored.sort(key=lambda x: x[1], reverse=True)
     selected = []
-    for s, sc in scored[:max_shown]:
+    wiki_count = 0
+    for s, sc in scored:
+        if len(selected) >= max_shown:
+            break
+        url = (s.get("url") or "").strip()
+        if _mlg_is_wikipedia(url):
+            if wiki_count >= MLG_MAX_WIKIPEDIA_PER_BUNDLE:
+                continue
+            wiki_count += 1
         s["_quality_score"] = sc
         selected.append(s)
     return selected
@@ -1105,10 +1170,13 @@ def _mlg_format_grounding_sources_text(sources):
         url = s.get("url", "")
         cat = s.get("category", "")
         origin = s.get("origin", "")
+        source_class = s.get("_source_class", "")
         entry = f"- {name}"
         if url:
             entry += f" ({url})"
-        if cat:
+        if source_class == "tertiary_calibration":
+            entry += " [Tertiary Calibration Only]"
+        elif cat:
             entry += f" [{cat}]"
         if origin:
             entry += f" Origin: {origin}"
@@ -5137,10 +5205,12 @@ def build_structured_report(
             for _egs in _eg_sources[:MLG_MAX_SOURCES_SHOWN]:
                 _egs_title = _egs.get("title", "Untitled")
                 _egs_url = _egs.get("url", "")
+                _egs_class = _egs.get("source_class", "")
+                _egs_label = " [Tertiary Calibration Only]" if _egs_class == "tertiary_calibration" else ""
                 if _egs_url:
-                    grounding_lines.append(f"    - {_egs_title} ({_egs_url})")
+                    grounding_lines.append(f"    - {_egs_title} ({_egs_url}){_egs_label}")
                 else:
-                    grounding_lines.append(f"    - {_egs_title}")
+                    grounding_lines.append(f"    - {_egs_title}{_egs_label}")
     else:
         grounding_lines.append("  No execution-level calibration context was available for this study.")
 
@@ -5184,10 +5254,12 @@ def build_structured_report(
         for _egs in _exec_gd["sources"][:MLG_MAX_SOURCES_SHOWN]:
             _egs_title = _egs.get("title", "Untitled")
             _egs_url = _egs.get("url", "")
+            _egs_class = _egs.get("source_class", "")
+            _egs_label = " [Tertiary Calibration Only]" if _egs_class == "tertiary_calibration" else ""
             if _egs_url:
-                source_lines.append(f"  - {_egs_title} ({_egs_url})")
+                source_lines.append(f"  - {_egs_title} ({_egs_url}){_egs_label}")
             else:
-                source_lines.append(f"  - {_egs_title}")
+                source_lines.append(f"  - {_egs_title}{_egs_label}")
     source_lines.append("")
     sections["sources_citations"] = "\n".join(source_lines)
 
@@ -5840,6 +5912,25 @@ def run_ben_qa(study_dict):
                 and not (gt_row["admin_source_reason_code"] or "").strip()
             ):
                 gov_failures.append("Admin sources unused without reason code.")
+
+        _qa_egd_raw = study_dict.get("exec_grounding_data")
+        if _qa_egd_raw:
+            try:
+                _qa_egd = json.loads(_qa_egd_raw) if isinstance(_qa_egd_raw, str) else _qa_egd_raw
+                _qa_egd_sources = _qa_egd.get("sources", [])
+                _qa_wiki_sources = [s for s in _qa_egd_sources if _mlg_is_wikipedia(s.get("url", ""))]
+                _qa_non_wiki = [s for s in _qa_egd_sources if not _mlg_is_wikipedia(s.get("url", ""))]
+                if len(_qa_wiki_sources) > MLG_MAX_WIKIPEDIA_PER_BUNDLE:
+                    gov_failures.append(
+                        f"Wikipedia over-represented in execution grounding: "
+                        f"{len(_qa_wiki_sources)} Wikipedia sources (max {MLG_MAX_WIKIPEDIA_PER_BUNDLE})."
+                    )
+                if len(_qa_wiki_sources) > 0 and len(_qa_non_wiki) == 0 and len(_qa_egd_sources) > 1:
+                    gov_failures.append(
+                        "Wikipedia is the sole grounding source when secondary authoritative sources should be available."
+                    )
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         if study_type in ("synthetic_idi", "synthetic_focus_group"):
             personas = normalize_personas_used(study_dict.get("personas_used"))
@@ -8096,7 +8187,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         try:
             _eg_save = {
                 "sources": [
-                    {"title": s.get("name", s.get("title", "")), "url": s.get("url", ""), "score": s.get("_quality_score", s.get("score", 0))}
+                    {"title": s.get("name", s.get("title", "")), "url": s.get("url", ""), "score": s.get("_quality_score", s.get("score", 0)), "source_class": s.get("_source_class", "")}
                     for s in (_exec_mlg_data.get("sources") or [])
                 ],
                 "synthesized_summary": (_exec_mlg_data.get("synthesized_summary") or "")[:500],
