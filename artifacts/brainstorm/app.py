@@ -771,6 +771,9 @@ _MLG_WIKIPEDIA_DOMAINS = {"wikipedia.org", "en.wikipedia.org", "ja.wikipedia.org
     "ko.m.wikipedia.org", "th.m.wikipedia.org"}
 
 def _mlg_is_wikipedia(url):
+    # DEPRECATED for ranking/exclusion (Patch 2.1.2). Retained for informational
+    # logging only. Must NOT be used to score, filter, cap, or exclude sources
+    # in any product-facing code path.
     if not url:
         return False
     try:
@@ -782,6 +785,9 @@ def _mlg_is_wikipedia(url):
 
 
 def _mlg_is_secondary_authoritative(url):
+    # DEPRECATED for ranking/exclusion (Patch 2.1.2). Retained for informational
+    # logging only. Must NOT be used to score, boost, or filter sources
+    # in any product-facing code path.
     _SECONDARY_AUTHORITATIVE_DOMAINS = {
         ".gov", ".gov.hk", ".gov.sg", ".gov.au", ".gov.uk", ".gov.jp", ".go.jp", ".go.th",
         ".edu", ".edu.hk", ".edu.sg", ".edu.au", ".ac.uk", ".ac.jp",
@@ -958,10 +964,12 @@ def _mlg_model_web_search(study_dict, admin_web_hints=None):
                                         "category": "Population Data",
                                         "origin": "Model Web Search",
                                     })
-                                    snippets.append(f"[Model Web: {title}] {url}")
 
-        if response_text and not snippets:
-            snippets.append(f"[Model Web Summary] {response_text[:600]}")
+        if response_text:
+            snippets.append(f"[Model Web Summary] {response_text[:2000]}")
+        elif sources:
+            for _s in sources:
+                snippets.append(f"[Model Web: {_s['name']}] {_s['url']}")
 
         sources = sources[:MLG_MAX_SOURCES_SHOWN]
         snippets = snippets[:MLG_MAX_SOURCES_SHOWN]
