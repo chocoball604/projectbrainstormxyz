@@ -5555,8 +5555,8 @@ def generate_report_pdf(study, sections, translated_sections=None, translation_l
         ("5. What Surprised Us", sections.get("what_surprised_us", ""), _ts.get("what_surprised_us")),
         ("6. Risks, Limits, and Unknowns", sections.get("risks_limits", ""), _ts.get("risks_limits")),
         ("7. Grounding Coverage Summary", sections.get("grounding_coverage", ""), _ts.get("grounding_coverage")),
-        ("8. Sources and Citations", sections.get("sources_citations", ""), _ts.get("sources_citations")),
-        ("8.5. Context Sources (NOT Evidence)", sections.get("context_sources", ""), _ts.get("context_sources")),
+        ("8(a). Sources and Citations", sections.get("sources_citations", ""), _ts.get("sources_citations")),
+        ("8(b). Context Sources (NOT Evidence)", sections.get("context_sources", ""), _ts.get("context_sources")),
         ("9. Persona Summaries", sections.get("persona_summaries", ""), _ts.get("persona_summaries")),
     ]
 
