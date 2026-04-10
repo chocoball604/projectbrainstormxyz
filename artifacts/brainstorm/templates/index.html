@@ -247,6 +247,10 @@
                 <button type="submit" class="btn btn-secondary btn-small">Logout</button>
             </form>
         {% elif user %}
+            {% if view_study_output or view_persona or new_research_step or configure_study or dm_view == 'messages' or show_new_persona %}
+            <a href="/?token={{ token }}" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500;">&larr; Dashboard</a>
+            <span style="color: var(--pb-text); font-size: 13px; opacity: 0.5;">|</span>
+            {% endif %}
             <a href="/blog" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500;">Blog / News</a>
             <span style="color: var(--pb-text); font-size: 13px; opacity: 0.5;">|</span>
             <a href="/?token={{ token }}&view=messages" style="color: var(--pb-text); text-decoration: none; font-size: 13px; font-weight: 500; position: relative;">
