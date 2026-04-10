@@ -750,34 +750,25 @@ def _validate_persona_list(parsed, n_required):
     return personas
 
 
+# ── MLG Constants ─────────────────────────────────────────────────────
+# INVARIANT: No product-facing code path may perform independent web search,
+# crawling, SERP querying, or application-side ranking/scoring.
+# All live web access must be mediated via model-mediated web search calls
+# (currently OpenAI Responses API with web_search_preview).
+# Admin-configured web sources are retrieval hints only — they are injected
+# into the model prompt as emphasis/guidance, never fetched directly.
+# ──────────────────────────────────────────────────────────────────────
 MLG_MAX_SNIPPETS_PER_TIER = 3
-MLG_WEB_FETCH_TIMEOUT = 8
-MLG_SEARCH_RESULTS_LIMIT = 5
 MLG_SYNTHESIZER_MODEL = "google/gemini-2.0-flash-001"
 MLG_MAX_SUMMARY_WORDS = 400
 MLG_MAX_SUMMARY_CHARS = 3200
-MLG_MIN_RELEVANCE_KEYWORDS = 1
-MLG_MAX_SOURCES_SHOWN = 3
-MLG_MAX_WIKIPEDIA_PER_BUNDLE = 1
+MLG_MAX_SOURCES_SHOWN = 5
+MLG_MODEL_WEB_SEARCH_MODEL = "gpt-4o-mini"
 
 _MLG_WIKIPEDIA_DOMAINS = {"wikipedia.org", "en.wikipedia.org", "ja.wikipedia.org",
     "zh.wikipedia.org", "ko.wikipedia.org", "th.wikipedia.org",
     "en.m.wikipedia.org", "ja.m.wikipedia.org", "zh.m.wikipedia.org",
     "ko.m.wikipedia.org", "th.m.wikipedia.org"}
-
-_MLG_SECONDARY_AUTHORITATIVE_DOMAINS = {
-    ".gov", ".gov.hk", ".gov.sg", ".gov.au", ".gov.uk", ".gov.jp", ".go.jp", ".go.th",
-    ".edu", ".edu.hk", ".edu.sg", ".edu.au", ".ac.uk", ".ac.jp",
-    ".int",
-    "worldbank.org", "data.worldbank.org",
-    "un.org", "unctad.org", "undp.org",
-    "oecd.org", "oecd-ilibrary.org",
-    "who.int", "imf.org",
-    "stat.go.jp", "e-stat.go.jp",
-    "census.gov", "bls.gov", "bea.gov",
-    "ons.gov.uk", "abs.gov.au",
-}
-
 
 def _mlg_is_wikipedia(url):
     if not url:
@@ -791,12 +782,24 @@ def _mlg_is_wikipedia(url):
 
 
 def _mlg_is_secondary_authoritative(url):
+    _SECONDARY_AUTHORITATIVE_DOMAINS = {
+        ".gov", ".gov.hk", ".gov.sg", ".gov.au", ".gov.uk", ".gov.jp", ".go.jp", ".go.th",
+        ".edu", ".edu.hk", ".edu.sg", ".edu.au", ".ac.uk", ".ac.jp",
+        ".int",
+        "worldbank.org", "data.worldbank.org",
+        "un.org", "unctad.org", "undp.org",
+        "oecd.org", "oecd-ilibrary.org",
+        "who.int", "imf.org",
+        "stat.go.jp", "e-stat.go.jp",
+        "census.gov", "bls.gov", "bea.gov",
+        "ons.gov.uk", "abs.gov.au",
+    }
     if not url:
         return False
     try:
         from urllib.parse import urlparse
         host = (urlparse(url).hostname or "").lower()
-        for dom in _MLG_SECONDARY_AUTHORITATIVE_DOMAINS:
+        for dom in _SECONDARY_AUTHORITATIVE_DOMAINS:
             if dom.startswith("."):
                 if host.endswith(dom):
                     return True
@@ -857,170 +860,118 @@ def _mlg_tier2_admin_uploads(conn):
     return sources, snippets
 
 
-def _mlg_build_relevance_keywords(study_dict):
-    parts = []
-    for key in ("target_audience", "study_fit"):
-        val = (study_dict.get(key) or "").strip()
-        if val:
-            for word in val.lower().split():
-                word = word.strip(".,;:!?\"'()[]{}")
-                if len(word) >= 3 and word not in ("the", "and", "for", "with", "that", "this", "from", "are", "was"):
-                    parts.append(word)
-    return list(set(parts))
+def _mlg_model_web_search(study_dict, admin_web_hints=None):
+    import openai as _openai
 
-
-def _mlg_is_relevant(text, keywords, min_hits=MLG_MIN_RELEVANCE_KEYWORDS):
-    if not keywords:
-        return True
-    text_lower = text.lower()
-    hits = sum(1 for kw in keywords if kw in text_lower)
-    return hits >= min_hits
-
-
-def _mlg_is_safe_url(url):
-    from urllib.parse import urlparse
-    try:
-        parsed = urlparse(url)
-        if parsed.scheme not in ("http", "https"):
-            return False
-        host = (parsed.hostname or "").lower()
-        if not host:
-            return False
-        blocked = ("localhost", "127.0.0.1", "0.0.0.0", "169.254.169.254", "[::1]", "metadata.google.internal")
-        for b in blocked:
-            if host == b or host.endswith("." + b):
-                return False
-        if host.startswith("10.") or host.startswith("192.168.") or host.startswith("172."):
-            return False
-        return True
-    except Exception:
-        return False
-
-
-def _mlg_tier3_admin_web(admin_web_sources, relevance_keywords=None):
-    import requests as _req
-    import re as _re
-
-    sources = []
-    snippets = []
-    attempted = 0
-    matched = 0
-    for src in admin_web_sources[:MLG_MAX_SNIPPETS_PER_TIER]:
-        url = (src.get("url") or "").strip()
-        name = src.get("name") or url
-        if not url:
-            continue
-        if not _mlg_is_safe_url(url):
-            print(f"MLG_TIER3_BLOCKED_URL url={url}", flush=True)
-            continue
-        attempted += 1
-        try:
-            resp = _req.get(url, timeout=MLG_WEB_FETCH_TIMEOUT, headers={"User-Agent": "ProjectBrainstorm/1.0"}, allow_redirects=False)
-            resp.raise_for_status()
-            text = resp.text[:3000]
-            text = _re.sub(r"<[^>]+>", " ", text)
-            text = _re.sub(r"\s+", " ", text).strip()
-            if len(text) > 50 and _mlg_is_relevant(text, relevance_keywords):
-                matched += 1
-                sources.append({
-                    "name": name,
-                    "url": url,
-                    "category": "News/Government/Census",
-                    "origin": "Admin-Directed",
-                })
-                snippets.append(f"[Admin Web: {name}] {text[:500]}")
-            elif len(text) > 50:
-                print(f"MLG_TIER3_NOT_RELEVANT url={url}", flush=True)
-        except Exception as e:
-            print(f"MLG_TIER3_FETCH_FAIL url={url} err={e}", flush=True)
-    return sources, snippets, attempted, matched
-
-
-def _mlg_tier4_local_web(market_geo, lang_name, target_audience, relevance_keywords=None):
-    try:
-        from ddgs import DDGS
-    except ImportError:
-        try:
-            from duckduckgo_search import DDGS
-        except ImportError:
-            print("MLG_TIER4_SKIP ddgs not installed", flush=True)
-            return [], [], 0, 0
-
-    queries = []
-    geo_clean = (market_geo or "").strip()
-    ta_clean = (target_audience or "").strip()
-    if geo_clean and lang_name and lang_name != "English":
-        queries.append(f"{geo_clean} demographics population socioeconomic")
-        if ta_clean:
-            queries.append(f"{ta_clean} {geo_clean} lifestyle work patterns")
-    if not queries:
+    base_url = os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
+    api_key = os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
+    if not base_url or not api_key:
+        print("MLG_MODEL_WEB_SEARCH_SKIP reason=openai_not_configured", flush=True)
         return [], [], 0, 0
 
-    sources = []
-    snippets = []
-    attempted = 0
-    matched = 0
-    try:
-        ddgs = DDGS()
-        for q in queries[:2]:
-            attempted += 1
-            try:
-                results = list(ddgs.text(q, max_results=MLG_SEARCH_RESULTS_LIMIT))
-                for r in results[:MLG_MAX_SNIPPETS_PER_TIER]:
-                    body = (r.get("body") or "").strip()
-                    title = (r.get("title") or "").strip()
-                    href = (r.get("href") or "").strip()
-                    if body and len(body) > 30 and _mlg_is_relevant(body + " " + title, relevance_keywords):
-                        matched += 1
-                        sources.append({
-                            "name": title or href,
-                            "url": href,
-                            "category": "News/Market Data",
-                            "origin": "Local Non-English",
-                        })
-                        snippets.append(f"[Local Web: {title}] {body[:400]}")
-            except Exception as e:
-                print(f"MLG_TIER4_SEARCH_FAIL query={q} err={e}", flush=True)
-    except Exception as e:
-        print(f"MLG_TIER4_INIT_FAIL err={e}", flush=True)
-    return sources, snippets, attempted, matched
+    market = (study_dict.get("study_fit") or "").strip()
+    audience = (study_dict.get("target_audience") or "").strip()
+    if not market and not audience:
+        print("MLG_MODEL_WEB_SEARCH_SKIP reason=no_population_fields", flush=True)
+        return [], [], 0, 0
 
+    topic_parts = []
+    if market:
+        topic_parts.append(f"Market/Geography: {market}")
+    if audience:
+        topic_parts.append(f"Target Audience (Demographics / Socio-economics): {audience}")
+    topic_block = "\n".join(topic_parts)
 
-def _mlg_tier5_general_web(market_geo, target_audience, relevance_keywords=None):
-    try:
-        from ddgs import DDGS
-    except ImportError:
-        try:
-            from duckduckgo_search import DDGS
-        except ImportError:
-            print("MLG_TIER5_SKIP ddgs not installed", flush=True)
-            return [], [], 0, 0
+    hint_block = ""
+    if admin_web_hints:
+        hint_lines = []
+        for h in admin_web_hints[:10]:
+            h_url = (h.get("url") or "").strip()
+            h_name = (h.get("name") or h_url).strip()
+            if h_url:
+                hint_lines.append(f"  - {h_name}: {h_url}")
+        if hint_lines:
+            hint_block = (
+                "\n\nADMIN-CONFIGURED REFERENCE SOURCES (retrieval hints — pay special "
+                "attention to these if relevant, but do not limit your search to them):\n"
+                + "\n".join(hint_lines)
+            )
 
-    ta_clean = (target_audience or "").strip()
-    geo_clean = (market_geo or "").strip()
-    query = f"{ta_clean} {geo_clean} demographics socioeconomic population".strip()
+    prompt = (
+        "You are a population-grounding research assistant. Your task is to find "
+        "3 to 5 reputable sources with population-level data relevant to the market "
+        "segment described below.\n\n"
+        "PURPOSE: This data will be used as calibration context for synthetic market "
+        "research personas — informing realism in demographics, socio-economic conditions, "
+        "cultural norms, lifestyle patterns, and work/life realities. It is NOT evidentiary "
+        "support for specific claims.\n\n"
+        "WHAT TO FIND:\n"
+        "- Demographics and population statistics\n"
+        "- Socio-economic data (income, employment, cost of living)\n"
+        "- Cultural norms, lifestyle patterns, work/life balance\n"
+        "- Class dynamics, economic structure\n"
+        "- Government/census data, academic research, authoritative reports\n\n"
+        "PREFERENCES:\n"
+        "- Prefer government statistics, census data, international organizations (UN, "
+        "World Bank, OECD), and academic research\n"
+        "- Include reputable journalism about population conditions if relevant\n"
+        "- Deprioritize commercial/vendor content, press releases, how-to guides\n"
+        "- Focus exclusively on who these people are as a population, not what they buy\n\n"
+        f"POPULATION SEGMENT:\n{topic_block}"
+        f"{hint_block}\n\n"
+        "For each source found, provide:\n"
+        "1. The source title\n"
+        "2. A one-sentence summary of the population-level data it provides\n\n"
+        "Return between 3 and 5 sources. If fewer than 3 relevant sources exist, "
+        "return what you find."
+    )
+
     sources = []
     snippets = []
     attempted = 1
     matched = 0
     try:
-        ddgs = DDGS()
-        results = list(ddgs.text(query, max_results=MLG_SEARCH_RESULTS_LIMIT))
-        for r in results[:MLG_MAX_SNIPPETS_PER_TIER]:
-            body = (r.get("body") or "").strip()
-            title = (r.get("title") or "").strip()
-            href = (r.get("href") or "").strip()
-            if body and len(body) > 30 and _mlg_is_relevant(body + " " + title, relevance_keywords):
-                matched += 1
-                sources.append({
-                    "name": title or href,
-                    "url": href,
-                    "category": "News/Market Data",
-                    "origin": "General Web",
-                })
-                snippets.append(f"[General Web: {title}] {body[:400]}")
+        client = _openai.OpenAI(base_url=base_url, api_key=api_key, timeout=45)
+        response = client.responses.create(
+            model=MLG_MODEL_WEB_SEARCH_MODEL,
+            tools=[{"type": "web_search_preview"}],
+            input=prompt,
+        )
+
+        seen_urls = set()
+        response_text = ""
+        for item in response.output:
+            if item.type == "message":
+                for content_block in item.content:
+                    if content_block.type == "output_text":
+                        response_text += (content_block.text or "")
+                        for annotation in getattr(content_block, "annotations", []):
+                            if getattr(annotation, "type", "") == "url_citation":
+                                url = getattr(annotation, "url", "")
+                                title = getattr(annotation, "title", "") or url
+                                if url and url not in seen_urls:
+                                    seen_urls.add(url)
+                                    matched += 1
+                                    sources.append({
+                                        "name": title,
+                                        "url": url,
+                                        "category": "Population Data",
+                                        "origin": "Model Web Search",
+                                    })
+                                    snippets.append(f"[Model Web: {title}] {url}")
+
+        if response_text and not snippets:
+            snippets.append(f"[Model Web Summary] {response_text[:600]}")
+
+        sources = sources[:MLG_MAX_SOURCES_SHOWN]
+        snippets = snippets[:MLG_MAX_SOURCES_SHOWN]
+        print(
+            f"MLG_MODEL_WEB_SEARCH_DONE matched={matched} "
+            f"urls={[s['url'][:60] for s in sources]}",
+            flush=True,
+        )
     except Exception as e:
-        print(f"MLG_TIER5_SEARCH_FAIL err={e}", flush=True)
+        print(f"MLG_MODEL_WEB_SEARCH_FAIL err={e}", flush=True)
     return sources, snippets, attempted, matched
 
 
@@ -1077,88 +1028,6 @@ def _mlg_synthesize_summary(raw_snippets, study_dict):
         return ""
 
 
-_MLG_REPUTABLE_DOMAINS = {
-    ".gov", ".gov.hk", ".gov.sg", ".gov.au", ".gov.uk", ".gov.jp", ".go.jp", ".go.th",
-    ".edu", ".edu.hk", ".edu.sg", ".edu.au", ".ac.uk", ".ac.jp",
-    ".int",
-}
-
-_MLG_LOW_QUALITY_PATTERNS = [
-    "how-to-start", "how to start", "affiliate", "listicle",
-    "best-vending-machine", "top-10", "top-5",
-    "/blog/how-to", "/blog/best-", "/blog/top-",
-    "shopify.com/blog", "entrepreneur.com/starting",
-    "bizfluent.com", "wikihow.com",
-]
-
-
-def _mlg_score_source(source):
-    from urllib.parse import urlparse
-
-    origin = (source.get("origin") or "").strip()
-    url = (source.get("url") or "").strip()
-    name = (source.get("name") or "").strip()
-    score = 50
-
-    if origin == "Uploaded Document":
-        score = 95
-    elif origin == "Admin-Directed":
-        score = 90
-    elif origin == "Local Non-English":
-        score = 60
-    elif origin == "General Web":
-        score = 40
-
-    is_wiki = _mlg_is_wikipedia(url)
-    is_authoritative = _mlg_is_secondary_authoritative(url)
-
-    if url:
-        try:
-            host = urlparse(url).hostname or ""
-            host_lower = host.lower()
-            if is_wiki:
-                score -= 25
-                source["_source_class"] = "tertiary_calibration"
-            elif is_authoritative:
-                score += 25
-                source["_source_class"] = "secondary_authoritative"
-            else:
-                for rep in _MLG_REPUTABLE_DOMAINS:
-                    if host_lower.endswith(rep):
-                        score += 15
-                        break
-            url_lower = url.lower()
-            name_lower = name.lower()
-            for pat in _MLG_LOW_QUALITY_PATTERNS:
-                if pat in url_lower or pat in name_lower:
-                    score -= 30
-                    break
-        except Exception:
-            pass
-
-    return max(0, min(100, score))
-
-
-def _mlg_select_top_sources(all_sources, max_shown=MLG_MAX_SOURCES_SHOWN):
-    if not all_sources:
-        return []
-    scored = []
-    for s in all_sources:
-        scored.append((s, _mlg_score_source(s)))
-    scored.sort(key=lambda x: x[1], reverse=True)
-    selected = []
-    wiki_count = 0
-    for s, sc in scored:
-        if len(selected) >= max_shown:
-            break
-        url = (s.get("url") or "").strip()
-        if _mlg_is_wikipedia(url):
-            if wiki_count >= MLG_MAX_WIKIPEDIA_PER_BUNDLE:
-                continue
-            wiki_count += 1
-        s["_quality_score"] = sc
-        selected.append(s)
-    return selected
 
 
 def _mlg_format_grounding_sources_text(sources):
@@ -1170,13 +1039,10 @@ def _mlg_format_grounding_sources_text(sources):
         url = s.get("url", "")
         cat = s.get("category", "")
         origin = s.get("origin", "")
-        source_class = s.get("_source_class", "")
         entry = f"- {name}"
         if url:
             entry += f" ({url})"
-        if source_class == "tertiary_calibration":
-            entry += " [Tertiary Calibration Only]"
-        elif cat:
+        if cat:
             entry += f" [{cat}]"
         if origin:
             entry += f" Origin: {origin}"
@@ -1186,7 +1052,7 @@ def _mlg_format_grounding_sources_text(sources):
 
 def _mlg_build_reason_code(tier_stats):
     parts = []
-    for tier_name in ["user_uploads", "admin_uploads", "admin_web", "local_web", "general_web"]:
+    for tier_name in ["user_uploads", "admin_uploads", "model_web_search"]:
         t = tier_stats.get(tier_name, {})
         found = t.get("found", 0)
         attempted = t.get("attempted", 0)
@@ -1208,7 +1074,6 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     all_sources = []
     all_snippets = []
     tier_stats = {}
-    relevance_kw = _mlg_build_relevance_keywords(study_dict)
 
     conn = get_db()
     try:
@@ -1226,40 +1091,28 @@ def mlg_retrieve_for_persona(study_dict, study_id, user_id):
     finally:
         conn.close()
 
-    t3_sources, t3_snippets, t3_attempted, t3_matched = _mlg_tier3_admin_web(admin_web_sources, relevance_kw)
-    tier_stats["admin_web"] = {"attempted": t3_attempted, "matched": t3_matched}
-    all_sources.extend(t3_sources[:MLG_MAX_SNIPPETS_PER_TIER])
-    all_snippets.extend(t3_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
+    admin_web_hints = [
+        {"url": (src.get("url") or "").strip(), "name": src.get("name") or src.get("url") or ""}
+        for src in admin_web_sources
+        if (src.get("url") or "").strip()
+    ] if admin_web_sources else None
 
-    market_geo = (study_dict.get("study_fit") or "").strip()
-    target_aud = (study_dict.get("target_audience") or "").strip()
-    _g_admin_srcs = admin_web_sources
-    _, lang_name = infer_market_language(market_geo, _g_admin_srcs)
-
-    t4_sources, t4_snippets, t4_attempted, t4_matched = _mlg_tier4_local_web(
-        market_geo, lang_name, target_aud, relevance_kw
+    mws_sources, mws_snippets, mws_attempted, mws_matched = _mlg_model_web_search(
+        study_dict, admin_web_hints=admin_web_hints
     )
-    tier_stats["local_web"] = {"attempted": t4_attempted, "matched": t4_matched}
-    all_sources.extend(t4_sources[:MLG_MAX_SNIPPETS_PER_TIER])
-    all_snippets.extend(t4_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
-
-    t5_sources, t5_snippets, t5_attempted, t5_matched = _mlg_tier5_general_web(
-        market_geo, target_aud, relevance_kw
-    )
-    tier_stats["general_web"] = {"attempted": t5_attempted, "matched": t5_matched}
-    all_sources.extend(t5_sources[:MLG_MAX_SNIPPETS_PER_TIER])
-    all_snippets.extend(t5_snippets[:MLG_MAX_SNIPPETS_PER_TIER])
+    tier_stats["model_web_search"] = {"attempted": mws_attempted, "matched": mws_matched}
+    all_sources.extend(mws_sources)
+    all_snippets.extend(mws_snippets)
 
     synthesized_summary = _mlg_synthesize_summary(all_snippets, study_dict)
 
     grounding_used = bool(synthesized_summary)
     if grounding_used:
-        top_sources = _mlg_select_top_sources(all_sources, MLG_MAX_SOURCES_SHOWN)
+        top_sources = all_sources[:MLG_MAX_SOURCES_SHOWN]
         grounding_sources_text = _mlg_format_grounding_sources_text(top_sources)
-        shown_scores = [(s.get("name","?"), s.get("_quality_score", 0)) for s in top_sources]
         print(
-            f"MLG_QUALITY_FILTER study={study_id} total_retrieved={len(all_sources)} "
-            f"shown={len(top_sources)} scores={shown_scores}",
+            f"MLG_RETRIEVE study={study_id} total_retrieved={len(all_sources)} "
+            f"shown={len(top_sources)}",
             flush=True,
         )
     elif all_sources:
@@ -2617,14 +2470,13 @@ def create_grounding_trace(conn, trigger_event, study_id=None, persona_id=None, 
     if mlg_data:
         admin_cfg_count = mlg_data.get("admin_web_configured", 0)
         tier_stats = mlg_data.get("tier_stats", {})
-        admin_web_stats = tier_stats.get("admin_web", {})
-        admin_queried_count = admin_web_stats.get("attempted", 0)
-        admin_matched_count = admin_web_stats.get("matched", 0)
+        mws_stats = tier_stats.get("model_web_search", {})
+        mws_matched = mws_stats.get("matched", 0)
         grounding_used = mlg_data.get("grounding_used", False)
         flag_configured = 1 if admin_cfg_count > 0 else 0
-        flag_queried = 1 if admin_queried_count > 0 else 0
-        flag_matched = 1 if admin_matched_count > 0 else 0
-        flag_used = 1 if (admin_matched_count > 0 and grounding_used) else 0
+        flag_queried = 1 if mws_stats.get("attempted", 0) > 0 else 0
+        flag_matched = 1 if mws_matched > 0 else 0
+        flag_used = 1 if (mws_matched > 0 and grounding_used) else 0
         reason_code = mlg_data.get("reason_code", "")
     else:
         active_sources = get_admin_web_sources(conn, status_filter="active")
@@ -5295,22 +5147,19 @@ def build_structured_report(
     if _exec_gd and _exec_gd.get("grounding_used"):
         _eg_sources = _exec_gd.get("sources", [])
         _eg_ts = _exec_gd.get("tier_stats", {})
-        _eg_local = _eg_ts.get("local_web", {})
-        _eg_general = _eg_ts.get("general_web", {})
-        _total_retrieved = _eg_local.get("matched", 0) + _eg_general.get("matched", 0)
+        _eg_mws = _eg_ts.get("model_web_search", {})
+        _total_retrieved = _eg_mws.get("matched", 0)
         grounding_lines.append(f"  Population calibration context was provided to the execution model.")
-        grounding_lines.append(f"  Sources retrieved: {_total_retrieved} (shown: {len(_eg_sources)})")
+        grounding_lines.append(f"  Sources retrieved via model-mediated web search: {_total_retrieved} (shown: {len(_eg_sources)})")
         if _eg_sources:
             grounding_lines.append("  Calibration sources (used for realism, NOT cited as evidence):")
             for _egs in _eg_sources[:MLG_MAX_SOURCES_SHOWN]:
                 _egs_title = _egs.get("title", "Untitled")
                 _egs_url = _egs.get("url", "")
-                _egs_class = _egs.get("source_class", "")
-                _egs_label = " [Tertiary Calibration Only]" if _egs_class == "tertiary_calibration" else ""
                 if _egs_url:
-                    grounding_lines.append(f"    - {_egs_title} ({_egs_url}){_egs_label}")
+                    grounding_lines.append(f"    - {_egs_title} ({_egs_url})")
                 else:
-                    grounding_lines.append(f"    - {_egs_title}{_egs_label}")
+                    grounding_lines.append(f"    - {_egs_title}")
     else:
         grounding_lines.append("  No execution-level calibration context was available for this study.")
 
@@ -5354,12 +5203,10 @@ def build_structured_report(
         for _egs in _exec_gd["sources"][:MLG_MAX_SOURCES_SHOWN]:
             _egs_title = _egs.get("title", "Untitled")
             _egs_url = _egs.get("url", "")
-            _egs_class = _egs.get("source_class", "")
-            _egs_label = " [Tertiary Calibration Only]" if _egs_class == "tertiary_calibration" else ""
             if _egs_url:
-                source_lines.append(f"  - {_egs_title} ({_egs_url}){_egs_label}")
+                source_lines.append(f"  - {_egs_title} ({_egs_url})")
             else:
-                source_lines.append(f"  - {_egs_title}{_egs_label}")
+                source_lines.append(f"  - {_egs_title}")
     source_lines.append("")
     sections["sources_citations"] = "\n".join(source_lines)
 
@@ -6044,17 +5891,25 @@ def run_ben_qa(study_dict):
             try:
                 _qa_egd = json.loads(_qa_egd_raw) if isinstance(_qa_egd_raw, str) else _qa_egd_raw
                 _qa_egd_sources = _qa_egd.get("sources", [])
-                _qa_wiki_sources = [s for s in _qa_egd_sources if _mlg_is_wikipedia(s.get("url", ""))]
-                _qa_non_wiki = [s for s in _qa_egd_sources if not _mlg_is_wikipedia(s.get("url", ""))]
-                if len(_qa_wiki_sources) > MLG_MAX_WIKIPEDIA_PER_BUNDLE:
-                    gov_failures.append(
-                        f"Wikipedia over-represented in execution grounding: "
-                        f"{len(_qa_wiki_sources)} Wikipedia sources (max {MLG_MAX_WIKIPEDIA_PER_BUNDLE})."
-                    )
-                if len(_qa_wiki_sources) > 0 and len(_qa_non_wiki) == 0 and len(_qa_egd_sources) > 1:
-                    gov_failures.append(
-                        "Wikipedia is the sole grounding source when secondary authoritative sources should be available."
-                    )
+
+                _deprecated_origins = {"Local Non-English", "General Web", "Admin-Directed"}
+                for _qs in _qa_egd_sources:
+                    _qs_origin = (_qs.get("origin") or "").strip()
+                    if _qs_origin in _deprecated_origins:
+                        gov_failures.append(
+                            f"Source '{_qs.get('name', '?')}' has deprecated origin='{_qs_origin}'. "
+                            "All web sources must originate from model-mediated web search (origin='Model Web Search')."
+                        )
+                        break
+
+                _qa_reason = _qa_egd.get("reason_code", "")
+                for _dep_tier_prefix in ("local_web:", "general_web:", "admin_web:"):
+                    if _dep_tier_prefix in _qa_reason:
+                        gov_failures.append(
+                            f"Deprecated retrieval tier detected in reason_code ('{_dep_tier_prefix[:-1]}'). "
+                            "Only model_web_search is allowed for product-facing web retrieval."
+                        )
+                        break
 
                 _qa_ctx_sources = _qa_egd.get("context_sources", [])
                 if _qa_ctx_sources:
@@ -7815,11 +7670,9 @@ def run_study(study_id):
                         "tier_stats": {
                             "user_uploads": {"found": 0},
                             "admin_uploads": {"found": 0},
-                            "admin_web": {"attempted": 0, "matched": 0},
-                            "local_web": {"attempted": 0, "matched": 0},
-                            "general_web": {"attempted": 0, "matched": 0},
+                            "model_web_search": {"attempted": 0, "matched": 0},
                         },
-                        "reason_code": "user_uploads:none;admin_uploads:none;admin_web:error;local_web:error;general_web:error",
+                        "reason_code": "user_uploads:none;admin_uploads:none;model_web_search:error",
                         "admin_web_configured": 0,
                     }
 
@@ -8389,7 +8242,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         try:
             _eg_save = {
                 "sources": [
-                    {"title": s.get("name", s.get("title", "")), "url": s.get("url", ""), "score": s.get("_quality_score", s.get("score", 0)), "source_class": s.get("_source_class", "")}
+                    {"title": s.get("name", s.get("title", "")), "url": s.get("url", ""), "origin": s.get("origin", "Model Web Search")}
                     for s in ((_exec_mlg_data or {}).get("sources") or [])
                 ],
                 "synthesized_summary": ((_exec_mlg_data or {}).get("synthesized_summary") or "")[:500],
@@ -9676,6 +9529,9 @@ def admin_remove_pool_model(pool_id):
 
 @app.route("/admin/import-openrouter-models", methods=["POST"])
 def admin_import_openrouter_models():
+    # ALLOWED EXCEPTION: Admin-only diagnostic fetch — not product-facing.
+    # This fetches the OpenRouter model catalog for admin configuration.
+    # It does NOT surface content to users or influence product outputs.
     token = get_token()
     _, is_admin = get_session_data(token)
     if not is_admin:
