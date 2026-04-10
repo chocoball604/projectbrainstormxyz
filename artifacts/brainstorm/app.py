@@ -8333,12 +8333,23 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             f"Budget ceiling exceeded: {tokens_total} tokens > {ceiling} ceiling."
         )
 
+    _needs_translate = False
+    _translate_target = None
+    if final_status == "completed":
+        _user_iface_lang = request.cookies.get("pb_lang", "en")
+        if _user_iface_lang not in VALID_LANGS:
+            _user_iface_lang = "en"
+        _translate_target = _user_iface_lang if _user_iface_lang != _study_lang_code else ("en" if _study_lang_code != "en" else None)
+        _needs_translate = _translate_target is not None
+
+    _pre_translate_status = "running" if _needs_translate else final_status
+
     conn.execute(
         """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
            confidence_summary = ?, final_report = ?, output_language = ?,
            exec_grounding_data = ? WHERE id = ?""",
         (
-            final_status,
+            _pre_translate_status,
             output,
             qa_decision.lower(),
             qa_notes,
@@ -8372,21 +8383,21 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
     conn.close()
     _active_conn[0] = get_db()
 
-    if final_status == "completed":
-        _user_iface_lang = request.cookies.get("pb_lang", "en")
-        if _user_iface_lang not in VALID_LANGS:
-            _user_iface_lang = "en"
-        _translate_target = _user_iface_lang if _user_iface_lang != _study_lang_code else ("en" if _study_lang_code != "en" else None)
-        if _translate_target:
-            print(f"SYNC_TRANSLATE_START study={study_id} output_lang={_study_lang_code} target_lang={_translate_target}", flush=True)
-            try:
-                _sync_translate_personas(study_id, user["id"], _translate_target)
-            except Exception as _tp_err:
-                print(f"SYNC_TRANSLATE_PERSONAS_ERR study={study_id} err={_tp_err}", flush=True)
-            try:
-                _sync_translate_study_output(study_id, user["id"], _translate_target, _study_lang_code)
-            except Exception as _to_err:
-                print(f"SYNC_TRANSLATE_OUTPUT_ERR study={study_id} err={_to_err}", flush=True)
+    if _needs_translate:
+        print(f"SYNC_TRANSLATE_START study={study_id} output_lang={_study_lang_code} target_lang={_translate_target}", flush=True)
+        try:
+            _sync_translate_personas(study_id, user["id"], _translate_target)
+        except Exception as _tp_err:
+            print(f"SYNC_TRANSLATE_PERSONAS_ERR study={study_id} err={_tp_err}", flush=True)
+        try:
+            _sync_translate_study_output(study_id, user["id"], _translate_target, _study_lang_code)
+        except Exception as _to_err:
+            print(f"SYNC_TRANSLATE_OUTPUT_ERR study={study_id} err={_to_err}", flush=True)
+
+        _active_conn[0] = get_db()
+        _active_conn[0].execute("UPDATE studies SET status = ? WHERE id = ?", (final_status, study_id))
+        _active_conn[0].commit()
+        print(f"SYNC_TRANSLATE_COMPLETE study={study_id} status_set={final_status}", flush=True)
 
     conn = _active_conn[0]
 
@@ -9952,11 +9963,22 @@ def admin_dev_run_study(study_id):
             f"Budget ceiling exceeded: {tokens_total} tokens > {ceiling} ceiling."
         )
 
+    _needs_translate_dev = False
+    _translate_target_dev = None
+    if final_status == "completed":
+        _user_iface_lang = request.cookies.get("pb_lang", "en")
+        if _user_iface_lang not in VALID_LANGS:
+            _user_iface_lang = "en"
+        _translate_target_dev = _user_iface_lang if _user_iface_lang != _dev_lang_code else ("en" if _dev_lang_code != "en" else None)
+        _needs_translate_dev = _translate_target_dev is not None
+
+    _pre_translate_status_dev = "running" if _needs_translate_dev else final_status
+
     conn.execute(
         """UPDATE studies SET status = ?, study_output = ?, qa_status = ?, qa_notes = ?,
            confidence_summary = ?, final_report = ?, output_language = ? WHERE id = ?""",
         (
-            final_status,
+            _pre_translate_status_dev,
             output,
             qa_decision.lower(),
             qa_notes,
@@ -9989,21 +10011,22 @@ def admin_dev_run_study(study_id):
     _dev_user_id = study["user_id"]
     conn.close()
 
-    if final_status == "completed":
-        _user_iface_lang = request.cookies.get("pb_lang", "en")
-        if _user_iface_lang not in VALID_LANGS:
-            _user_iface_lang = "en"
-        _translate_target = _user_iface_lang if _user_iface_lang != _dev_lang_code else ("en" if _dev_lang_code != "en" else None)
-        if _translate_target:
-            print(f"SYNC_TRANSLATE_START study={study_id} output_lang={_dev_lang_code} target_lang={_translate_target}", flush=True)
-            try:
-                _sync_translate_personas(study_id, _dev_user_id, _translate_target)
-            except Exception as _tp_err:
-                print(f"SYNC_TRANSLATE_PERSONAS_ERR study={study_id} err={_tp_err}", flush=True)
-            try:
-                _sync_translate_study_output(study_id, _dev_user_id, _translate_target, _dev_lang_code)
-            except Exception as _to_err:
-                print(f"SYNC_TRANSLATE_OUTPUT_ERR study={study_id} err={_to_err}", flush=True)
+    if _needs_translate_dev:
+        print(f"SYNC_TRANSLATE_START study={study_id} output_lang={_dev_lang_code} target_lang={_translate_target_dev}", flush=True)
+        try:
+            _sync_translate_personas(study_id, _dev_user_id, _translate_target_dev)
+        except Exception as _tp_err:
+            print(f"SYNC_TRANSLATE_PERSONAS_ERR study={study_id} err={_tp_err}", flush=True)
+        try:
+            _sync_translate_study_output(study_id, _dev_user_id, _translate_target_dev, _dev_lang_code)
+        except Exception as _to_err:
+            print(f"SYNC_TRANSLATE_OUTPUT_ERR study={study_id} err={_to_err}", flush=True)
+
+        _dev_conn = get_db()
+        _dev_conn.execute("UPDATE studies SET status = ? WHERE id = ?", (final_status, study_id))
+        _dev_conn.commit()
+        _dev_conn.close()
+        print(f"SYNC_TRANSLATE_COMPLETE study={study_id} status_set={final_status}", flush=True)
 
     user, _ = get_session_data(token)
     if user:
