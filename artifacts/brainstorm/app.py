@@ -5157,8 +5157,11 @@ def build_structured_report(
         _eg_ts = _exec_gd.get("tier_stats", {})
         _eg_mws = _eg_ts.get("model_web_search", {})
         _total_retrieved = _eg_mws.get("matched", 0)
+        _eg_admin_hints = _exec_gd.get("admin_web_configured", 0)
         grounding_lines.append(f"  Population calibration context was provided to the execution model.")
         grounding_lines.append(f"  Sources retrieved via model-mediated web search: {_total_retrieved} (shown: {len(_eg_sources)})")
+        if _eg_admin_hints > 0:
+            grounding_lines.append(f"  Admin-configured retrieval hints provided: {_eg_admin_hints}")
         if _eg_sources:
             grounding_lines.append("  Calibration sources (used for realism, NOT cited as evidence):")
             for _egs in _eg_sources[:MLG_MAX_SOURCES_SHOWN]:
@@ -5900,13 +5903,20 @@ def run_ben_qa(study_dict):
                 _qa_egd = json.loads(_qa_egd_raw) if isinstance(_qa_egd_raw, str) else _qa_egd_raw
                 _qa_egd_sources = _qa_egd.get("sources", [])
 
-                _deprecated_origins = {"Local Non-English", "General Web", "Admin-Directed"}
+                _allowed_web_origins = {"Model Web Search"}
+                _allowed_non_web_origins = {"Uploaded Document"}
                 for _qs in _qa_egd_sources:
                     _qs_origin = (_qs.get("origin") or "").strip()
-                    if _qs_origin in _deprecated_origins:
+                    _qs_url = (_qs.get("url") or "").strip()
+                    if _qs_url and _qs_origin not in _allowed_web_origins:
                         gov_failures.append(
-                            f"Source '{_qs.get('name', '?')}' has deprecated origin='{_qs_origin}'. "
+                            f"Source '{_qs.get('name', '?')}' has origin='{_qs_origin}' but contains a URL. "
                             "All web sources must originate from model-mediated web search (origin='Model Web Search')."
+                        )
+                        break
+                    if not _qs_url and _qs_origin and _qs_origin not in _allowed_non_web_origins and _qs_origin not in _allowed_web_origins:
+                        gov_failures.append(
+                            f"Source '{_qs.get('name', '?')}' has unrecognized origin='{_qs_origin}'."
                         )
                         break
 
@@ -8257,6 +8267,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
                 "reason_code": (_exec_mlg_data or {}).get("reason_code", ""),
                 "grounding_used": (_exec_mlg_data or {}).get("grounding_used", False),
                 "tier_stats": (_exec_mlg_data or {}).get("tier_stats", {}),
+                "admin_web_configured": (_exec_mlg_data or {}).get("admin_web_configured", 0),
                 "context_sources": _exec_context_sources or [],
             }
             _exec_grounding_json = json.dumps(_eg_save)
