@@ -2291,20 +2291,24 @@
                 {% endif %}
             </div>
 
+            {% if view_study_output.status in ['qa_blocked', 'terminated_system'] %}
+            <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 6px; padding: 20px; margin-bottom: 16px; font-size: 14px; color: #721c24;">
+                <strong style="font-size: 16px;">{% if view_study_output.status == 'qa_blocked' %}QA BLOCKED{% else %}TERMINATED BY SYSTEM{% endif %}</strong><br><br>
+                This study's output has been withheld because it did not pass the quality assurance gate.<br><br>
+                <strong>Reason:</strong> {{ view_study_output.qa_notes or 'No details provided.' }}<br><br>
+                {% if view_study_output.qa_retry_count is defined and view_study_output.qa_retry_count is not none %}
+                <strong>QA retries used:</strong> {{ view_study_output.qa_retry_count }}<br>
+                {% endif %}
+                <strong>Remediation:</strong> Please re-run this study. If the issue persists, contact your administrator or adjust study parameters.
+            </div>
+            {% else %}
+
             {% if view_study_output.confidence_parsed %}
             <div style="background: #e8f4fd; border: 1px solid #b8daff; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 13px; color: #004085; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
                 <strong>Confidence Labels:</strong>
                 <span style="background: #d4edda; color: #155724; padding: 3px 10px; border-radius: 4px; font-weight: 600;">Strong: {{ view_study_output.confidence_parsed.Strong }}</span>
                 <span style="background: #fff3cd; color: #856404; padding: 3px 10px; border-radius: 4px; font-weight: 600;">Indicative: {{ view_study_output.confidence_parsed.Indicative }}</span>
                 <span style="background: #f8d7da; color: #721c24; padding: 3px 10px; border-radius: 4px; font-weight: 600;">Exploratory: {{ view_study_output.confidence_parsed.Exploratory }}</span>
-            </div>
-            {% endif %}
-
-            {% if view_study_output.status == 'qa_blocked' %}
-            <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 14px; color: #721c24;">
-                <strong>QA BLOCKED</strong><br>
-                This study's output has been blocked by the QA gate (Ben).<br>
-                <strong>Reason:</strong> {{ view_study_output.qa_notes or 'No notes provided.' }}
             </div>
             {% endif %}
 
@@ -2315,7 +2319,7 @@
             </div>
             {% endif %}
 
-            {% if view_study_output.status in ['completed', 'qa_blocked', 'terminated_system'] %}
+            {% if view_study_output.status == 'completed' %}
             <div style="display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
                 {% if view_study_output.report_sections and view_study_output.report_sections.max_version > 1 %}
                 <span style="font-size: 13px; color: #555;">Report Version:</span>
@@ -2602,6 +2606,7 @@
             <div style="background: #e8f4fd; border: 1px solid #b8daff; border-radius: 6px; padding: 12px; font-size: 13px; color: #004085;">
                 Maximum of 2 follow-up rounds reached for this study. No further follow-ups are allowed.
             </div>
+            {% endif %}
             {% endif %}
             {% endif %}
         </div>

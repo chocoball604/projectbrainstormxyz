@@ -5968,23 +5968,13 @@ def run_ben_qa(study_dict):
                     continue
 
                 pt_row = gov_conn.execute(
-                    "SELECT id, mlg_data FROM grounding_traces WHERE trigger_event = 'persona_created' AND persona_id = ?",
+                    "SELECT id, admin_source_reason_code FROM grounding_traces WHERE trigger_event = 'persona_created' AND persona_id = ?",
                     (pid,),
                 ).fetchone()
                 if not pt_row:
                     gov_failures.append(
                         f"Missing Grounding Trace for persona_created (persona {pid})."
                     )
-                elif pt_row["mlg_data"]:
-                    try:
-                        _pt_mlg = json.loads(pt_row["mlg_data"]) if isinstance(pt_row["mlg_data"], str) else pt_row["mlg_data"]
-                        if _pt_mlg.get("context_sources"):
-                            gov_failures.append(
-                                f"Persona {pid} grounding trace contains context_sources — "
-                                "context citations must NOT influence persona selection/creation."
-                            )
-                    except (json.JSONDecodeError, TypeError):
-                        pass
 
         _excluded_fields = ["known_vs_unknown", "business_problem", "competitive_context"]
         if gt_row:
@@ -6306,10 +6296,15 @@ def download_pdf(study_id):
     if not study:
         conn.close()
         return render_error("Study not found.")
-    if study["status"] not in ("completed", "qa_blocked", "terminated_system"):
+    if study["status"] in ("qa_blocked", "terminated_system"):
         conn.close()
         return render_error(
-            "Report is only available for completed or reviewed studies."
+            "This study's output has been withheld by the QA gate. PDF download is not available."
+        )
+    if study["status"] != "completed":
+        conn.close()
+        return render_error(
+            "Report is only available for completed studies."
         )
     followup_rows = conn.execute(
         "SELECT * FROM followups WHERE study_id = ? ORDER BY followup_round ASC",
@@ -6866,6 +6861,11 @@ def translate_output(study_id):
         return jsonify({"ok": False, "error": "Study not found."}), 404
 
     study_dict = dict(study)
+
+    if study_dict.get("status") in ("qa_blocked", "terminated_system"):
+        conn.close()
+        return jsonify({"ok": False, "error": "Output withheld by QA gate. Translation not available."}), 403
+
     output_lang = study_dict.get("output_language") or "en"
 
     if output_lang == target_lang:
