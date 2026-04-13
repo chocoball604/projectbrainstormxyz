@@ -196,6 +196,20 @@
                 opacity: 0.7;
             }
 
+            .blog-section-btn {
+                display: inline-block;
+                background: #bbb;
+                color: #fff;
+                text-decoration: none;
+                padding: 8px 20px;
+                border-radius: 6px;
+                font-size: var(--font-heading);
+                font-weight: 600;
+                margin-bottom: 12px;
+                transition: background 0.2s;
+            }
+            .blog-section-btn:hover { background: var(--pb-grey); }
+
             .landing-footer {
                 background: #1a1a2e;
                 color: rgba(255,255,255,0.6);
@@ -458,7 +472,7 @@
                         id="section-blog"
                     >
                         <div class="landing-section-inner">
-                            <a href="/blog" style="display: inline-block; background: var(--pb-grey); color: #fff; text-decoration: none; padding: 8px 20px; border-radius: 6px; font-size: var(--font-heading); font-weight: 600; margin-bottom: 12px;">博客／最新消息</a>
+                            <a href="/blog" class="blog-section-btn">博客／最新消息</a>
                             {% if latest_blog_posts %}
                             <div
                                 style="
@@ -623,7 +637,7 @@
                         id="section-blog"
                     >
                         <div class="landing-section-inner">
-                            <a href="/blog" style="display: inline-block; background: var(--pb-grey); color: #fff; text-decoration: none; padding: 8px 20px; border-radius: 6px; font-size: var(--font-heading); font-weight: 600; margin-bottom: 12px;">博客／最新消息</a>
+                            <a href="/blog" class="blog-section-btn">博客／最新消息</a>
                             {% if latest_blog_posts %}
                             <div
                                 style="
@@ -819,7 +833,7 @@
                         id="section-blog"
                     >
                         <div class="landing-section-inner">
-                            <a href="/blog" style="display: inline-block; background: var(--pb-grey); color: #fff; text-decoration: none; padding: 8px 20px; border-radius: 6px; font-size: var(--font-heading); font-weight: 600; margin-bottom: 12px;">Blog / News</a>
+                            <a href="/blog" class="blog-section-btn">Blog / News</a>
                             {% if latest_blog_posts %}
                             <div
                                 style="
