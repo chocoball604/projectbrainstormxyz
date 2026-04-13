@@ -37,8 +37,12 @@
         .brand-lockup {
             display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;
         }
-        .brand-lockup img { height: 32px; width: 32px; object-fit: contain; }
-        .brand-wordmark { font-size: var(--font-brand); font-weight: 700; white-space: nowrap; }
+        .brand-lockup img { height: 36px; width: 36px; object-fit: contain; }
+        .brand-wordmark { font-size: var(--font-brand); font-weight: 700; white-space: nowrap; letter-spacing: -0.3px; }
+        .brand-cn {
+            font-size: 1.05em; margin-left: 0.35em; font-weight: 700; letter-spacing: 0.02em;
+            font-family: 'PingFang TC','Microsoft JhengHei UI','Microsoft JhengHei',sans-serif;
+        }
         .blog-header {
             background: var(--pb-white);
             color: var(--pb-text);
@@ -46,12 +50,11 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
             border-bottom: 1px solid var(--pb-lightgrey);
             box-shadow: 0 2px 10px rgba(0,0,0,0.06);
-        }
-        .blog-header .brand-lockup {
-            padding-bottom: 4px;
-            border-bottom: 2px solid var(--pb-accent);
         }
         .blog-header .brand-wordmark { color: var(--pb-text); }
         .blog-header-right { display: flex; align-items: center; gap: 14px; }
@@ -61,8 +64,30 @@
             font-size: var(--font-small);
             font-weight: 500;
             opacity: 0.8;
+            transition: opacity 0.2s;
         }
         .blog-header-right a:hover { opacity: 1; }
+        .blog-header-right .btn-header {
+            background: var(--pb-grey);
+            color: #fff;
+            padding: 7px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: var(--font-small);
+            text-decoration: none;
+            opacity: 1;
+        }
+        .blog-header-right .btn-header:hover { background: #8a8a8a; }
+        .lang-selector {
+            background: transparent;
+            color: var(--pb-text);
+            border: 1px solid var(--pb-lightgrey);
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: var(--font-small);
+            cursor: pointer;
+        }
+        .lang-selector option { color: #333; background: #fff; }
         .container {
             max-width: 800px;
             margin: 32px auto;
@@ -115,11 +140,18 @@
 <div class="blog-header">
     <a href="/" class="brand-lockup">
         <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
-        <span class="brand-wordmark" id="brand-wordmark">Project Brainstorm</span>
+        <span class="brand-wordmark"><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思計劃</span></span>
     </a>
     <div class="blog-header-right">
         <a href="/">Home</a>
         <a href="/blog">Blog / News</a>
+        <select class="lang-selector" aria-label="Language" id="lang-selector">
+            <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
+            <option value="zh-Hans"{% if lang == 'zh-Hans' %} selected{% endif %}>CN-Simplified简</option>
+            <option value="zh-Hant"{% if lang == 'zh-Hant' %} selected{% endif %}>CN-Traditional繁</option>
+        </select>
+        <a href="/?show_auth_tab=login">Login</a>
+        <a href="/?show_auth_tab=signup" class="btn-header">Sign Up</a>
     </div>
 </div>
 
@@ -136,13 +168,13 @@
 </div>
 
 <script>
-(function(){
-    var lang = document.documentElement.getAttribute('data-lang') || 'en';
-    var wm = document.getElementById('brand-wordmark');
-    if (wm && (lang === 'zh-Hans' || lang === 'zh-Hant' || lang === 'ja')) {
-        wm.textContent = 'Project Brainstorm \u96C6\u601D\u5EE3\u76CA';
-    }
-})();
+var langSel = document.getElementById('lang-selector');
+if (langSel) {
+    langSel.addEventListener('change', function() {
+        document.cookie = 'pb_lang=' + this.value + ';path=/;max-age=31536000;SameSite=Lax';
+        location.reload();
+    });
+}
 </script>
 
 <div style="background: #1a1a2e; color: rgba(255,255,255,0.6); text-align: center; padding: 24px 20px; font-size: 11px; line-height: 1.6; margin-top: 40px;">
