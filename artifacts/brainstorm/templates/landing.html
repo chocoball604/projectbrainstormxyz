@@ -122,246 +122,61 @@
         }
         .lang-selector option { color: #333; background: #fff; }
 
-        .landing-section {
-            padding: 45px 24px;
-            text-align: center;
-        }
-        .landing-section-inner {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-        .section-white { background: var(--pb-white); color: var(--pb-text); }
-        .section-accent { background: var(--pb-accent); color: var(--pb-text-on-accent); }
-
-        .landing-section h2 {
-            font-size: var(--font-heading);
-            font-weight: 700;
-            margin-bottom: 20px;
-            line-height: var(--line-heading);
-        }
-        .landing-section h3 {
-            font-size: var(--font-heading);
-            font-weight: 600;
-            margin-bottom: 14px;
-            margin-top: 22px;
-        }
-        .landing-section p {
-            font-size: var(--font-body);
-            line-height: var(--line-body);
-            margin-bottom: 14px;
-        }
-        .pb-bullet-wrap {
-            display: flex;
-            justify-content: center;
-        }
-        .pb-rail {
-            width: min(680px, 92vw);
-            text-align: left;
-        }
-        .pb-bullets {
-            list-style: disc;
-            list-style-position: inside;
-            padding: 0;
-            margin: 0.35rem 0 0.9rem 0;
-        }
-        .pb-bullets li {
-            margin: 0.25rem 0;
-            font-size: var(--font-body);
-            line-height: 1.6;
-        }
-        .pb-lead {
-            margin: 0.6rem 0 0.25rem 0;
-            font-size: var(--font-body);
-            line-height: var(--line-body);
-        }
-        .pb-em {
-            font-style: italic;
-        }
-        .pb-two-col {
-            display: flex;
-            justify-content: center;
-            gap: 64px;
-            width: 100%;
-        }
-        .pb-col {
-            width: 260px;
-        }
-        .pb-col-title {
-            font-weight: 700;
-            text-align: center;
-            margin-bottom: 0.35rem;
-        }
-        @media (max-width: 720px) {
-            .pb-two-col {
-                flex-direction: column;
-                gap: 18px;
-                align-items: stretch;
-            }
-            .pb-col {
-                width: 100%;
-            }
-            .pb-col-title {
-                text-align: left;
-            }
-        }
-
-        .btn-landing {
-            display: inline-block;
-            padding: 12px 28px;
-            border-radius: 8px;
-            font-size: var(--font-body);
-            font-weight: 700;
-            text-decoration: none;
-            transition: transform 0.2s, box-shadow 0.2s;
-            cursor: pointer;
-            border: none;
-        }
-        .btn-landing:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-        .btn-primary-landing { background: var(--pb-grey); color: #fff; }
-        .btn-secondary-landing { background: transparent; color: var(--pb-accent); border: 2px solid var(--pb-accent); margin-left: 12px; }
-        .section-accent .btn-secondary-landing { color: #fff; border-color: #fff; }
-        .section-accent .btn-primary-landing { background: #fff; color: var(--pb-accent); }
-
-        .hero-section {
-            padding: 56px 24px 45px;
-            text-align: center;
-        }
-        .hero-section h2 {
-            font-size: var(--font-heading);
-            margin-bottom: 14px;
-        }
-        .hero-section .hero-subtitle {
-            font-size: var(--font-body);
-            color: #555;
-            margin-bottom: 10px;
-            font-weight: 500;
-        }
-        .hero-section .hero-desc {
-            font-size: var(--font-body);
-            color: #666;
-            max-width: 700px;
-            margin: 0 auto 28px;
-            line-height: var(--line-body);
-        }
-        .hero-buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-
-        .callout-band {
-            padding: 34px 24px;
-            text-align: center;
-        }
-        .callout-band p {
-            font-size: var(--font-heading);
-            font-weight: 600;
-            font-style: italic;
-            max-width: 800px;
-            margin: 0 auto;
-            line-height: 1.4;
-        }
-
-        .cta-section {
-            text-align: center;
-            padding: 45px 24px;
-        }
-        .cta-section h2 { margin-bottom: 24px; }
-        .cta-section p { font-size: var(--font-body); margin-bottom: 8px; }
-
-        @media (max-width: 700px) {
-            .landing-header-right { gap: 8px; }
-            .landing-header-right a { font-size: var(--font-small); }
-        }
-
-        .callout-sentence {
-            text-align: center;
-            font-weight: 700;
-            font-style: italic;
-            margin-top: 20px;
-            margin-bottom: 0;
-        }
-
-        .flow-diagram {
-            margin-top: 32px;
-        }
-        .flow-diagram-title {
-            text-align: center;
-            font-size: var(--font-body);
-            font-weight: 600;
-            margin-bottom: 24px;
-            font-style: italic;
-        }
-        .flow-card {
-            max-width: 620px;
-            margin: 0 auto;
-            padding: 16px 20px;
-            border-radius: 10px;
+        .landing-content {
             background: #fff;
-            border: 1px solid #D4DDE2;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-            display: flex;
-            align-items: flex-start;
-            gap: 16px;
+            padding: 28px 24px 36px;
+        }
+        .landing-content-inner {
+            max-width: 860px;
+            margin: 0 auto;
+        }
+        .landing-copy {
+            font-size: 16px;
+            line-height: 1.7;
+            color: var(--pb-text);
             text-align: left;
         }
-        .flow-card-output {
-            border-left: 3px solid #5C7E8F;
+        .landing-copy h1 {
+            font-size: 20px;
+            margin-bottom: 12px;
+            font-weight: 700;
         }
-        .flow-num {
-            flex-shrink: 0;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: var(--pb-accent);
+        .landing-copy h2 {
+            font-size: 18px;
+            margin: 22px 0 8px;
+            font-weight: 700;
+        }
+        .landing-copy p {
+            font-size: 16px;
+            margin: 0 0 14px;
+        }
+        .landing-copy .landing-spacer {
+            height: 14px;
+        }
+        .landing-copy .landing-button-wrap {
+            margin: 18px 0 26px;
+        }
+        .landing-copy .landing-flow {
+            display: block;
+            margin: 0 auto 28px;
+            max-width: 100%;
+            height: auto;
+        }
+        .landing-copy .landing-flow-wrap {
+            text-align: center;
+            margin: 10px 0 28px;
+        }
+        .landing-copy .landing-signup-btn {
+            display: inline-block;
+            background: #27ae60;
             color: #fff;
+            text-decoration: none;
+            padding: 12px 22px;
+            border-radius: 6px;
             font-size: 16px;
             font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
-        .flow-card-body { flex: 1; }
-        .flow-card-title {
-            font-size: var(--font-body);
-            font-weight: 700;
-            color: var(--pb-text);
-            margin-bottom: 4px;
-        }
-        .flow-card-role {
-            font-size: var(--font-small);
-            font-weight: 600;
-            color: var(--pb-accent);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 6px;
-        }
-        .flow-card ul {
-            margin: 4px 0 0 0;
-            padding: 0;
-            list-style: none;
-        }
-        .flow-card ul li {
-            font-size: var(--font-body);
-            line-height: 1.5;
-            padding-left: 14px;
-            position: relative;
-            color: var(--pb-text);
-            margin-bottom: 2px;
-        }
-        .flow-card ul li::before {
-            content: "\2022";
-            position: absolute;
-            left: 2px;
-            color: var(--pb-accent);
-            font-weight: 700;
-        }
-        .flow-connector {
-            text-align: center;
-            padding: 4px 0;
-            font-size: 20px;
-            color: #D4DDE2;
-            line-height: 1;
-        }
-
-
-
+        .landing-copy .landing-signup-btn:hover { background: #219a52; }
         .blog-placeholder {
             text-align: center;
             padding: 32px;
@@ -492,294 +307,69 @@
 <div class="landing-error">{{ error }}</div>
 {% endif %}
 
-<!-- Section 1: Hero (white) -->
-<section class="landing-section section-white hero-section" id="section-hero">
-    <div class="landing-section-inner">
-        <h2>Simulate Markets. Avoid Costly Mistakes.</h2>
-        <p class="hero-subtitle">AI&#8209;native market intelligence for Asia&#8209;Pacific and beyond.</p>
-        <p class="hero-desc">Test strategies, messaging, and decisions with culturally grounded simulations — before committing capital.</p>
-        <div class="hero-buttons">
-            <a href="#" class="btn-landing btn-primary-landing" onclick="openAuthModal('signup'); return false;">Free Trial</a>
-            <a href="#section-how-it-works" class="btn-landing btn-secondary-landing">See How It Works</a>
-        </div>
-    </div>
-</section>
-
-<!-- Section 2: The Problem (accent) -->
-<section class="landing-section section-accent" id="section-problem">
-    <div class="landing-section-inner">
-        <h2>The World's Most Important Region Is the Hardest to Understand</h2>
-        <div class="pb-bullet-wrap">
-            <div class="pb-rail">
-                <p class="pb-lead">Asia&#8209;Pacific is fast&#8209;growing, culturally complex, and unforgiving.</p>
-                <ul class="pb-bullets">
-                    <li>16+ major markets</li>
-                    <li>41+ languages</li>
-                    <li>Rapidly shifting consumers and regulations</li>
-                </ul>
-                <p class="pb-lead">Yet most decisions are still made using:</p>
-                <ul class="pb-bullets">
-                    <li>Slow, biased surveys</li>
-                    <li>Incomplete panels</li>
-                    <li>Gut feel and "experience"</li>
-                </ul>
+<section class="landing-content">
+    <div class="landing-content-inner">
+        <div class="landing-copy">
+            <h1>Project Brainstorm (Beta)</h1>
+            <h2>AI-Native Market Research for Discovery-Stage Decisions</h2>
+            <p>Project Brainstorm is an experimental platform for AI‑native market research, designed to help teams explore markets and decision contexts before committing resources.</p>
+            <p>This beta release -- V1A – is focused on one core question:</p>
+            <p>Who exists in a market segment, and how might those people think or react to an idea or concept -- before any product or solution bias is introduced?</p>
+            <p>Traditional market research struggles to answer this well. Surveys, panels, and focus groups built on human respondents are slow, expensive, and structurally biased -- especially in Asia‑Pacific, where markets are fragmented, languages are diverse, and cultural nuance matters most.</p>
+            <p>Generic AI tools move faster, but they are opaque, ungrounded, and difficult to trust.</p>
+            <p>Project Brainstorm exists to explore a different approach.</p>
+            <h2>What this beta does</h2>
+            <p>Project Brainstorm V1A enables discovery‑stage research using synthetic surveys, in‑depth interviews, and focus groups. Outputs look familiar -- research findings, transcripts, structured insight reports -- but they are generated through AI-native market simulation, not human panels.</p>
+            <p>At the center of the platform are synthetic personas: lifelike, statistically plausible representations of people in a specific market context. These personas are grounded in high‑quality demographic data, regional context, and local journalism, enabling ethnographic realism without relying on live respondents.</p>
+            <p>Every output is explainable, source‑cited, and reviewed through a disciplined QA process. Confidence is labeled. Limits and uncertainty are explicit.</p>
+            <h2>What this beta deliberately does not do</h2>
+            <p>This release does not support concept-conditioned or category-primed sampling. It is not designed to answer: “who will buy this product”, “how much are they willing to pay”, or “which brand will win”.</p>
+            <p>Those questions belong in later versions.</p>
+            <p>V1A is about understanding populations, surfacing patterns, tensions, and reactions – not predicting solutions.</p>
+            <h2>Where this beta is focused</h2>
+            <p>The current release is tuned for major Asian markets, including:</p>
+            <p>Hong Kong</p>
+            <p>Mainland China</p>
+            <p>Japan</p>
+            <p>Singapore</p>
+            <p>Malaysia</p>
+            <h2>Why sign up</h2>
+            <p>Project Brainstorm is in active beta. We are looking for practitioners who want to try it, challenge it, and help shape what comes next.</p>
+            <p>If you work in strategy, marketing, insights, innovation, investment, policy -- or are building a business in Asia-Pacific – we invite you to explore the platform and share your feedback.</p>
+            <div class="landing-button-wrap">
+                <a href="/signup" class="landing-signup-btn">Sign Up for the Beta</a>
             </div>
-        </div>
-        <p class="callout-sentence">The result: cultural misfires, failed launches, and billions in lost value.</p>
-    </div>
-</section>
-
-<!-- Section 3: The Insight Gap (white) -->
-<section class="landing-section section-white" id="section-insight-gap">
-    <div class="landing-section-inner">
-        <h2>Traditional Research Is Too Slow. Generic AI Is Not Trustworthy.</h2>
-        <div class="pb-bullet-wrap">
-            <div class="pb-rail">
-                <div class="pb-two-col">
-                    <div class="pb-col">
-                        <div class="pb-col-title">Legacy market research</div>
-                        <ul class="pb-bullets">
-                            <li>Takes weeks or months</li>
-                            <li>Is expensive and episodic</li>
-                            <li>Breaks down in APAC</li>
-                        </ul>
+            <div class="landing-flow-wrap">
+                <img src="@assets/Flow-EN_1776061622577.png" alt="Flow diagram" class="landing-flow">
+            </div>
+            <section class="landing-section section-accent" id="section-blog">
+                <div class="landing-section-inner">
+                    <h2>Blog / News</h2>
+                    {% if latest_blog_posts %}
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; margin-top: 20px;">
+                        {% for post in latest_blog_posts %}
+                        <a href="/blog/{{ post.id }}" style="text-decoration: none; color: inherit;">
+                            <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 18px; transition: background 0.2s;">
+                                {% if post.image_path %}
+                                <img src="/static/blog/{{ post.image_path }}" alt="{{ post.title }}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">
+                                {% endif %}
+                                <h3 style="font-size: var(--font-heading); font-weight: 600; margin-bottom: 6px; color: #fff;">{{ post.title }}</h3>
+                                <p style="font-size: var(--font-small); color: rgba(255,255,255,0.6);">{{ post.created_at }}</p>
+                            </div>
+                        </a>
+                        {% endfor %}
                     </div>
-                    <div class="pb-col">
-                        <div class="pb-col-title">Generic AI tools</div>
-                        <ul class="pb-bullets">
-                            <li>Are fast but opaque</li>
-                            <li>Lack cultural depth and focus</li>
-                            <li>Cannot be audited or trusted</li>
-                        </ul>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <a href="/blog" style="color: var(--pb-lightgrey); font-weight: 600; text-decoration: none; font-size: var(--font-body);">Read more &rarr;</a>
                     </div>
-                </div>
-            </div>
-        </div>
-        <p class="callout-sentence">Speed without trust isn't insight, it's risk.</p>
-    </div>
-</section>
-
-<!-- Section 4: Our Solution (accent) -->
-<section class="landing-section section-accent" id="section-solution">
-    <div class="landing-section-inner">
-        <h2>AI&#8209;Native Market Intelligence Through Simulation</h2>
-        <div class="pb-bullet-wrap">
-            <div class="pb-rail">
-                <p class="pb-lead">Project Brainstorm replaces traditional surveys and focus groups with grounded simulations using synthetic consumers.</p>
-                <p class="pb-lead" style="font-weight: 700;">Synthetic consumers are:</p>
-                <ul class="pb-bullets">
-                    <li>Lifelike AI personas</li>
-                    <li>Statistically plausible representations of real people</li>
-                    <li>Grounded in trusted local journalism and regional data</li>
-                </ul>
-                <p class="pb-lead">You interact through <strong>Mark</strong>, our Market Intelligence Copilot, who helps you:</p>
-                <ul class="pb-bullets">
-                    <li>Frame the business problem</li>
-                    <li>Design the research</li>
-                    <li>Run simulations</li>
-                    <li>Turn results into decision&#8209;ready insights</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- Section 5: Who It's For (white) -->
-<section class="landing-section section-white" id="section-who">
-    <div class="landing-section-inner">
-        <h2>Built for Teams That Can't Afford to Get APAC Wrong</h2>
-        <div class="pb-bullet-wrap">
-            <div class="pb-rail">
-                <ul class="pb-bullets">
-                    <li>Global and regional brand leaders</li>
-                    <li>Consultancies and agencies</li>
-                    <li>Investors and financial institutions</li>
-                    <li>Public sector and policy teams</li>
-                </ul>
-            </div>
-        </div>
-        <p class="callout-sentence">Your decisions carry reputational, financial, or strategic risk - this is for you.</p>
-    </div>
-</section>
-
-<!-- Section 6: Why Use Project Brainstorm (accent) -->
-<section class="landing-section section-accent" id="section-why">
-    <div class="landing-section-inner">
-        <h2>Continuous Market Testing — Without the Friction</h2>
-        <div class="pb-bullet-wrap">
-            <div class="pb-rail">
-                <p class="pb-lead">In a perfect world, teams would run constant research before every major decision.</p>
-                <p class="pb-lead">We make that possible by delivering:</p>
-                <ul class="pb-bullets">
-                    <li><strong>Speed:</strong> insights in minutes, not weeks</li>
-                    <li><strong>Cultural fidelity:</strong> grounded in local sources, not assumptions</li>
-                    <li><strong>Auditability:</strong> every output is source&#8209;cited and explainable</li>
-                    <li><strong>Cost efficiency:</strong> SaaS subscriptions, not open&#8209;ended consulting</li>
-                </ul>
-            </div>
-        </div>
-        <p class="callout-sentence">Market research becomes a daily decision tool, not a last-minute expense.</p>
-    </div>
-</section>
-
-<!-- Section 7: What Makes Us Different (white) -->
-<section class="landing-section section-white" id="section-different">
-    <div class="landing-section-inner">
-        <h2>Trust Is Designed In — Not Assumed</h2>
-        <div class="pb-bullet-wrap">
-            <div class="pb-rail">
-                <p class="pb-lead">Unlike chatbots, Project Brainstorm is not a black box.</p>
-                <ul class="pb-bullets">
-                    <li>Every persona is grounded</li>
-                    <li>Every insight is labeled by confidence</li>
-                    <li>Every claim is traceable to real sources</li>
-                </ul>
-            </div>
-        </div>
-        <p class="callout-sentence">We don't ask you to "trust the model". We make trust verifiable.</p>
-    </div>
-</section>
-
-<!-- Section 8: What You Get (accent) -->
-<section class="landing-section section-accent" id="section-outputs">
-    <div class="landing-section-inner">
-        <h2>Familiar Research Outputs — Generated in a New Way</h2>
-        <div class="pb-bullet-wrap">
-            <div class="pb-rail">
-                <ul class="pb-bullets">
-                    <li>Synthetic survey results</li>
-                    <li>Synthetic focus group and in-depth interview transcripts</li>
-                    <li>Structured insight reports</li>
-                    <li>Recommendations, risks, and unknowns</li>
-                    <li>Full citations and audit trails</li>
-                </ul>
-            </div>
-        </div>
-        <p class="callout-sentence">Same outputs decision-makers expect, delivered faster, cheaper, and with cultural precision.</p>
-    </div>
-</section>
-
-<!-- Section 9: One-Line Differentiator (white, callout band) -->
-<section class="landing-section section-white callout-band" id="section-differentiator">
-    <div class="landing-section-inner">
-        <p>From human panels to grounded simulation. Market research rebuilt for Asia-Pacific.</p>
-    </div>
-</section>
-
-<!-- Section 10: Final CTA (accent) -->
-<section class="landing-section section-accent cta-section" id="section-cta">
-    <div class="landing-section-inner">
-        <h2>Make Better Decisions Before It's Too Late</h2>
-        <p>Run a simulation.</p>
-        <p>Test assumptions.</p>
-        <p>Avoid blind spots.</p>
-        <div style="margin-top: 28px;">
-            <a href="#" class="btn-landing btn-primary-landing" onclick="openAuthModal('signup'); return false;">Free Trial</a>
-        </div>
-    </div>
-</section>
-
-<!-- Section 11: See How It Works (white) -->
-<section class="landing-section section-white" id="section-how-it-works">
-    <div class="landing-section-inner">
-        <h2>See How It Works</h2>
-        <p>You start with a real business decision, not a survey form.</p>
-        <p><strong>Mark</strong> acts like a senior consultant — helping you frame the problem and choose the right research approach.</p>
-        <p><strong>Lisa</strong> does the work — running culturally-grounded simulations using synthetic consumers.</p>
-        <p><strong>Ben</strong> ensures trust — enforcing rigor, realism, and auditability before anything reaches you.</p>
-        <p class="callout-sentence">You get insights you can act on, fast. With clarity on what's strong, what's tentative, and what's unknown.</p>
-
-        <div class="flow-diagram">
-            <p class="flow-diagram-title">Multi-agent ecosystem. One disciplined flow. No guesswork.</p>
-
-            <div class="flow-card">
-                <div class="flow-num">1</div>
-                <div class="flow-card-body">
-                    <div class="flow-card-title">Your Business Question</div>
-                </div>
-            </div>
-            <div class="flow-connector">&#9660;</div>
-
-            <div class="flow-card">
-                <div class="flow-num">2</div>
-                <div class="flow-card-body">
-                    <div class="flow-card-role">Mark, Market Intelligence Copilot</div>
-                    <ul>
-                        <li>Clarifies the decision</li>
-                        <li>Frames the right questions</li>
-                        <li>Designs the study</li>
-                    </ul>
-                </div>
-            </div>
-            <div class="flow-connector">&#9660;</div>
-
-            <div class="flow-card">
-                <div class="flow-num">3</div>
-                <div class="flow-card-body">
-                    <div class="flow-card-role">Lisa, Virtual Consultant</div>
-                    <ul>
-                        <li>Builds grounded personas</li>
-                        <li>Runs simulations (surveys, in-depth interviews, focus groups)</li>
-                    </ul>
-                </div>
-            </div>
-            <div class="flow-connector">&#9660;</div>
-
-            <div class="flow-card">
-                <div class="flow-num">4</div>
-                <div class="flow-card-body">
-                    <div class="flow-card-role">Ben, QA Sentinel</div>
-                    <ul>
-                        <li>Checks realism and grounding</li>
-                        <li>Enforces rigor</li>
-                        <li>Blocks weak outputs</li>
-                    </ul>
-                </div>
-            </div>
-            <div class="flow-connector">&#9660;</div>
-
-            <div class="flow-card flow-card-output">
-                <div class="flow-num">5</div>
-                <div class="flow-card-body">
-                    <div class="flow-card-role">Decision-ready insights</div>
-                    <ul>
-                        <li>Clear findings</li>
-                        <li>Confidence labels</li>
-                        <li>Full source citations</li>
-                        <li>Risks and unknowns</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- Section 12: Blog/News (accent) -->
-<section class="landing-section section-accent" id="section-blog">
-    <div class="landing-section-inner">
-        <h2>Blog / News</h2>
-        {% if latest_blog_posts %}
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; margin-top: 20px;">
-            {% for post in latest_blog_posts %}
-            <a href="/blog/{{ post.id }}" style="text-decoration: none; color: inherit;">
-                <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 18px; transition: background 0.2s;">
-                    {% if post.image_path %}
-                    <img src="/static/blog/{{ post.image_path }}" alt="{{ post.title }}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">
+                    {% else %}
+                    <div class="blog-placeholder">
+                        <p>Coming soon</p>
+                    </div>
                     {% endif %}
-                    <h3 style="font-size: var(--font-heading); font-weight: 600; margin-bottom: 6px; color: #fff;">{{ post.title }}</h3>
-                    <p style="font-size: var(--font-small); color: rgba(255,255,255,0.6);">{{ post.created_at }}</p>
                 </div>
-            </a>
-            {% endfor %}
+            </section>
         </div>
-        <div style="text-align: center; margin-top: 20px;">
-            <a href="/blog" style="color: var(--pb-lightgrey); font-weight: 600; text-decoration: none; font-size: var(--font-body);">Read more &rarr;</a>
-        </div>
-        {% else %}
-        <div class="blog-placeholder">
-            <p>Coming soon</p>
-        </div>
-        {% endif %}
     </div>
 </section>
 
