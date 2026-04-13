@@ -433,6 +433,69 @@
                         </div>
                     </section>
                 </div>
+            {% elif lang == 'zh-Hans' %}
+                <div class="landing-copy-zh">
+                    <h1>Project Brainstorm集思计划 (测试版)</h1>
+                    <h2>用于探索阶段决策的 AI 原生市场研究</h2>
+                    <p>集思计画是一个实验性的 AI 原生市场研究平台，旨在帮助团队在投入资源之前，探索市场与关键决策情境。</p>
+                    <p>此版本 -- V1A -- 聚焦于一个核心问题：</p>
+                    <p>在引入任何产品或方案偏见之前，一个市场区隔中「有哪些人存在」，以及这些人可能如何思考或回应一个想法或概念？</p>
+                    <p>传统市场研究很难有效回答这个问题。依赖真人受访者的问卷、消费者面板与焦点团体，往往过于缓慢、成本高昂，且在方法上存在结构性偏误 -- 在亚太地区尤其如此。碎片化的市场、多样的语言，以及高度依赖文化脉络的细微差异，使得可靠洞察更困难，也更关键。</p>
+                    <p>通用型 AI 工具虽然速度快，但其运作不透明、缺乏在地脉络，难以建立信任。</p>
+                    <p>集思计画正是为了探索一种不同的方法而诞生。</p>
+                    <h2>此版本的功能</h2>
+                    <p>集思计画V1A支援探索阶段研究，可执行民意调查（Survey）、深度访谈（IDI）与焦点小组（Focus Group）。产出形式看似熟悉 -- 研究发现、访谈逐字稿、结构化洞察报告 -- 但其生成方式并非来自真人受访，而是透过 AI 原生的市场模拟。</p>
+                    <p>平台核心是合成角色（Synthetic Personas，亦可视为模拟消费者的人口代表）：在统计上合理、具有真实感的市场人口代表。这些合成角色以高品质的人口资料、区域脉络与在地新闻来源为基础，使研究能呈现具民族志真实感的反应，而无需依赖即时招募的受访者。</p>
+                    <p>所有输出结果皆可被解释，并附有来源引用，同时经过严谨的品质保证流程审查。信心程度会清楚标示，不确定性与限制也会明确揭示。</p>
+                    <h2>此版本刻意不处理的问题</h2>
+                    <p>此版本不支援概念导向或类别导向的抽样方式，也不旨在回答以下问题：</p>
+                    <p>「谁会购买这个产品？」</p>
+                    <p>「他们愿意付多少钱？」</p>
+                    <p>「哪个品牌会胜出？」</p>
+                    <p>这些问题将留待后续版本探索。</p>
+                    <p>V1A 着重于理解人口结构与反应模式，揭示关键张力与行为趋势，而非预测最终解法或市场结果。</p>
+                    <h2>此版本的市场重点</h2>
+                    <p>目前版本针对以下亚洲主要市场进行调校：</p>
+                    <p>香港</p>
+                    <p>中国大陆</p>
+                    <p>日本</p>
+                    <p>新加坡</p>
+                    <p>马来西亚</p>
+                    <h2>为什么要注册参与</h2>
+                    <p>集思计画目前仍处于测试版阶段。我们正在寻找愿意实际使用、挑战假设，并协助塑造平台未来方向的实务使用者。</p>
+                    <p>如果你从事策略、行销、洞察、创新、投资或公共政策相关工作，或正在亚太地区创业，我们诚挚邀请你探索本平台并分享你的回馈。</p>
+                    <div class="landing-button-wrap">
+                        <a href="#" class="landing-signup-btn" onclick="openAuthModal('signup'); return false;">注册参与测试版</a>
+                    </div>
+                    <div class="landing-flow-wrap">
+                        <img src="/static/flow_cnsimp.png" alt="" class="landing-flow" />
+                    </div>
+                    <section class="landing-section section-accent" id="section-blog">
+                        <div class="landing-section-inner">
+                            <h2>博客／最新消息</h2>
+                            {% if latest_blog_posts %}
+                            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; margin-top: 20px;">
+                                {% for post in latest_blog_posts %}
+                                <a href="/blog/{{ post.id }}" style="text-decoration: none; color: inherit;">
+                                    <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 18px; transition: background 0.2s;">
+                                        {% if post.image_path %}
+                                        <img src="/static/blog/{{ post.image_path }}" alt="{{ post.title }}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;" />
+                                        {% endif %}
+                                        <h3 style="font-size: var(--font-heading); font-weight: 600; margin-bottom: 6px; color: #fff;">{{ post.title }}</h3>
+                                        <p style="font-size: var(--font-small); color: rgba(255,255,255,0.6);">{{ post.created_at }}</p>
+                                    </div>
+                                </a>
+                                {% endfor %}
+                            </div>
+                            <div style="text-align: center; margin-top: 20px;">
+                                <a href="/blog" style="color: var(--pb-lightgrey); font-weight: 600; text-decoration: none; font-size: var(--font-body);">更多文章 &rarr;</a>
+                            </div>
+                            {% else %}
+                            <div class="blog-placeholder"><p>即将推出</p></div>
+                            {% endif %}
+                        </div>
+                    </section>
+                </div>
             {% else %}
                 <div class="landing-copy">
                     <h1>Project Brainstorm (Beta)</h1>
