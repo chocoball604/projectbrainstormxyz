@@ -1,492 +1,752 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-lang="{{ lang }}">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Brainstorm — AI-Native Market Intelligence</title>
-    <style>
-        :root {
-          --pb-white: #FFFFFF;
-          --pb-accent: #5C7E8F;
-          --pb-grey: #A2A2A2;
-          --pb-lightgrey: #D4DDE2;
-          --pb-text: #111111;
-          --pb-text-on-accent: #FFFFFF;
-          --font-small: 11px;
-          --font-body: 13px;
-          --font-brand: clamp(18px, 2vw, 22px);
-          --font-heading: clamp(15px, 1.6vw, 18px);
-          --line-body: 1.45;
-          --line-heading: 1.25;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: Calibri, "Segoe UI", Arial, sans-serif;
-            font-size: var(--font-body);
-            line-height: var(--line-body);
-            color: var(--pb-text);
-            min-height: 100vh;
-            background: var(--pb-white);
-        }
-        html[data-lang="en"] body {
-            font-family: Calibri, "Segoe UI", Arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic", "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
-        }
-        html[data-lang="ja"] body {
-            font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic", sans-serif;
-        }
-        html[data-lang="zh-Hans"] body {
-            font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-        }
-        html[data-lang="zh-Hant"] body {
-            font-family: "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
-        }
-        .small, .meta, .nav, .label { font-size: var(--font-small); }
-        h1,h2,h3,h4,h5 { font-size: var(--font-heading); font-weight: 600; line-height: var(--line-heading); }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Project Brainstorm — AI-Native Market Intelligence</title>
+        <style>
+            :root {
+              --pb-white: #FFFFFF;
+              --pb-accent: #5C7E8F;
+              --pb-grey: #A2A2A2;
+              --pb-lightgrey: #D4DDE2;
+              --pb-text: #111111;
+              --pb-text-on-accent: #FFFFFF;
+              --font-small: 11px;
+              --font-body: 13px;
+              --font-brand: clamp(18px, 2vw, 22px);
+              --font-heading: clamp(15px, 1.6vw, 18px);
+              --line-body: 1.45;
+              --line-heading: 1.25;
+            }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+                font-family: Calibri, "Segoe UI", Arial, sans-serif;
+                font-size: var(--font-body);
+                line-height: var(--line-body);
+                color: var(--pb-text);
+                min-height: 100vh;
+                background: var(--pb-white);
+            }
+            html[data-lang="en"] body {
+                font-family: Calibri, "Segoe UI", Arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic", "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+            }
+            html[data-lang="ja"] body {
+                font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "MS PGothic", sans-serif;
+            }
+            html[data-lang="zh-Hans"] body {
+                font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+            }
+            html[data-lang="zh-Hant"] body {
+                font-family: "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif;
+            }
+            .small, .meta, .nav, .label { font-size: var(--font-small); }
+            h1,h2,h3,h4,h5 { font-size: var(--font-heading); font-weight: 600; line-height: var(--line-heading); }
 
-        .brand-lockup {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            text-decoration: none;
-            color: inherit;
-        }
-        .brand-lockup img {
-            height: 36px;
-            width: 36px;
-            object-fit: contain;
-        }
-        .brand-wordmark {
-            font-size: var(--font-brand);
-            font-weight: 700;
-            letter-spacing: -0.3px;
-            white-space: nowrap;
-        }
-        .brand-cn {
-            font-size: 1.05em;
-            margin-left: 0.35em;
-            font-weight: 700;
-            letter-spacing: 0.02em;
-            font-family: 'PingFang TC','Microsoft JhengHei UI','Microsoft JhengHei',sans-serif;
-        }
+            .brand-lockup {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                text-decoration: none;
+                color: inherit;
+            }
+            .brand-lockup img {
+                height: 36px;
+                width: 36px;
+                object-fit: contain;
+            }
+            .brand-wordmark {
+                font-size: var(--font-brand);
+                font-weight: 700;
+                letter-spacing: -0.3px;
+                white-space: nowrap;
+            }
+            .brand-cn {
+                font-size: 1.05em;
+                margin-left: 0.35em;
+                font-weight: 700;
+                letter-spacing: 0.02em;
+                font-family: 'PingFang TC','Microsoft JhengHei UI','Microsoft JhengHei',sans-serif;
+            }
 
-        .landing-header {
-            background: var(--pb-white);
-            color: var(--pb-text);
-            padding: 12px 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            border-bottom: 1px solid var(--pb-lightgrey);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.06);
-        }
-        .landing-header .brand-lockup {
-        }
-        .landing-header .brand-wordmark { color: var(--pb-text); }
-        .landing-header-right {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .landing-header-right a {
-            color: var(--pb-text);
-            text-decoration: none;
-            font-size: var(--font-small);
-            font-weight: 500;
-            opacity: 0.8;
-            transition: opacity 0.2s;
-        }
-        .landing-header-right a:hover { opacity: 1; }
-        .landing-header-right .btn-header {
-            background: var(--pb-grey);
-            color: #fff;
-            padding: 7px 16px;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: var(--font-small);
-            text-decoration: none;
-            transition: background 0.2s;
-            opacity: 1;
-        }
-        .landing-header-right .btn-header:hover { background: #8a8a8a; }
-        .lang-selector {
-            background: transparent;
-            color: var(--pb-text);
-            border: 1px solid var(--pb-lightgrey);
-            border-radius: 4px;
-            padding: 3px 6px;
-            font-size: var(--font-small);
-            cursor: pointer;
-        }
-        .lang-selector option { color: #333; background: #fff; }
+            .landing-header {
+                background: var(--pb-white);
+                color: var(--pb-text);
+                padding: 12px 24px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                border-bottom: 1px solid var(--pb-lightgrey);
+                box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+            }
+            .landing-header .brand-lockup {
+            }
+            .landing-header .brand-wordmark { color: var(--pb-text); }
+            .landing-header-right {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+            .landing-header-right a {
+                color: var(--pb-text);
+                text-decoration: none;
+                font-size: var(--font-small);
+                font-weight: 500;
+                opacity: 0.8;
+                transition: opacity 0.2s;
+            }
+            .landing-header-right a:hover { opacity: 1; }
+            .landing-header-right .btn-header {
+                background: var(--pb-grey);
+                color: #fff;
+                padding: 7px 16px;
+                border-radius: 6px;
+                font-weight: 600;
+                font-size: var(--font-small);
+                text-decoration: none;
+                transition: background 0.2s;
+                opacity: 1;
+            }
+            .landing-header-right .btn-header:hover { background: #8a8a8a; }
+            .lang-selector {
+                background: transparent;
+                color: var(--pb-text);
+                border: 1px solid var(--pb-lightgrey);
+                border-radius: 4px;
+                padding: 3px 6px;
+                font-size: var(--font-small);
+                cursor: pointer;
+            }
+            .lang-selector option { color: #333; background: #fff; }
 
-        .landing-content {
-            background: #fff;
-            padding: 28px 24px 36px;
-        }
-        .landing-content-inner {
-            max-width: 860px;
-            margin: 0 auto;
-        }
-        .landing-copy {
-            font-size: 16px;
-            line-height: 1.7;
-            color: var(--pb-text);
-            text-align: left;
-        }
-        .landing-copy h1 {
-            font-size: 20px;
-            margin-bottom: 12px;
-            font-weight: 700;
-        }
-        .landing-copy h2 {
-            font-size: 18px;
-            margin: 22px 0 8px;
-            font-weight: 700;
-        }
-        .landing-copy p {
-            font-size: 16px;
-            margin: 0 0 14px;
-        }
-        .landing-copy .landing-spacer {
-            height: 14px;
-        }
-        .landing-copy .landing-button-wrap {
-            margin: 18px 0 26px;
-        }
-        .landing-copy .landing-flow {
-            display: block;
-            margin: 0 auto 28px;
-            max-width: 100%;
-            height: auto;
-        }
-        .landing-copy .landing-flow-wrap {
-            text-align: center;
-            margin: 10px 0 28px;
-        }
-        .landing-copy .landing-signup-btn {
-            display: inline-block;
-            background: #27ae60;
-            color: #fff;
-            text-decoration: none;
-            padding: 12px 22px;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 700;
-        }
-        .landing-copy .landing-signup-btn:hover { background: #219a52; }
-        .blog-placeholder {
-            text-align: center;
-            padding: 32px;
-            border: 2px dashed rgba(255,255,255,0.3);
-            border-radius: 12px;
-            margin-top: 20px;
-        }
-        .section-white .blog-placeholder {
-            border-color: #e2e8f0;
-        }
-        .blog-placeholder p {
-            font-size: var(--font-body);
-            opacity: 0.7;
-        }
+            .landing-content {
+                background: #fff;
+                padding: 28px 24px 36px;
+            }
+            .landing-content-inner {
+                max-width: 860px;
+                margin: 0 auto;
+            }
+            .landing-copy {
+                font-size: 16px;
+                line-height: 1.7;
+                color: var(--pb-text);
+                text-align: left;
+            }
+            .landing-copy h1 {
+                font-size: 20px;
+                margin-bottom: 12px;
+                font-weight: 700;
+            }
+            .landing-copy h2 {
+                font-size: 18px;
+                margin: 22px 0 8px;
+                font-weight: 700;
+            }
+            .landing-copy p {
+                font-size: 16px;
+                margin: 0 0 14px;
+            }
+            .landing-copy .landing-spacer {
+                height: 14px;
+            }
+            .landing-copy .landing-button-wrap {
+                margin: 18px 0 26px;
+            }
+            .landing-copy .landing-flow {
+                display: block;
+                margin: 0 auto 28px;
+                max-width: 100%;
+                height: auto;
+            }
+            .landing-copy .landing-flow-wrap {
+                text-align: center;
+                margin: 10px 0 28px;
+            }
+            .landing-copy .landing-signup-btn {
+                display: inline-block;
+                background: #27ae60;
+                color: #fff;
+                text-decoration: none;
+                padding: 12px 22px;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: 700;
+            }
+            .landing-copy .landing-signup-btn:hover { background: #219a52; }
+            .blog-placeholder {
+                text-align: center;
+                padding: 32px;
+                border: 2px dashed rgba(255,255,255,0.3);
+                border-radius: 12px;
+                margin-top: 20px;
+            }
+            .section-white .blog-placeholder {
+                border-color: #e2e8f0;
+            }
+            .blog-placeholder p {
+                font-size: var(--font-body);
+                opacity: 0.7;
+            }
 
-        .landing-footer {
-            background: #1a1a2e;
-            color: rgba(255,255,255,0.6);
-            text-align: center;
-            padding: 20px;
-            font-size: var(--font-small);
-        }
+            .landing-footer {
+                background: #1a1a2e;
+                color: rgba(255,255,255,0.6);
+                text-align: center;
+                padding: 20px;
+                font-size: var(--font-small);
+            }
 
-        .auth-modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 200;
-            justify-content: center;
-            align-items: center;
-        }
-        .auth-modal-overlay.active { display: flex; }
-        .auth-modal {
-            background: #fff;
-            border-radius: 12px;
-            padding: 36px;
-            max-width: 400px;
-            width: 90%;
-            position: relative;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        .auth-modal h2 { color: var(--pb-text); font-size: var(--font-heading); margin-bottom: 18px; }
-        .auth-modal .close-btn {
-            position: absolute;
-            top: 14px;
-            right: 14px;
-            background: none;
-            border: none;
-            font-size: 22px;
-            cursor: pointer;
-            color: #999;
-        }
-        .auth-modal .form-group {
-            margin-bottom: 14px;
-        }
-        .auth-modal .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-size: var(--font-body);
-            font-weight: 500;
-            color: #333;
-        }
-        .auth-modal .form-group input {
-            width: 100%;
-            padding: 9px 12px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            font-size: var(--font-body);
-        }
-        .auth-modal .btn-submit {
-            width: 100%;
-            padding: 11px;
-            background: var(--pb-grey);
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            font-size: var(--font-body);
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .auth-modal .btn-submit:hover { background: #8a8a8a; }
-        .auth-modal .switch-link {
-            text-align: center;
-            margin-top: 14px;
-            font-size: var(--font-small);
-            color: #666;
-        }
-        .auth-modal .switch-link a {
-            color: var(--pb-accent);
-            text-decoration: none;
-            font-weight: 600;
-        }
+            .auth-modal-overlay {
+                display: none;
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 200;
+                justify-content: center;
+                align-items: center;
+            }
+            .auth-modal-overlay.active { display: flex; }
+            .auth-modal {
+                background: #fff;
+                border-radius: 12px;
+                padding: 36px;
+                max-width: 400px;
+                width: 90%;
+                position: relative;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            }
+            .auth-modal h2 { color: var(--pb-text); font-size: var(--font-heading); margin-bottom: 18px; }
+            .auth-modal .close-btn {
+                position: absolute;
+                top: 14px;
+                right: 14px;
+                background: none;
+                border: none;
+                font-size: 22px;
+                cursor: pointer;
+                color: #999;
+            }
+            .auth-modal .form-group {
+                margin-bottom: 14px;
+            }
+            .auth-modal .form-group label {
+                display: block;
+                margin-bottom: 5px;
+                font-size: var(--font-body);
+                font-weight: 500;
+                color: #333;
+            }
+            .auth-modal .form-group input {
+                width: 100%;
+                padding: 9px 12px;
+                border: 1px solid #ccc;
+                border-radius: 6px;
+                font-size: var(--font-body);
+            }
+            .auth-modal .btn-submit {
+                width: 100%;
+                padding: 11px;
+                background: var(--pb-grey);
+                color: #fff;
+                border: none;
+                border-radius: 6px;
+                font-size: var(--font-body);
+                font-weight: 600;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+            .auth-modal .btn-submit:hover { background: #8a8a8a; }
+            .auth-modal .switch-link {
+                text-align: center;
+                margin-top: 14px;
+                font-size: var(--font-small);
+                color: #666;
+            }
+            .auth-modal .switch-link a {
+                color: var(--pb-accent);
+                text-decoration: none;
+                font-weight: 600;
+            }
+
+            {% if error %}
+            .landing-error {
+                background: #fee2e2;
+                color: #dc2626;
+                padding: 11px 24px;
+                text-align: center;
+                font-size: var(--font-body);
+                font-weight: 500;
+            }
+            {% endif %}
+        </style>
+    </head>
+    <body>
+        <div class="landing-header">
+            <a href="/" class="brand-lockup">
+                <img
+                    src="/static/brand/enso_logo_256.png"
+                    alt="Project Brainstorm logo"
+                    onerror="this.style.display='none'"
+                />
+                <span class="brand-wordmark" id="brand-wordmark"
+                    ><span class="brand-en">Project Brainstorm</span
+                    ><span class="brand-cn">集思廣益</span></span
+                >
+            </a>
+            <div class="landing-header-right">
+                <a href="/blog">Blog / News</a>
+                <select class="lang-selector" aria-label="Language" id="lang-selector">
+                    <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
+                    <option value="zh-Hans"{% if lang == 'zh-Hans' %} selected{% endif %}>CN-Simplified简</option>
+                    <option value="zh-Hant"{% if lang == 'zh-Hant' %} selected{% endif %}>CN-Traditional繁</option>
+                </select>
+                <a href="#" onclick="openAuthModal('login'); return false;"
+                    >Login</a
+                >
+                <a
+                    href="#"
+                    class="btn-header"
+                    onclick="openAuthModal('signup'); return false;"
+                    >Sign Up</a
+                >
+            </div>
+        </div>
 
         {% if error %}
-        .landing-error {
-            background: #fee2e2;
-            color: #dc2626;
-            padding: 11px 24px;
-            text-align: center;
-            font-size: var(--font-body);
-            font-weight: 500;
-        }
+        <div class="landing-error">{{ error }}</div>
         {% endif %}
-    </style>
-</head>
-<body>
 
-<div class="landing-header">
-    <a href="/" class="brand-lockup">
-        <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
-        <span class="brand-wordmark" id="brand-wordmark"><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思廣益</span></span>
-    </a>
-    <div class="landing-header-right">
-        <a href="/blog">Blog / News</a>
-        <select class="lang-selector" aria-label="Language" id="lang-selector">
-            <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
-            <option value="zh-Hans"{% if lang == 'zh-Hans' %} selected{% endif %}>CN-Simplified简</option>
-            <option value="zh-Hant"{% if lang == 'zh-Hant' %} selected{% endif %}>CN-Traditional繁</option>
-        </select>
-        <a href="#" onclick="openAuthModal('login'); return false;">Login</a>
-        <a href="#" class="btn-header" onclick="openAuthModal('signup'); return false;">Sign Up</a>
-    </div>
-</div>
-
-{% if error %}
-<div class="landing-error">{{ error }}</div>
-{% endif %}
-
-<section class="landing-content">
-    <div class="landing-content-inner">
-        <div class="landing-copy">
-            <h1>Project Brainstorm (Beta)</h1>
-            <h2>AI-Native Market Research for Discovery-Stage Decisions</h2>
-            <p>Project Brainstorm is an experimental platform for AI‑native market research, designed to help teams explore markets and decision contexts before committing resources.</p>
-            <p>This beta release -- V1A – is focused on one core question:</p>
-            <p>Who exists in a market segment, and how might those people think or react to an idea or concept -- before any product or solution bias is introduced?</p>
-            <p>Traditional market research struggles to answer this well. Surveys, panels, and focus groups built on human respondents are slow, expensive, and structurally biased -- especially in Asia‑Pacific, where markets are fragmented, languages are diverse, and cultural nuance matters most.</p>
-            <p>Generic AI tools move faster, but they are opaque, ungrounded, and difficult to trust.</p>
-            <p>Project Brainstorm exists to explore a different approach.</p>
-            <h2>What this beta does</h2>
-            <p>Project Brainstorm V1A enables discovery‑stage research using synthetic surveys, in‑depth interviews, and focus groups. Outputs look familiar -- research findings, transcripts, structured insight reports -- but they are generated through AI-native market simulation, not human panels.</p>
-            <p>At the center of the platform are synthetic personas: lifelike, statistically plausible representations of people in a specific market context. These personas are grounded in high‑quality demographic data, regional context, and local journalism, enabling ethnographic realism without relying on live respondents.</p>
-            <p>Every output is explainable, source‑cited, and reviewed through a disciplined QA process. Confidence is labeled. Limits and uncertainty are explicit.</p>
-            <h2>What this beta deliberately does not do</h2>
-            <p>This release does not support concept-conditioned or category-primed sampling. It is not designed to answer: “who will buy this product”, “how much are they willing to pay”, or “which brand will win”.</p>
-            <p>Those questions belong in later versions.</p>
-            <p>V1A is about understanding populations, surfacing patterns, tensions, and reactions – not predicting solutions.</p>
-            <h2>Where this beta is focused</h2>
-            <p>The current release is tuned for major Asian markets, including:</p>
-            <p>Hong Kong</p>
-            <p>Mainland China</p>
-            <p>Japan</p>
-            <p>Singapore</p>
-            <p>Malaysia</p>
-            <h2>Why sign up</h2>
-            <p>Project Brainstorm is in active beta. We are looking for practitioners who want to try it, challenge it, and help shape what comes next.</p>
-            <p>If you work in strategy, marketing, insights, innovation, investment, policy -- or are building a business in Asia-Pacific – we invite you to explore the platform and share your feedback.</p>
-            <div class="landing-button-wrap">
-                <a href="/signup" class="landing-signup-btn">Sign Up for the Beta</a>
-            </div>
-            <div class="landing-flow-wrap">
-                <img src="/static/flow_en.png" alt="" class="landing-flow">
-            </div>
-            <section class="landing-section section-accent" id="section-blog">
-                <div class="landing-section-inner">
-                    <h2>Blog / News</h2>
-                    {% if latest_blog_posts %}
-                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; margin-top: 20px;">
-                        {% for post in latest_blog_posts %}
-                        <a href="/blog/{{ post.id }}" style="text-decoration: none; color: inherit;">
-                            <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 18px; transition: background 0.2s;">
-                                {% if post.image_path %}
-                                <img src="/static/blog/{{ post.image_path }}" alt="{{ post.title }}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">
-                                {% endif %}
-                                <h3 style="font-size: var(--font-heading); font-weight: 600; margin-bottom: 6px; color: #fff;">{{ post.title }}</h3>
-                                <p style="font-size: var(--font-small); color: rgba(255,255,255,0.6);">{{ post.created_at }}</p>
+        <section class="landing-content">
+            <div class="landing-content-inner">
+                <div class="landing-copy">
+                    <h1>Project Brainstorm (Beta)</h1>
+                    <h2>
+                        AI-Native Market Research for Discovery-Stage Decisions
+                    </h2>
+                    <p>
+                        Project Brainstorm is an experimental platform for
+                        AI‑native market research, designed to help teams
+                        explore markets and decision contexts before committing
+                        resources.
+                    </p>
+                    <p>
+                        This beta release -- V1A – is focused on one core
+                        question:
+                    </p>
+                    <p>
+                        Who exists in a market segment, and how might those
+                        people think or react to an idea or concept -- before
+                        any product or solution bias is introduced?
+                    </p>
+                    <p>
+                        Traditional market research struggles to answer this
+                        well. Surveys, panels, and focus groups built on human
+                        respondents are slow, expensive, and structurally biased
+                        -- especially in Asia‑Pacific, where markets are
+                        fragmented, languages are diverse, and cultural nuance
+                        matters most.
+                    </p>
+                    <p>
+                        Generic AI tools move faster, but they are opaque,
+                        ungrounded, and difficult to trust.
+                    </p>
+                    <p>
+                        Project Brainstorm exists to explore a different
+                        approach.
+                    </p>
+                    <h2>What this beta does</h2>
+                    <p>
+                        Project Brainstorm V1A enables discovery‑stage research
+                        using synthetic surveys, in‑depth interviews, and focus
+                        groups. Outputs look familiar -- research findings,
+                        transcripts, structured insight reports -- but they are
+                        generated through AI-native market simulation, not human
+                        panels.
+                    </p>
+                    <p>
+                        At the center of the platform are synthetic personas:
+                        lifelike, statistically plausible representations of
+                        people in a specific market context. These personas are
+                        grounded in high‑quality demographic data, regional
+                        context, and local journalism, enabling ethnographic
+                        realism without relying on live respondents.
+                    </p>
+                    <p>
+                        Every output is explainable, source‑cited, and reviewed
+                        through a disciplined QA process. Confidence is labeled.
+                        Limits and uncertainty are explicit.
+                    </p>
+                    <h2>What this beta deliberately does not do</h2>
+                    <p>
+                        This release does not support concept-conditioned or
+                        category-primed sampling. It is not designed to answer:
+                        “who will buy this product”, “how much are they willing
+                        to pay”, or “which brand will win”.
+                    </p>
+                    <p>Those questions belong in later versions.</p>
+                    <p>
+                        V1A is about understanding populations, surfacing
+                        patterns, tensions, and reactions – not predicting
+                        solutions.
+                    </p>
+                    <h2>Where this beta is focused</h2>
+                    <p>
+                        The current release is tuned for major Asian markets,
+                        including:
+                    </p>
+                    <p>- Hong Kong</p>
+                    <p>- Mainland China</p>
+                    <p>- Japan</p>
+                    <p>- Singapore</p>
+                    <p>- Malaysia</p>
+                    <h2>Why sign up</h2>
+                    <p>
+                        Project Brainstorm is in active beta. We are looking for
+                        practitioners who want to try it, challenge it, and help
+                        shape what comes next.
+                    </p>
+                    <p>
+                        If you work in strategy, marketing, insights,
+                        innovation, investment, policy -- or are building a
+                        business in Asia-Pacific – we invite you to explore the
+                        platform and share your feedback.
+                    </p>
+                    <div class="landing-button-wrap">
+                        <a href="/signup" class="landing-signup-btn"
+                            >Sign Up for the Beta</a
+                        >
+                    </div>
+                    <div class="landing-flow-wrap">
+                        <img
+                            src="/static/flow_en.png"
+                            alt=""
+                            class="landing-flow"
+                        />
+                    </div>
+                    <section
+                        class="landing-section section-accent"
+                        id="section-blog"
+                    >
+                        <div class="landing-section-inner">
+                            <h2>Blog / News</h2>
+                            {% if latest_blog_posts %}
+                            <div
+                                style="
+                                    display: grid;
+                                    grid-template-columns: repeat(
+                                        auto-fill,
+                                        minmax(280px, 1fr)
+                                    );
+                                    gap: 18px;
+                                    margin-top: 20px;
+                                "
+                            >
+                                {% for post in latest_blog_posts %}
+                                <a
+                                    href="/blog/{{ post.id }}"
+                                    style="
+                                        text-decoration: none;
+                                        color: inherit;
+                                    "
+                                >
+                                    <div
+                                        style="
+                                            background: rgba(
+                                                255,
+                                                255,
+                                                255,
+                                                0.1
+                                            );
+                                            border-radius: 12px;
+                                            padding: 18px;
+                                            transition: background 0.2s;
+                                        "
+                                    >
+                                        {% if post.image_path %}
+                                        <img
+                                            src="/static/blog/{{ post.image_path }}"
+                                            alt="{{ post.title }}"
+                                            style="
+                                                width: 100%;
+                                                height: 120px;
+                                                object-fit: cover;
+                                                border-radius: 8px;
+                                                margin-bottom: 10px;
+                                            "
+                                        />
+                                        {% endif %}
+                                        <h3
+                                            style="
+                                                font-size: var(--font-heading);
+                                                font-weight: 600;
+                                                margin-bottom: 6px;
+                                                color: #fff;
+                                            "
+                                        >
+                                            {{ post.title }}
+                                        </h3>
+                                        <p
+                                            style="
+                                                font-size: var(--font-small);
+                                                color: rgba(255, 255, 255, 0.6);
+                                            "
+                                        >
+                                            {{ post.created_at }}
+                                        </p>
+                                    </div>
+                                </a>
+                                {% endfor %}
                             </div>
-                        </a>
-                        {% endfor %}
-                    </div>
-                    <div style="text-align: center; margin-top: 20px;">
-                        <a href="/blog" style="color: var(--pb-lightgrey); font-weight: 600; text-decoration: none; font-size: var(--font-body);">Read more &rarr;</a>
-                    </div>
-                    {% else %}
-                    <div class="blog-placeholder">
-                        <p>Coming soon</p>
-                    </div>
-                    {% endif %}
+                            <div style="text-align: center; margin-top: 20px">
+                                <a
+                                    href="/blog"
+                                    style="
+                                        color: var(--pb-lightgrey);
+                                        font-weight: 600;
+                                        text-decoration: none;
+                                        font-size: var(--font-body);
+                                    "
+                                    >Read more &rarr;</a
+                                >
+                            </div>
+                            {% else %}
+                            <div class="blog-placeholder">
+                                <p>Coming soon</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </section>
                 </div>
-            </section>
+            </div>
+        </section>
+
+        <div class="landing-footer" style="line-height: 1.6">
+            &copy; Project Brainstorm 2026. All rights reserved.
+            &nbsp;&nbsp;&middot;&nbsp;&nbsp;
+            <a
+                href="#"
+                onclick="openAuthModal('admin'); return false;"
+                style="
+                    color: rgba(255, 255, 255, 0.3);
+                    text-decoration: none;
+                    font-size: var(--font-small);
+                "
+                >Admin</a
+            >
+            <div style="margin-top: 8px">
+                <a
+                    href="{{ url_for('terms_page') }}"
+                    style="
+                        color: rgba(255, 255, 255, 0.8);
+                        text-decoration: none;
+                        margin: 0 8px;
+                    "
+                    >Terms of Service</a
+                >
+                <a
+                    href="{{ url_for('privacy_page') }}"
+                    style="
+                        color: rgba(255, 255, 255, 0.8);
+                        text-decoration: none;
+                        margin: 0 8px;
+                    "
+                    >Privacy Policy</a
+                >
+                <a
+                    href="{{ url_for('disclaimer_page') }}"
+                    style="
+                        color: rgba(255, 255, 255, 0.8);
+                        text-decoration: none;
+                        margin: 0 8px;
+                    "
+                    >Disclaimer</a
+                >
+            </div>
+            <div
+                style="
+                    margin-top: 10px;
+                    font-size: 10px;
+                    color: rgba(255, 255, 255, 0.45);
+                    max-width: 700px;
+                    margin-left: auto;
+                    margin-right: auto;
+                "
+            >
+                Experimental Platform Notice: Project Brainstorm is an
+                experimental AI powered simulation platform. Outputs are
+                synthetic, probabilistic, and provided for informational
+                purposes only. Do not rely on them as professional advice.
+            </div>
+            <div
+                style="
+                    margin-top: 8px;
+                    font-size: 9px;
+                    color: rgba(255, 255, 255, 0.35);
+                    max-width: 700px;
+                    margin-left: auto;
+                    margin-right: auto;
+                    text-transform: uppercase;
+                "
+            >
+                TO THE MAXIMUM EXTENT PERMITTED BY LAW, PROJECT BRAINSTORM AND
+                ALL ASSOCIATED PERSONS SHALL NOT BE LIABLE FOR ANY DIRECT,
+                INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, OR
+                PUNITIVE DAMAGES.
+            </div>
         </div>
-    </div>
-</section>
 
-<div class="landing-footer" style="line-height: 1.6;">
-    &copy; Project Brainstorm 2026. All rights reserved.
-    &nbsp;&nbsp;&middot;&nbsp;&nbsp;
-    <a href="#" onclick="openAuthModal('admin'); return false;" style="color: rgba(255,255,255,0.3); text-decoration: none; font-size: var(--font-small);">Admin</a>
-    <div style="margin-top: 8px;">
-        <a href="{{ url_for('terms_page') }}" style="color: rgba(255,255,255,0.8); text-decoration: none; margin: 0 8px;">Terms of Service</a>
-        <a href="{{ url_for('privacy_page') }}" style="color: rgba(255,255,255,0.8); text-decoration: none; margin: 0 8px;">Privacy Policy</a>
-        <a href="{{ url_for('disclaimer_page') }}" style="color: rgba(255,255,255,0.8); text-decoration: none; margin: 0 8px;">Disclaimer</a>
-    </div>
-    <div style="margin-top: 10px; font-size: 10px; color: rgba(255,255,255,0.45); max-width: 700px; margin-left: auto; margin-right: auto;">Experimental Platform Notice: Project Brainstorm is an experimental AI powered simulation platform. Outputs are synthetic, probabilistic, and provided for informational purposes only. Do not rely on them as professional advice.</div>
-    <div style="margin-top: 8px; font-size: 9px; color: rgba(255,255,255,0.35); max-width: 700px; margin-left: auto; margin-right: auto; text-transform: uppercase;">TO THE MAXIMUM EXTENT PERMITTED BY LAW, PROJECT BRAINSTORM AND ALL ASSOCIATED PERSONS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, OR PUNITIVE DAMAGES.</div>
-</div>
-
-<!-- Sign Up Modal -->
-<div class="auth-modal-overlay" id="modal-signup">
-    <div class="auth-modal">
-        <button class="close-btn" onclick="closeAuthModals()">&times;</button>
-        <h2>Sign Up</h2>
-        <form action="/signup" method="POST">
-            <div class="form-group">
-                <label for="signup-email">Email</label>
-                <input type="email" id="signup-email" name="email" required>
+        <!-- Sign Up Modal -->
+        <div class="auth-modal-overlay" id="modal-signup">
+            <div class="auth-modal">
+                <button class="close-btn" onclick="closeAuthModals()">
+                    &times;
+                </button>
+                <h2>Sign Up</h2>
+                <form action="/signup" method="POST">
+                    <div class="form-group">
+                        <label for="signup-email">Email</label>
+                        <input
+                            type="email"
+                            id="signup-email"
+                            name="email"
+                            required
+                        />
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-username">Username</label>
+                        <input
+                            type="text"
+                            id="signup-username"
+                            name="username"
+                            required
+                        />
+                    </div>
+                    <div class="form-group">
+                        <label for="signup-password"
+                            >Password (6–10 characters)</label
+                        >
+                        <input
+                            type="password"
+                            id="signup-password"
+                            name="password"
+                            minlength="6"
+                            maxlength="10"
+                            required
+                        />
+                    </div>
+                    <button type="submit" class="btn-submit">Sign Up</button>
+                </form>
+                <div class="switch-link">
+                    Already have an account?
+                    <a href="#" onclick="openAuthModal('login'); return false;"
+                        >Login</a
+                    >
+                </div>
             </div>
-            <div class="form-group">
-                <label for="signup-username">Username</label>
-                <input type="text" id="signup-username" name="username" required>
-            </div>
-            <div class="form-group">
-                <label for="signup-password">Password (6–10 characters)</label>
-                <input type="password" id="signup-password" name="password" minlength="6" maxlength="10" required>
-            </div>
-            <button type="submit" class="btn-submit">Sign Up</button>
-        </form>
-        <div class="switch-link">
-            Already have an account? <a href="#" onclick="openAuthModal('login'); return false;">Login</a>
         </div>
-    </div>
-</div>
 
-<!-- Login Modal -->
-<div class="auth-modal-overlay" id="modal-login">
-    <div class="auth-modal">
-        <button class="close-btn" onclick="closeAuthModals()">&times;</button>
-        <h2>Login</h2>
-        <form action="/login" method="POST">
-            <div class="form-group">
-                <label for="login-email">Email</label>
-                <input type="email" id="login-email" name="email" required>
+        <!-- Login Modal -->
+        <div class="auth-modal-overlay" id="modal-login">
+            <div class="auth-modal">
+                <button class="close-btn" onclick="closeAuthModals()">
+                    &times;
+                </button>
+                <h2>Login</h2>
+                <form action="/login" method="POST">
+                    <div class="form-group">
+                        <label for="login-email">Email</label>
+                        <input
+                            type="email"
+                            id="login-email"
+                            name="email"
+                            required
+                        />
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input
+                            type="password"
+                            id="login-password"
+                            name="password"
+                            required
+                        />
+                    </div>
+                    <button type="submit" class="btn-submit">Login</button>
+                </form>
+                <div class="switch-link">
+                    Don't have an account?
+                    <a href="#" onclick="openAuthModal('signup'); return false;"
+                        >Sign Up</a
+                    >
+                </div>
             </div>
-            <div class="form-group">
-                <label for="login-password">Password</label>
-                <input type="password" id="login-password" name="password" required>
-            </div>
-            <button type="submit" class="btn-submit">Login</button>
-        </form>
-        <div class="switch-link">
-            Don't have an account? <a href="#" onclick="openAuthModal('signup'); return false;">Sign Up</a>
         </div>
-    </div>
-</div>
 
-<!-- Admin Login Modal -->
-<div class="auth-modal-overlay" id="modal-admin">
-    <div class="auth-modal">
-        <button class="close-btn" onclick="closeAuthModals()">&times;</button>
-        <h2>Admin Login</h2>
-        <form action="/admin-login" method="POST">
-            <div class="form-group">
-                <label for="admin-password">Admin Password</label>
-                <input type="password" id="admin-password" name="admin_password" required>
+        <!-- Admin Login Modal -->
+        <div class="auth-modal-overlay" id="modal-admin">
+            <div class="auth-modal">
+                <button class="close-btn" onclick="closeAuthModals()">
+                    &times;
+                </button>
+                <h2>Admin Login</h2>
+                <form action="/admin-login" method="POST">
+                    <div class="form-group">
+                        <label for="admin-password">Admin Password</label>
+                        <input
+                            type="password"
+                            id="admin-password"
+                            name="admin_password"
+                            required
+                        />
+                    </div>
+                    <button type="submit" class="btn-submit">
+                        Login as Admin
+                    </button>
+                </form>
             </div>
-            <button type="submit" class="btn-submit">Login as Admin</button>
-        </form>
-    </div>
-</div>
+        </div>
 
-<script>
-function openAuthModal(type) {
-    closeAuthModals();
-    document.getElementById('modal-' + type).classList.add('active');
-}
-function closeAuthModals() {
-    document.querySelectorAll('.auth-modal-overlay').forEach(function(m) { m.classList.remove('active'); });
-}
-document.querySelectorAll('.auth-modal-overlay').forEach(function(overlay) {
-    overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) closeAuthModals();
-    });
-});
-
-document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
-    anchor.addEventListener('click', function(e) {
-        var href = this.getAttribute('href');
-        if (href.startsWith('#section-')) {
-            e.preventDefault();
-            var target = document.querySelector(href);
-            if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        <script>
+            function openAuthModal(type) {
+                closeAuthModals();
+                document.getElementById('modal-' + type).classList.add('active');
             }
-        }
-    });
-});
+            function closeAuthModals() {
+                document.querySelectorAll('.auth-modal-overlay').forEach(function(m) { m.classList.remove('active'); });
+            }
+            document.querySelectorAll('.auth-modal-overlay').forEach(function(overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) closeAuthModals();
+                });
+            });
 
-var langSel = document.getElementById('lang-selector');
-langSel.addEventListener('change', function() {
-    document.cookie = 'pb_lang=' + this.value + ';path=/;max-age=31536000;SameSite=Lax';
-    location.reload();
-});
+            document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
+                anchor.addEventListener('click', function(e) {
+                    var href = this.getAttribute('href');
+                    if (href.startsWith('#section-')) {
+                        e.preventDefault();
+                        var target = document.querySelector(href);
+                        if (target) {
+                            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }
+                });
+            });
+
+            var langSel = document.getElementById('lang-selector');
+            langSel.addEventListener('change', function() {
+                document.cookie = 'pb_lang=' + this.value + ';path=/;max-age=31536000;SameSite=Lax';
+                location.reload();
+            });
 
 
-{% if error %}
-openAuthModal('{{ show_auth_tab }}');
-{% endif %}
-</script>
-
-</body>
+            {% if error %}
+            openAuthModal('{{ show_auth_tab }}');
+            {% endif %}
+        </script>
+    </body>
 </html>
