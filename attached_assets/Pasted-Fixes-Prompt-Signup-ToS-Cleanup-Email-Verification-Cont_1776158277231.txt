@@ -1,0 +1,109 @@
+Fixes Prompt – Signup + ToS Cleanup + Email Verification
+Context:
+Recent signup work is functionally close but has UI, field‑definition, ToS content, and email‑delivery issues (see [Project Brainstorm — signup+tos.pdf](https://onedrive.live.com?cid=BFEC441E4A44D47E&id=BFEC441E4A44D47E!sc255b281bd264526919b32cc0704797b&EntityRepresentationId=4326b428-ced6-4079-9f60-d1734ceb95e9)). Apply the fixes below. Before changing code, inspect existing logic and reuse where possible.
+
+1. Fix Signup Form Layout / Formatting
+Problem:
+The current signup form renders vertically oversized and misaligned (“chimney” layout).
+Required fixes:
+
+Re‑layout fields into a clean, readable vertical form, with consistent spacing.
+Avoid duplicated signup blocks on the same page (only one active signup form per page).
+Ensure the ToS scroll panel does not push the form into excessive height.
+Keep layout minimal and readable on laptop screens (no need for mobile polish yet).
+
+Do not change header or footer.
+
+2. Correct Signup Fields and Validation
+Replace current signup fields with exactly the following:
+Required
+
+Email
+First Name
+Surname
+Location – Country only
+
+Implement as a dropdown (simple static country list or limited regions is fine for now)
+
+
+Password
+Confirm Password
+
+Optional
+
+Company
+Role / Title
+LinkedIn URL
+
+Rules:
+
+Remove username from the form (continue deriving username from email prefix internally).
+Add HTML5 required validation where applicable.
+Validate password confirmation match server‑side.
+LinkedIn field should accept full URL only.
+
+
+3. Fix Terms of Service & Privacy Policy Content
+Problem:
+Current ToS / Privacy text in the signup flow is incorrect / hallucinated.
+Required fix:
+
+Do NOT generate or rewrite ToS/Privacy text.
+Reuse the existing Terms of Service and Privacy Policy content already in the platform
+
+Pull from the same source used by /terms and /privacy.
+
+
+Display both documents inside the scrollable panel exactly as authored.
+Keep the “scroll to bottom before enabling checkbox” behavior.
+Checkbox must remain required.
+
+
+4. Email Not Sending – Diagnose and Fix Safely
+Problem:
+No email was received during signup or admin activation.
+Tasks:
+
+Verify that send_email(...) is being called in:
+
+signup verification flow
+admin activation flow
+
+
+Add explicit debug logging around:
+
+SMTP configuration detection
+email send attempt
+graceful no‑op path when SMTP is not configured
+
+
+Confirm DB connections are closed before SMTP calls.
+Confirm env vars used:
+
+SMTP_HOST
+SMTP_PORT
+SMTP_USER
+SMTP_PASS
+EMAIL_FROM
+
+
+Do not hard‑code any credentials.
+
+If SMTP is missing, log a clear warning explaining why email was skipped.
+Do not add retry queues or change email architecture.
+
+Constraints (Do Not Violate)
+
+Do not refactor unrelated code
+Do not change DB schema unless absolutely required
+Do not touch brainstorm_v1_replit_singlepage_pack/
+Do not invent new ToS / Privacy text
+Do not change admin login or existing users
+
+
+Deliverables (Required)
+At the end of your response, include:
+
+Files changed
+What changed
+How to test (step‑by‑step, including email verification test)
