@@ -307,6 +307,10 @@
         <div class="card" id="tab-signup" style="display:none;">
             <h2>Sign Up</h2>
             <form action="/signup" method="POST" id="signup-form-main">
+                <div class="form-group">
+                    <label for="signup-email">Email</label>
+                    <input type="email" id="signup-email" name="email" required>
+                </div>
                 <div style="display:flex;gap:12px;">
                     <div class="form-group" style="flex:1;">
                         <label for="signup-first-name">First Name</label>
@@ -318,79 +322,73 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="signup-email">Email</label>
-                    <input type="email" id="signup-email" name="email" required>
+                    <label for="signup-location">Location — Country</label>
+                    <select id="signup-location" name="location" required style="width:100%;padding:8px 10px;border:1px solid #d0d7de;border-radius:6px;font-size:14px;background:#fff;">
+                        <option value="">Select country…</option>
+                        <option value="Hong Kong">Hong Kong</option>
+                        <option value="China">China</option>
+                        <option value="Japan">Japan</option>
+                        <option value="Singapore">Singapore</option>
+                        <option value="South Korea">South Korea</option>
+                        <option value="Taiwan">Taiwan</option>
+                        <option value="Thailand">Thailand</option>
+                        <option value="Indonesia">Indonesia</option>
+                        <option value="Malaysia">Malaysia</option>
+                        <option value="Philippines">Philippines</option>
+                        <option value="Vietnam">Vietnam</option>
+                        <option value="India">India</option>
+                        <option value="Australia">Australia</option>
+                        <option value="New Zealand">New Zealand</option>
+                        <option value="United States">United States</option>
+                        <option value="United Kingdom">United Kingdom</option>
+                        <option value="Canada">Canada</option>
+                        <option value="Germany">Germany</option>
+                        <option value="France">France</option>
+                        <option value="Netherlands">Netherlands</option>
+                        <option value="Switzerland">Switzerland</option>
+                        <option value="United Arab Emirates">United Arab Emirates</option>
+                        <option value="Other">Other</option>
+                    </select>
                 </div>
-                <div class="form-group">
-                    <label for="signup-username">Username</label>
-                    <input type="text" id="signup-username" name="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="signup-password">Password (6–10 characters)</label>
-                    <input type="password" id="signup-password" name="password" minlength="6" maxlength="10" required>
-                </div>
-                <div class="form-group">
-                    <label for="signup-password2">Confirm Password</label>
-                    <input type="password" id="signup-password2" name="password2" minlength="6" maxlength="10" required>
-                </div>
-                <div class="form-group">
-                    <label for="signup-referral">How did you hear about us? <span style="font-weight:400;color:#999;">(optional)</span></label>
-                    <input type="text" id="signup-referral" name="referral_source" placeholder="e.g. Google, LinkedIn, a friend…">
-                </div>
-                <div class="form-group">
-                    <label style="margin-bottom:6px;display:block;">Terms of Service &amp; Privacy Policy</label>
-                    <div id="signup-tos-panel-main" style="height:180px;overflow-y:auto;border:1px solid #d0d7de;border-radius:6px;padding:14px 16px;font-size:13px;line-height:1.6;color:#444;background:#fafafa;">
-                        <strong style="font-size:14px;">Terms of Service</strong><br><br>
-                        <strong>1. Acceptance of Terms</strong><br>
-                        By accessing or using Project Brainstorm ("Service"), you agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree, do not use the Service.<br><br>
-                        <strong>2. Beta Service</strong><br>
-                        Project Brainstorm is currently in beta. Features may change, be removed, or become unavailable without notice. The Service is provided "as is" for evaluation and research purposes.<br><br>
-                        <strong>3. Permitted Use</strong><br>
-                        You may use the Service for lawful market research and business intelligence purposes only. You must not attempt to reverse-engineer the platform, scrape data at scale, create fake accounts, or use the Service to generate harmful, misleading, or illegal content. You are responsible for all activity under your account.<br><br>
-                        <strong>4. Third-Party Sources</strong><br>
-                        The Service may incorporate data, content, and outputs derived from third-party sources, AI language models, and web search tools. Such outputs are provided for research and informational purposes only. Project Brainstorm does not warrant the accuracy, completeness, or fitness for purpose of any third-party content or AI-generated output. You are solely responsible for how you use, interpret, and act upon any information generated by the Service.<br><br>
-                        <strong>5. Account &amp; Access</strong><br>
-                        You must provide accurate information at registration. Accounts are personal and non-transferable. We reserve the right to suspend or terminate accounts that violate these Terms.<br><br>
-                        <strong>6. Intellectual Property</strong><br>
-                        All platform code, design, and branding are owned by Project Brainstorm. Research outputs generated by your use of the Service belong to you, subject to applicable law and these Terms.<br><br>
-                        <strong>7. Confidentiality</strong><br>
-                        You agree to keep your account credentials confidential and to notify us immediately of any unauthorised access.<br><br>
-                        <strong>8. Limitation of Liability</strong><br>
-                        To the maximum extent permitted by law, Project Brainstorm and its operators shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the Service.<br><br>
-                        <strong>9. Indemnification</strong><br>
-                        You agree to indemnify Project Brainstorm against any claims arising from your misuse of the Service or violation of these Terms.<br><br>
-                        <strong>10. Modifications</strong><br>
-                        We may update these Terms at any time. Continued use of the Service after changes constitutes acceptance. Material changes will be communicated via email or platform notice.<br><br>
-                        <strong>11. Governing Law</strong><br>
-                        These Terms are governed by the laws of the jurisdiction in which Project Brainstorm operates, without regard to conflict-of-law principles.<br><br>
-                        <strong>12. Contact</strong><br>
-                        For questions about these Terms, contact us at <a href="mailto:admin@projectbrainstorm.xyz">admin@projectbrainstorm.xyz</a>.<br><br>
-                        <hr style="border:none;border-top:1px solid #ddd;margin:16px 0;">
-                        <strong style="font-size:14px;">Privacy Policy</strong><br><br>
-                        <strong>1. Information We Collect</strong><br>
-                        We collect information you provide at registration (name, email, username), profile data you add later (company, role, location), and usage data generated when you use the Service (studies, queries, interactions).<br><br>
-                        <strong>2. How We Use Your Information</strong><br>
-                        We use your information to provide and improve the Service, communicate with you about your account and updates, and ensure platform security and compliance with these Terms.<br><br>
-                        <strong>3. Data Sharing</strong><br>
-                        We do not sell your personal information. We may share data with service providers who assist in operating the platform (e.g., email delivery, hosting), subject to confidentiality obligations. We may disclose information if required by law.<br><br>
-                        <strong>4. Data Retention</strong><br>
-                        We retain your data for as long as your account is active or as needed to provide the Service. You may request deletion of your account and associated data by contacting us.<br><br>
-                        <strong>5. Security</strong><br>
-                        We implement reasonable technical and organisational measures to protect your data. No method of transmission or storage is 100% secure; use the Service at your own risk.<br><br>
-                        <strong>6. Cookies</strong><br>
-                        The Service uses session cookies necessary for authentication. We do not use third-party advertising cookies.<br><br>
-                        <strong>7. Your Rights</strong><br>
-                        Depending on your jurisdiction, you may have rights to access, correct, or delete your personal data. Contact us at <a href="mailto:admin@projectbrainstorm.xyz">admin@projectbrainstorm.xyz</a> to exercise these rights.<br><br>
-                        <strong>8. Contact</strong><br>
-                        Privacy enquiries: <a href="mailto:admin@projectbrainstorm.xyz">admin@projectbrainstorm.xyz</a>
+                <div style="display:flex;gap:12px;">
+                    <div class="form-group" style="flex:1;">
+                        <label for="signup-password">Password (6–10 chars)</label>
+                        <input type="password" id="signup-password" name="password" minlength="6" maxlength="10" required>
                     </div>
-                    <p id="signup-scroll-hint-main" style="font-size:12px;color:#888;margin:6px 0 10px;">Scroll to the bottom to enable the checkbox below.</p>
+                    <div class="form-group" style="flex:1;">
+                        <label for="signup-password2">Confirm Password</label>
+                        <input type="password" id="signup-password2" name="password2" minlength="6" maxlength="10" required>
+                    </div>
+                </div>
+                <details style="margin-bottom:12px;">
+                    <summary style="cursor:pointer;font-size:13px;color:#5C7E8F;font-weight:600;">Optional — Company, Role, LinkedIn</summary>
+                    <div style="padding-top:8px;">
+                        <div class="form-group">
+                            <label for="signup-company">Company</label>
+                            <input type="text" id="signup-company" name="company">
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-role">Role / Title</label>
+                            <input type="text" id="signup-role" name="role">
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-linkedin">LinkedIn URL</label>
+                            <input type="url" id="signup-linkedin" name="linkedin" placeholder="https://linkedin.com/in/…">
+                        </div>
+                    </div>
+                </details>
+                <div class="form-group" style="margin-bottom:8px;">
+                    <label style="margin-bottom:6px;display:block;">Terms of Service &amp; Privacy Policy</label>
+                    <div id="signup-tos-panel-main" style="height:150px;overflow-y:auto;border:1px solid #d0d7de;border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.55;color:#444;background:#fafafa;">
+                        {% include '_tos_privacy_inline.html' %}
+                    </div>
+                    <p id="signup-scroll-hint-main" style="font-size:11px;color:#888;margin:4px 0 6px;">Scroll to the bottom to enable the checkbox.</p>
                     <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;">
                         <input type="checkbox" id="signup-tos-agree-main" name="tos_agreed" value="1" disabled required style="margin-top:3px;flex-shrink:0;">
-                        <span>I have read and agree to the Terms of Service and Privacy Policy.</span>
+                        <span>I have read and agree to the <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.</span>
                     </label>
                 </div>
-                <button type="submit" class="btn btn-primary" style="margin-top:8px;">Create Account</button>
+                <button type="submit" class="btn btn-primary">Create Account</button>
             </form>
             <script>
             (function(){

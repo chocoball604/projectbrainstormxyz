@@ -179,20 +179,23 @@
                 <input type="text" id="surname" name="surname" value="{{ user.surname or '' }}" required>
             </div>
             <div class="form-group">
+                <label for="location">Location — Country</label>
+                <select id="location" name="location" required style="width:100%;padding:8px 10px;border:1px solid #d0d7de;border-radius:6px;font-size:14px;background:#fff;">
+                    <option value="">Select country…</option>
+                    {% for c in ['Hong Kong','China','Japan','Singapore','South Korea','Taiwan','Thailand','Indonesia','Malaysia','Philippines','Vietnam','India','Australia','New Zealand','United States','United Kingdom','Canada','Germany','France','Netherlands','Switzerland','United Arab Emirates','Other'] %}<option value="{{ c }}"{% if (user.location or '') == c %} selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
                 <label for="company">Company <span style="font-weight:400;color:#999;">(optional)</span></label>
                 <input type="text" id="company" name="company" value="{{ user.company or '' }}">
             </div>
             <div class="form-group">
-                <label for="role">Role / Title</label>
+                <label for="role">Role / Title <span style="font-weight:400;color:#999;">(optional)</span></label>
                 <input type="text" id="role" name="role" value="{{ user.role or '' }}">
             </div>
             <div class="form-group">
-                <label for="location">Location</label>
-                <input type="text" id="location" name="location" value="{{ user.location or '' }}">
-            </div>
-            <div class="form-group">
-                <label for="linkedin">LinkedIn (optional)</label>
-                <input type="url" id="linkedin" name="linkedin" value="{{ user.linkedin or '' }}" placeholder="https://linkedin.com/in/...">
+                <label for="linkedin">LinkedIn URL <span style="font-weight:400;color:#999;">(optional)</span></label>
+                <input type="url" id="linkedin" name="linkedin" value="{{ user.linkedin or '' }}" placeholder="https://linkedin.com/in/…">
             </div>
             <button type="submit" class="btn-primary">Save Profile</button>
         </form>

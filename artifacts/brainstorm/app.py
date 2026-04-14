@@ -294,25 +294,41 @@ def send_email(to, subject, body_text):
     smtp_pass = os.environ.get("SMTP_PASS", "")
     email_from = os.environ.get("EMAIL_FROM", smtp_user)
 
+    env_status = (
+        f"SMTP_HOST={'SET' if smtp_host else 'MISSING'}, "
+        f"SMTP_PORT={smtp_port}, "
+        f"SMTP_USER={'SET' if smtp_user else 'MISSING'}, "
+        f"SMTP_PASS={'SET' if smtp_pass else 'MISSING'}, "
+        f"EMAIL_FROM={'SET' if email_from else 'MISSING'}"
+    )
+    print(f"[send_email] ENV check: {env_status}")
+
     if not smtp_host or not smtp_user or not smtp_pass:
-        print(f"[send_email] SMTP not configured — skipping email to {to}: {subject}")
+        print(f"[send_email] WARNING: SMTP not configured — email to {to} ('{subject}') was NOT sent. "
+              f"Set SMTP_HOST, SMTP_USER, and SMTP_PASS environment variables to enable email delivery.")
         return False
 
+    print(f"[send_email] Attempting to send '{subject}' to {to} via {smtp_host}:{smtp_port}")
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = email_from
         msg["To"] = to
         msg.attach(MIMEText(body_text, "plain"))
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(email_from, [to], msg.as_string())
-        print(f"[send_email] Sent '{subject}' to {to}")
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(email_from, [to], msg.as_string())
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.ehlo()
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(email_from, [to], msg.as_string())
+        print(f"[send_email] SUCCESS: Sent '{subject}' to {to}")
         return True
     except Exception as e:
-        print(f"[send_email] Failed to send to {to}: {e}")
+        print(f"[send_email] FAILED to send to {to}: {type(e).__name__}: {e}")
         return False
 
 
@@ -3296,22 +3312,26 @@ def signup():
     email = (request.form.get("email") or "").strip().lower()
     first_name = (request.form.get("first_name") or "").strip()
     surname = (request.form.get("surname") or "").strip()
-    username_raw = (request.form.get("username") or "").strip()
-    referral_source = (request.form.get("referral_source") or "").strip()
+    location = (request.form.get("location") or "").strip()
+    company = (request.form.get("company") or "").strip()
+    role = (request.form.get("role") or "").strip()
+    linkedin = (request.form.get("linkedin") or "").strip()
     password = request.form.get("password") or ""
     password2 = request.form.get("password2") or ""
     tos_agreed = request.form.get("tos_agreed") or ""
 
-    if not email or not first_name or not surname or not password:
+    if not email or not first_name or not surname or not location or not password:
         return render_error("Please fill in all required fields.")
     if len(password) < 6 or len(password) > 10:
         return render_error("Password must be 6–10 characters.")
-    if password2 and password != password2:
+    if password != password2:
         return render_error("Passwords do not match.")
     if tos_agreed != "1":
         return render_error("You must agree to the Terms of Service and Privacy Policy to sign up.")
+    if linkedin and not linkedin.startswith("https://"):
+        return render_error("LinkedIn URL must start with https://")
 
-    username = username_raw if username_raw else email.split("@")[0]
+    username = email.split("@")[0]
     now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
     conn = get_db()
@@ -3319,22 +3339,17 @@ def signup():
     if existing:
         conn.close()
         return render_error("That email is already registered.")
-    if username_raw:
-        existing_uname = conn.execute(
-            "SELECT id FROM users WHERE username = ?", (username,)
-        ).fetchone()
-        if existing_uname:
-            conn.close()
-            return render_error("That username is already taken. Please choose another.")
 
     password_hash = generate_password_hash(password)
     verify_token = _secrets.token_urlsafe(32)
     conn.execute(
         """INSERT INTO users
            (email, username, password_hash, state, first_name, surname,
+            location, company, role, linkedin,
             name, email_verify_token, tos_agreed_at)
-           VALUES (?, ?, ?, 'unverified', ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, 'unverified', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (email, username, password_hash, first_name, surname,
+         location, company, role, linkedin,
          (first_name + " " + surname).strip(),
          verify_token, now_str),
     )
