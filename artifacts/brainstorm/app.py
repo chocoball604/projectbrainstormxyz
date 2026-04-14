@@ -111,6 +111,7 @@ def inject_lang():
 VERIFY_EXEMPT_ENDPOINTS = {
     "index",
     "verify_email",
+    "verify_signup",
     "login",
     "signup",
     "admin_login",
@@ -279,6 +280,40 @@ BLOG_STATIC_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "static", "blog"
 )
 os.makedirs(BLOG_STATIC_DIR, exist_ok=True)
+
+
+def send_email(to, subject, body_text):
+    """Send a plain-text email via SMTP. No-ops gracefully if SMTP env vars are absent."""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    smtp_host = os.environ.get("SMTP_HOST", "")
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_user = os.environ.get("SMTP_USER", "")
+    smtp_pass = os.environ.get("SMTP_PASS", "")
+    email_from = os.environ.get("EMAIL_FROM", smtp_user)
+
+    if not smtp_host or not smtp_user or not smtp_pass:
+        print(f"[send_email] SMTP not configured — skipping email to {to}: {subject}")
+        return False
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = email_from
+        msg["To"] = to
+        msg.attach(MIMEText(body_text, "plain"))
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(email_from, [to], msg.as_string())
+        print(f"[send_email] Sent '{subject}' to {to}")
+        return True
+    except Exception as e:
+        print(f"[send_email] Failed to send to {to}: {e}")
+        return False
 
 
 def call_llm(model_id, messages, purpose="", timeout_seconds=60):
@@ -1841,6 +1876,10 @@ def init_db():
         ("location", "TEXT NOT NULL DEFAULT ''"),
         ("linkedin", "TEXT NOT NULL DEFAULT ''"),
         ("last_email_verification_timestamp", "TEXT"),
+        ("first_name", "TEXT NOT NULL DEFAULT ''"),
+        ("surname", "TEXT NOT NULL DEFAULT ''"),
+        ("email_verify_token", "TEXT"),
+        ("tos_agreed_at", "TEXT"),
     ]:
         try:
             conn.execute(f"ALTER TABLE users ADD COLUMN {col_def[0]} {col_def[1]}")
@@ -2648,13 +2687,13 @@ def index():
         pending_users = [
             dict(r)
             for r in conn.execute(
-                "SELECT id, email, username, state, created_at FROM users WHERE state = 'pending' ORDER BY created_at DESC"
+                "SELECT id, email, username, first_name, surname, state, created_at FROM users WHERE state IN ('pending', 'unverified') ORDER BY created_at DESC"
             ).fetchall()
         ]
         all_users = [
             dict(r)
             for r in conn.execute(
-                "SELECT id, email, username, state, created_at FROM users ORDER BY created_at DESC"
+                "SELECT id, email, username, first_name, surname, state, created_at FROM users ORDER BY created_at DESC"
             ).fetchall()
         ]
         admin_web_sources = get_admin_web_sources(conn)
@@ -3252,33 +3291,103 @@ def index():
 
 @app.route("/signup", methods=["POST"])
 def signup():
-    email = (request.form.get("email") or "").strip().lower()
-    username = (request.form.get("username") or "").strip()
-    password = request.form.get("password") or ""
+    import secrets as _secrets
 
-    if not email or not username or not password:
-        return render_error("All fields are required.")
+    email = (request.form.get("email") or "").strip().lower()
+    first_name = (request.form.get("first_name") or "").strip()
+    surname = (request.form.get("surname") or "").strip()
+    username_raw = (request.form.get("username") or "").strip()
+    referral_source = (request.form.get("referral_source") or "").strip()
+    password = request.form.get("password") or ""
+    password2 = request.form.get("password2") or ""
+    tos_agreed = request.form.get("tos_agreed") or ""
+
+    if not email or not first_name or not surname or not password:
+        return render_error("Please fill in all required fields.")
     if len(password) < 6 or len(password) > 10:
         return render_error("Password must be 6–10 characters.")
+    if password2 and password != password2:
+        return render_error("Passwords do not match.")
+    if tos_agreed != "1":
+        return render_error("You must agree to the Terms of Service and Privacy Policy to sign up.")
+
+    username = username_raw if username_raw else email.split("@")[0]
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
     conn = get_db()
     existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
     if existing:
         conn.close()
         return render_error("That email is already registered.")
+    if username_raw:
+        existing_uname = conn.execute(
+            "SELECT id FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        if existing_uname:
+            conn.close()
+            return render_error("That username is already taken. Please choose another.")
 
     password_hash = generate_password_hash(password)
+    verify_token = _secrets.token_urlsafe(32)
     conn.execute(
-        "INSERT INTO users (email, username, password_hash, state) VALUES (?, ?, ?, 'pending')",
-        (email, username, password_hash),
+        """INSERT INTO users
+           (email, username, password_hash, state, first_name, surname,
+            name, email_verify_token, tos_agreed_at)
+           VALUES (?, ?, ?, 'unverified', ?, ?, ?, ?, ?)""",
+        (email, username, password_hash, first_name, surname,
+         (first_name + " " + surname).strip(),
+         verify_token, now_str),
     )
     conn.commit()
-
     user_row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
     conn.close()
 
+    verify_url = request.host_url.rstrip("/") + url_for("verify_signup", t=verify_token)
+    send_email(
+        to=email,
+        subject="Verify your email — Project Brainstorm",
+        body_text=(
+            f"Hi {first_name},\n\n"
+            "Thank you for signing up for Project Brainstorm (Beta).\n\n"
+            "Please verify your email address by clicking the link below:\n\n"
+            f"{verify_url}\n\n"
+            "This link is valid until your account is activated.\n\n"
+            "If you did not sign up, please ignore this email.\n\n"
+            "— The Project Brainstorm Team"
+        ),
+    )
+
     token = create_session(user_id=user_row["id"])
     return redirect(url_for("index", token=token))
+
+
+@app.route("/verify-signup", methods=["GET"])
+def verify_signup():
+    verify_token = (request.args.get("t") or "").strip()
+    if not verify_token:
+        return render_error("Invalid or missing verification link.")
+
+    conn = get_db()
+    user_row = conn.execute(
+        "SELECT * FROM users WHERE email_verify_token = ?", (verify_token,)
+    ).fetchone()
+
+    if not user_row:
+        conn.close()
+        return render_error("Verification link is invalid or has already been used.")
+
+    if user_row["state"] != "unverified":
+        conn.close()
+        return render_error("This link has already been used or your account is in an unexpected state.")
+
+    conn.execute(
+        "UPDATE users SET state = 'pending', email_verify_token = NULL WHERE id = ?",
+        (user_row["id"],),
+    )
+    conn.commit()
+    token = create_session(user_id=user_row["id"])
+    conn.close()
+    return redirect(url_for("index", token=token, _verified="1"))
 
 
 @app.route("/login", methods=["POST"])
@@ -3719,7 +3828,30 @@ def admin_approve(user_id):
 
     conn.execute("UPDATE users SET state = 'active' WHERE id = ?", (user_id,))
     conn.commit()
+    user_email = user["email"]
+    user_first_name = (user["first_name"] or user["name"] or "").strip().split()[0] if (user["first_name"] or user["name"]) else "there"
     conn.close()
+
+    send_email(
+        to=user_email,
+        subject="Welcome to Project Brainstorm (Beta)",
+        body_text=(
+            f"Hi {user_first_name},\n\n"
+            "Welcome to Project Brainstorm — your access to the V1A beta is now active.\n\n"
+            "Project Brainstorm is an experimental, AI-native market research platform designed to help you explore markets, populations, and decision contexts before committing resources. This beta is intentionally lightweight, disciplined, and built for iteration.\n\n"
+            "HOW TO GET STARTED\n\n"
+            "Start a new study from your dashboard. You'll be guided to define a Business Problem and the Decision to Support. These keep your research focused without forcing conclusions.\n\n"
+            "Choose a study type — Synthetic Survey, Focus Group, or In-Depth Interview (IDI) — depending on whether you want breadth, group interaction, or depth.\n\n"
+            "Provide just enough context. Less is more. Clear scope helps the personas explore naturally, and you can always iterate with follow-up studies.\n\n"
+            "NEW TO THE PLATFORM?\n\n"
+            "The Blog / News section (https://projectbrainstorm.xyz/blog) is a good place to begin. We recommend starting with the \"What is Project Brainstorm?\" and \"Getting Started\" posts.\n\n"
+            "GETTING HELP\n\n"
+            "If you have questions, feedback, or run into issues, the easiest way to reach us is Direct Messaging inside the platform. Messages go straight to the team and are the fastest way to get support during the beta.\n\n"
+            "Project Brainstorm is a work in progress. Your feedback directly shapes how it evolves.\n\n"
+            "We're glad to have you exploring with us.\n\n"
+            "The Project Brainstorm Team"
+        ),
+    )
     return redirect(url_for("index", token=token))
 
 
@@ -9741,13 +9873,13 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         pending_users = [
             dict(r)
             for r in conn.execute(
-                "SELECT id, email, username, state, created_at FROM users WHERE state = 'pending' ORDER BY created_at DESC"
+                "SELECT id, email, username, first_name, surname, state, created_at FROM users WHERE state IN ('pending', 'unverified') ORDER BY created_at DESC"
             ).fetchall()
         ]
         all_users = [
             dict(r)
             for r in conn.execute(
-                "SELECT id, email, username, state, created_at FROM users ORDER BY created_at DESC"
+                "SELECT id, email, username, first_name, surname, state, created_at FROM users ORDER BY created_at DESC"
             ).fetchall()
         ]
         conn.close()
@@ -10301,16 +10433,18 @@ def manage_account():
     error_msg = None
 
     if request.method == "POST":
-        name = (request.form.get("name") or "").strip()
+        first_name = (request.form.get("first_name") or "").strip()
+        surname = (request.form.get("surname") or "").strip()
         company = (request.form.get("company") or "").strip()
         role = (request.form.get("role") or "").strip()
         location = (request.form.get("location") or "").strip()
         linkedin = (request.form.get("linkedin") or "").strip()
+        full_name = (first_name + " " + surname).strip()
 
         conn = get_db()
         conn.execute(
-            "UPDATE users SET name=?, company=?, role=?, location=?, linkedin=? WHERE id=?",
-            (name, company, role, location, linkedin, user["id"]),
+            "UPDATE users SET first_name=?, surname=?, name=?, company=?, role=?, location=?, linkedin=? WHERE id=?",
+            (first_name, surname, full_name, company, role, location, linkedin, user["id"]),
         )
         conn.commit()
         user = dict(

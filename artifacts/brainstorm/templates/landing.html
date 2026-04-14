@@ -1020,40 +1020,83 @@
                     &times;
                 </button>
                 <h2>Sign Up</h2>
-                <form action="/signup" method="POST">
-                    <div class="form-group">
-                        <label for="signup-email">Email</label>
-                        <input
-                            type="email"
-                            id="signup-email"
-                            name="email"
-                            required
-                        />
+                <form action="/signup" method="POST" id="signup-form-landing">
+                    <div style="display:flex;gap:12px;">
+                        <div class="form-group" style="flex:1;">
+                            <label for="landing-first-name">First Name</label>
+                            <input type="text" id="landing-first-name" name="first_name" required>
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label for="landing-surname">Surname</label>
+                            <input type="text" id="landing-surname" name="surname" required>
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label for="signup-username">Username</label>
-                        <input
-                            type="text"
-                            id="signup-username"
-                            name="username"
-                            required
-                        />
+                        <label for="landing-signup-email">Email</label>
+                        <input type="email" id="landing-signup-email" name="email" required>
                     </div>
                     <div class="form-group">
-                        <label for="signup-password"
-                            >Password (6–10 characters)</label
-                        >
-                        <input
-                            type="password"
-                            id="signup-password"
-                            name="password"
-                            minlength="6"
-                            maxlength="10"
-                            required
-                        />
+                        <label for="landing-signup-username">Username</label>
+                        <input type="text" id="landing-signup-username" name="username" required>
                     </div>
-                    <button type="submit" class="btn-submit">Sign Up</button>
+                    <div class="form-group">
+                        <label for="landing-signup-password">Password (6–10 characters)</label>
+                        <input type="password" id="landing-signup-password" name="password" minlength="6" maxlength="10" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="landing-signup-password2">Confirm Password</label>
+                        <input type="password" id="landing-signup-password2" name="password2" minlength="6" maxlength="10" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="landing-referral">How did you hear about us? <span style="font-weight:400;opacity:0.6;">(optional)</span></label>
+                        <input type="text" id="landing-referral" name="referral_source" placeholder="e.g. Google, LinkedIn, a friend…">
+                    </div>
+                    <div class="form-group">
+                        <label style="margin-bottom:6px;display:block;">Terms of Service &amp; Privacy Policy</label>
+                        <div id="signup-tos-panel-landing" style="height:160px;overflow-y:auto;border:1px solid #d0d7de;border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.6;color:#444;background:#fafafa;">
+                            <strong>Terms of Service</strong><br><br>
+                            <strong>1. Acceptance of Terms</strong><br>By accessing or using Project Brainstorm, you agree to be bound by these Terms and our Privacy Policy.<br><br>
+                            <strong>2. Beta Service</strong><br>This is a beta. Features may change without notice. The Service is provided "as is" for evaluation and research purposes.<br><br>
+                            <strong>3. Permitted Use</strong><br>You may use the Service for lawful market research only. You must not reverse-engineer, scrape, or create fake accounts. You are responsible for all activity under your account.<br><br>
+                            <strong>4. Third-Party Sources</strong><br>Outputs may be derived from AI models and third-party sources. They are for research purposes only. Project Brainstorm does not warrant their accuracy. You are solely responsible for how you use them.<br><br>
+                            <strong>5. Account &amp; Access</strong><br>You must provide accurate registration information. Accounts are non-transferable. We may suspend accounts that violate these Terms.<br><br>
+                            <strong>6. Intellectual Property</strong><br>Platform code, design, and branding are owned by Project Brainstorm. Research outputs belong to you, subject to applicable law.<br><br>
+                            <strong>7. Confidentiality</strong><br>Keep your credentials confidential and notify us of any unauthorised access.<br><br>
+                            <strong>8. Limitation of Liability</strong><br>To the maximum extent permitted by law, Project Brainstorm shall not be liable for indirect or consequential damages.<br><br>
+                            <strong>9. Modifications</strong><br>We may update these Terms at any time. Continued use constitutes acceptance.<br><br>
+                            <strong>10. Contact</strong><br><a href="mailto:admin@projectbrainstorm.xyz">admin@projectbrainstorm.xyz</a><br><br>
+                            <hr style="border:none;border-top:1px solid #ddd;margin:12px 0;">
+                            <strong>Privacy Policy</strong><br><br>
+                            <strong>1. What We Collect</strong><br>Name, email, username at registration; profile data you add later; usage data from your studies.<br><br>
+                            <strong>2. How We Use It</strong><br>To provide and improve the Service, communicate with you, and ensure security and compliance.<br><br>
+                            <strong>3. Data Sharing</strong><br>We do not sell your data. We may share with service providers under confidentiality obligations or if required by law.<br><br>
+                            <strong>4. Retention</strong><br>Data retained while your account is active. Request deletion at <a href="mailto:admin@projectbrainstorm.xyz">admin@projectbrainstorm.xyz</a>.<br><br>
+                            <strong>5. Cookies</strong><br>Session cookies for authentication only. No third-party advertising cookies.<br><br>
+                            <strong>6. Contact</strong><br><a href="mailto:admin@projectbrainstorm.xyz">admin@projectbrainstorm.xyz</a>
+                        </div>
+                        <p id="signup-scroll-hint-landing" style="font-size:11px;color:#888;margin:5px 0 8px;">Scroll to the bottom to enable the checkbox below.</p>
+                        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;">
+                            <input type="checkbox" id="signup-tos-agree-landing" name="tos_agreed" value="1" disabled required style="margin-top:3px;flex-shrink:0;">
+                            <span>I have read and agree to the Terms of Service and Privacy Policy.</span>
+                        </label>
+                    </div>
+                    <button type="submit" class="btn-submit" style="margin-top:8px;">Create Account</button>
                 </form>
+                <script>
+                (function(){
+                    var panel = document.getElementById('signup-tos-panel-landing');
+                    var cb = document.getElementById('signup-tos-agree-landing');
+                    var hint = document.getElementById('signup-scroll-hint-landing');
+                    function check(){
+                        if(panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 8){
+                            cb.disabled = false;
+                            hint.style.display = 'none';
+                        }
+                    }
+                    panel.addEventListener('scroll', check);
+                    check();
+                })();
+                </script>
                 <div class="switch-link">
                     Already have an account?
                     <a href="#" onclick="openAuthModal('login'); return false;"

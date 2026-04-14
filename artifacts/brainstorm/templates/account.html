@@ -171,11 +171,15 @@
                 <p class="info-text">Email cannot be changed.</p>
             </div>
             <div class="form-group">
-                <label for="name">Full Name</label>
-                <input type="text" id="name" name="name" value="{{ user.name or '' }}">
+                <label for="first_name">First Name</label>
+                <input type="text" id="first_name" name="first_name" value="{{ user.first_name or '' }}" required>
             </div>
             <div class="form-group">
-                <label for="company">Company</label>
+                <label for="surname">Surname</label>
+                <input type="text" id="surname" name="surname" value="{{ user.surname or '' }}" required>
+            </div>
+            <div class="form-group">
+                <label for="company">Company <span style="font-weight:400;color:#999;">(optional)</span></label>
                 <input type="text" id="company" name="company" value="{{ user.company or '' }}">
             </div>
             <div class="form-group">
