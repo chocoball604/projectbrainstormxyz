@@ -1,0 +1,52 @@
+Prompt to Coding Agent – Signup Flow Upgrade 
+Task: Upgrade the user sign up and activation flow to match the new requirements.
+Before implementing, review the existing signup, email verification, and admin activation logic in the codebase — some parts may already exist.
+ 
+1. Update the Sign Up Form
+Replace the current basic signup form (see [Sign Up sheet (old).pdf] with a new version aligned with the Manage Account structure (see [Manage Account — Project Brainstorm.pdf], with the following changes:
+Field changes
+•	Replace Full Name (single field) with: 
+o	First Name (required)
+o	Surname (required)
+Required fields
+•	Email (required)
+•	First Name (required)
+•	Surname (required)
+•	Location (City / Country) (required)
+Optional fields
+•	Company (optional)
+•	Role / Title (optional)
+•	LinkedIn (optional)
+Add standard required field validation in the UI and backend.
+ 
+2. Email Verification (Post Signup)
+After a user submits the signup form:
+•	Send a confirmation email to verify the email address.
+•	Prevent login until the email address is successfully confirmed.
+If email verification functionality already exists, reuse it.
+ 
+3. Admin Activation (Manual Gate)
+After email confirmation:
+•	User status should remain inactive / pending.
+•	An admin must explicitly activate the account before access is granted.
+Ensure:
+•	Activated users can log in
+•	Non activated users see a clear “waiting for activation” message
+ 
+4. Auto Send Welcome Email on Activation
+When an admin activates a user account:
+•	Automatically send the Welcome Email (see [Welcome email (after signup).docx])
+•	Send it once, at the moment of activation
+If an email notification system already exists, reuse that mechanism.
+ 
+5. Constraints
+•	Do not refactor unrelated code
+•	Do not change database schema unless absolutely required
+•	Prefer extending existing user / auth tables and flags
+•	Leave header, footer, and non signup pages unchanged
+ 
+Deliverables (Required)
+At the end of your response, include:
+1.	Files changed
+2.	What changed
+3.	How to test (step by step, including email verification and admin activation)

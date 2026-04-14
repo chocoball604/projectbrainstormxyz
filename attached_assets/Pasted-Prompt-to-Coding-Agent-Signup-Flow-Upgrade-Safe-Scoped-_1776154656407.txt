@@ -1,0 +1,72 @@
+Prompt to Coding Agent – Signup Flow Upgrade (Safe / Scoped)
+Task: Upgrade the user sign‑up and activation flow to match the new requirements.
+Before implementing, review the existing signup, email verification, and admin activation logic in the codebase — some parts may already exist.
+
+1. Update the Sign‑Up Form
+Replace the current basic signup form (see [Sign Up sheet (old).pdf](https://onedrive.live.com?cid=BFEC441E4A44D47E&id=BFEC441E4A44D47E!s1cc1df3621d14b47bd78cb49f4682f8c&EntityRepresentationId=fd2b8ad6-ba5d-439b-b343-e731c0a8309b)) with a new version aligned with the Manage Account structure (see [Manage Account — Project Brainstorm.pdf](https://onedrive.live.com?cid=BFEC441E4A44D47E&id=BFEC441E4A44D47E!s2ca3cf4028404d5689ec4b2e299668ea&EntityRepresentationId=e49f532c-a623-4664-b55c-64b70d90c169)), with the following changes:
+Field changes
+
+Replace Full Name (single field) with:
+
+First Name (required)
+Surname (required)
+
+
+
+Required fields
+
+Email (required)
+First Name (required)
+Surname (required)
+Location (City / Country) (required)
+
+Optional fields
+
+Company (optional)
+Role / Title (optional)
+LinkedIn (optional)
+
+Add standard required‑field validation in the UI and backend.
+
+2. Email Verification (Post‑Signup)
+After a user submits the signup form:
+
+Send a confirmation email to verify the email address.
+Prevent login until the email address is successfully confirmed.
+
+If email‑verification functionality already exists, reuse it.
+
+3. Admin Activation (Manual Gate)
+After email confirmation:
+
+User status should remain inactive / pending.
+An admin must explicitly activate the account before access is granted.
+
+Ensure:
+
+Activated users can log in
+Non‑activated users see a clear “waiting for activation” message
+
+
+4. Auto‑Send Welcome Email on Activation
+When an admin activates a user account:
+
+Automatically send the Welcome Email (provided separately)
+Send it once, at the moment of activation
+
+If an email notification system already exists, reuse that mechanism.
+
+5. Constraints
+
+Do not refactor unrelated code
+Do not change database schema unless absolutely required
+Prefer extending existing user / auth tables and flags
+Leave header, footer, and non‑signup pages unchanged
+
+
+Deliverables (Required)
+At the end of your response, include:
+
+Files changed
+What changed
+How to test (step‑by‑step, including email verification and admin activation)
