@@ -306,6 +306,9 @@
 
         <div class="card" id="tab-signup" style="display:none;">
             <h2>Sign Up</h2>
+            {% if error and show_auth_tab == 'signup' %}
+            <div style="background:#fee2e2;color:#dc2626;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:500;margin-bottom:14px;">{{ error }}</div>
+            {% endif %}
             <form action="/signup" method="POST" id="signup-form-main">
                 <div class="form-group">
                     <label for="signup-email">Email</label>
@@ -322,9 +325,9 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="signup-location">Location — Country</label>
+                    <label for="signup-location">Location — Country / Region</label>
                     <select id="signup-location" name="location" required style="width:100%;padding:8px 10px;border:1px solid #d0d7de;border-radius:6px;font-size:14px;background:#fff;">
-                        <option value="">Select country…</option>
+                        <option value="">Select Country / Region</option>
                         <option value="Hong Kong">Hong Kong</option>
                         <option value="China">China</option>
                         <option value="Japan">Japan</option>
@@ -379,12 +382,12 @@
                 </details>
                 <div class="form-group" style="margin-bottom:8px;">
                     <label style="margin-bottom:6px;display:block;">Terms of Service &amp; Privacy Policy</label>
-                    <div id="signup-tos-panel-main" style="height:150px;overflow-y:auto;border:1px solid #d0d7de;border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.55;color:#444;background:#fafafa;">
+                    <div id="signup-tos-panel-main" style="height:200px;overflow-y:auto;border:1px solid #d0d7de;border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.55;color:#444;background:#fafafa;">
                         {% include '_tos_privacy_inline.html' %}
                     </div>
-                    <p id="signup-scroll-hint-main" style="font-size:11px;color:#888;margin:4px 0 6px;">Scroll to the bottom to enable the checkbox.</p>
-                    <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;">
-                        <input type="checkbox" id="signup-tos-agree-main" name="tos_agreed" value="1" disabled required style="margin-top:3px;flex-shrink:0;">
+                    <p id="signup-scroll-hint-main" style="font-size:11px;color:#888;margin:6px 0 8px;text-align:center;">↓ Scroll to the bottom to enable the checkbox ↓</p>
+                    <label style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:13px;">
+                        <input type="checkbox" id="signup-tos-agree-main" name="tos_agreed" value="1" disabled required style="flex-shrink:0;">
                         <span>I have read and agree to the <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.</span>
                     </label>
                 </div>
@@ -396,13 +399,24 @@
                 var cb = document.getElementById('signup-tos-agree-main');
                 var hint = document.getElementById('signup-scroll-hint-main');
                 function check(){
-                    if(panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 8){
-                        cb.disabled = false;
-                        hint.style.display = 'none';
+                    if(panel.scrollHeight > panel.clientHeight){
+                        if(panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 8){
+                            cb.disabled = false;
+                            if(hint) hint.style.display = 'none';
+                        }
                     }
                 }
                 panel.addEventListener('scroll', check);
-                check();
+                var observer = new MutationObserver(function(){
+                    var tab = document.getElementById('tab-signup');
+                    if(tab && tab.style.display !== 'none'){
+                        cb.checked = false;
+                        cb.disabled = true;
+                        if(hint) hint.style.display = '';
+                        setTimeout(check, 50);
+                    }
+                });
+                observer.observe(document.getElementById('tab-signup'), {attributes:true, attributeFilter:['style']});
             })();
             </script>
         </div>

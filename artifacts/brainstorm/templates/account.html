@@ -179,9 +179,9 @@
                 <input type="text" id="surname" name="surname" value="{{ user.surname or '' }}" required>
             </div>
             <div class="form-group">
-                <label for="location">Location — Country</label>
+                <label for="location">Location — Country / Region</label>
                 <select id="location" name="location" required style="width:100%;padding:8px 10px;border:1px solid #d0d7de;border-radius:6px;font-size:14px;background:#fff;">
-                    <option value="">Select country…</option>
+                    <option value="">Select Country / Region</option>
                     {% for c in ['Hong Kong','China','Japan','Singapore','South Korea','Taiwan','Thailand','Indonesia','Malaysia','Philippines','Vietnam','India','Australia','New Zealand','United States','United Kingdom','Canada','Germany','France','Netherlands','Switzerland','United Arab Emirates','Other'] %}<option value="{{ c }}"{% if (user.location or '') == c %} selected{% endif %}>{{ c }}</option>{% endfor %}
                 </select>
             </div>

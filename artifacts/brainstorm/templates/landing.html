@@ -232,8 +232,10 @@
                 background: #fff;
                 border-radius: 12px;
                 padding: 36px;
-                max-width: 400px;
-                width: 90%;
+                max-width: 520px;
+                width: 92%;
+                max-height: 90vh;
+                overflow-y: auto;
                 position: relative;
                 box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             }
@@ -1020,6 +1022,9 @@
                     &times;
                 </button>
                 <h2>Sign Up</h2>
+                {% if error and show_auth_tab == 'signup' %}
+                <div style="background:#fee2e2;color:#dc2626;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:500;margin-bottom:14px;">{{ error }}</div>
+                {% endif %}
                 <form action="/signup" method="POST" id="signup-form-landing">
                     <div class="form-group">
                         <label for="landing-signup-email">Email</label>
@@ -1036,9 +1041,9 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label for="landing-location">Location — Country</label>
+                        <label for="landing-location">Location — Country / Region</label>
                         <select id="landing-location" name="location" required style="width:100%;padding:8px 10px;border:1px solid #d0d7de;border-radius:6px;font-size:14px;background:#fff;">
-                            <option value="">Select country…</option>
+                            <option value="">Select Country / Region</option>
                             <option value="Hong Kong">Hong Kong</option>
                             <option value="China">China</option>
                             <option value="Japan">Japan</option>
@@ -1093,32 +1098,17 @@
                     </details>
                     <div class="form-group" style="margin-bottom:8px;">
                         <label style="margin-bottom:6px;display:block;">Terms of Service &amp; Privacy Policy</label>
-                        <div id="signup-tos-panel-landing" style="height:150px;overflow-y:auto;border:1px solid #d0d7de;border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.55;color:#444;background:#fafafa;">
+                        <div id="signup-tos-panel-landing" style="height:200px;overflow-y:auto;border:1px solid #d0d7de;border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.55;color:#444;background:#fafafa;">
                             {% include '_tos_privacy_inline.html' %}
                         </div>
-                        <p id="signup-scroll-hint-landing" style="font-size:11px;color:#888;margin:4px 0 6px;">Scroll to the bottom to enable the checkbox.</p>
-                        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;">
-                            <input type="checkbox" id="signup-tos-agree-landing" name="tos_agreed" value="1" disabled required style="margin-top:3px;flex-shrink:0;">
+                        <p id="signup-scroll-hint-landing" style="font-size:11px;color:#888;margin:6px 0 8px;text-align:center;">↓ Scroll to the bottom to enable the checkbox ↓</p>
+                        <label style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:13px;">
+                            <input type="checkbox" id="signup-tos-agree-landing" name="tos_agreed" value="1" disabled required style="flex-shrink:0;">
                             <span>I have read and agree to the <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.</span>
                         </label>
                     </div>
                     <button type="submit" class="btn-submit">Create Account</button>
                 </form>
-                <script>
-                (function(){
-                    var panel = document.getElementById('signup-tos-panel-landing');
-                    var cb = document.getElementById('signup-tos-agree-landing');
-                    var hint = document.getElementById('signup-scroll-hint-landing');
-                    function check(){
-                        if(panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 8){
-                            cb.disabled = false;
-                            hint.style.display = 'none';
-                        }
-                    }
-                    panel.addEventListener('scroll', check);
-                    check();
-                })();
-                </script>
                 <div class="switch-link">
                     Already have an account?
                     <a href="#" onclick="openAuthModal('login'); return false;"
@@ -1190,9 +1180,32 @@
         </div>
 
         <script>
+            function initTosScroll(panelId, cbId, hintId) {
+                var panel = document.getElementById(panelId);
+                var cb = document.getElementById(cbId);
+                var hint = document.getElementById(hintId);
+                if (!panel || !cb) return;
+                cb.checked = false;
+                cb.disabled = true;
+                if (hint) hint.style.display = '';
+                function check() {
+                    if (panel.scrollHeight > panel.clientHeight) {
+                        if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 8) {
+                            cb.disabled = false;
+                            if (hint) hint.style.display = 'none';
+                        }
+                    }
+                }
+                panel.removeEventListener('scroll', check);
+                panel.addEventListener('scroll', check);
+                setTimeout(check, 50);
+            }
             function openAuthModal(type) {
                 closeAuthModals();
                 document.getElementById('modal-' + type).classList.add('active');
+                if (type === 'signup') {
+                    initTosScroll('signup-tos-panel-landing', 'signup-tos-agree-landing', 'signup-scroll-hint-landing');
+                }
             }
             function closeAuthModals() {
                 document.querySelectorAll('.auth-modal-overlay').forEach(function(m) { m.classList.remove('active'); });
