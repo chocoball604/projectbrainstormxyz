@@ -3331,7 +3331,7 @@ def signup():
     if linkedin and not linkedin.startswith("https://"):
         return render_error("LinkedIn URL must start with https://")
 
-    username = email.split("@")[0]
+    base_username = email.split("@")[0]
     now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
     conn = get_db()
@@ -3339,6 +3339,12 @@ def signup():
     if existing:
         conn.close()
         return render_error("That email is already registered.")
+
+    username = base_username
+    suffix = 1
+    while conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone():
+        username = f"{base_username}{suffix}"
+        suffix += 1
 
     password_hash = generate_password_hash(password)
     verify_token = _secrets.token_urlsafe(32)
