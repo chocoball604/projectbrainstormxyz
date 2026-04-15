@@ -3487,11 +3487,17 @@ def login():
     return redirect(url_for("index", token=token))
 
 
+@app.route("/portal")
+def admin_portal():
+    error = request.args.get("error")
+    return render_template("admin_portal.html", error=error)
+
+
 @app.route("/admin-login", methods=["POST"])
 def admin_login():
     password = request.form.get("admin_password") or ""
     if password != ADMIN_PASSWORD:
-        return render_error("Invalid admin password.")
+        return redirect(url_for("admin_portal", error="Invalid admin password."))
 
     token = create_session(is_admin=True)
     return redirect(url_for("index", token=token))

@@ -813,17 +813,6 @@
 
         <div class="landing-footer" style="line-height: 1.6">
             &copy; Project Brainstorm 2026. All rights reserved.
-            &nbsp;&nbsp;&middot;&nbsp;&nbsp;
-            <a
-                href="#"
-                onclick="openAuthModal('admin'); return false;"
-                style="
-                    color: rgba(255, 255, 255, 0.3);
-                    text-decoration: none;
-                    font-size: var(--font-small);
-                "
-                >Admin</a
-            >
             <div style="margin-top: 8px">
                 <a
                     href="{{ url_for('terms_page') }}"
@@ -1026,29 +1015,6 @@
             </div>
         </div>
 
-        <!-- Admin Login Modal -->
-        <div class="auth-modal-overlay" id="modal-admin">
-            <div class="auth-modal">
-                <button class="close-btn" onclick="closeAuthModals()">
-                    &times;
-                </button>
-                <h2>Admin Login</h2>
-                <form action="/admin-login" method="POST">
-                    <div class="form-group">
-                        <label for="admin-password">Admin Password</label>
-                        <input
-                            type="password"
-                            id="admin-password"
-                            name="admin_password"
-                            required
-                        />
-                    </div>
-                    <button type="submit" class="btn-submit">
-                        Login as Admin
-                    </button>
-                </form>
-            </div>
-        </div>
 
         <script>
             function initTosScroll(panelId, cbId, hintId) {
