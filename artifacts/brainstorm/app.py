@@ -3416,9 +3416,10 @@ def verify_signup():
         conn.close()
         return render_error("This link has already been used or your account is in an unexpected state.")
 
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     conn.execute(
-        "UPDATE users SET state = 'pending', email_verify_token = NULL WHERE id = ?",
-        (user_row["id"],),
+        "UPDATE users SET state = 'pending', email_verify_token = NULL, last_email_verification_timestamp = ? WHERE id = ?",
+        (now_str, user_row["id"]),
     )
     conn.commit()
     token = create_session(user_id=user_row["id"])
@@ -3918,7 +3919,11 @@ def admin_approve(user_id):
         conn.close()
         return render_error("User is not in pending state.")
 
-    conn.execute("UPDATE users SET state = 'active' WHERE id = ?", (user_id,))
+    approve_now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        "UPDATE users SET state = 'active', last_email_verification_timestamp = COALESCE(last_email_verification_timestamp, ?) WHERE id = ?",
+        (approve_now, user_id),
+    )
     conn.commit()
     user_email = user["email"]
     user_first_name = (user["first_name"] or user["name"] or "").strip().split()[0] if (user["first_name"] or user["name"]) else "there"
