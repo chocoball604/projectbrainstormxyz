@@ -278,6 +278,7 @@ os.makedirs(SURVEY_IMAGES_DIR, exist_ok=True)
 BLOG_IMAGE_MAX_SIZE = 2 * 1024 * 1024
 
 _pending_blog_errors = {}
+_resend_timestamps = {}
 BLOG_IMAGE_ALLOWED = {"png", "jpg", "jpeg"}
 BLOG_STATIC_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "static", "blog"
@@ -3423,6 +3424,47 @@ def verify_signup():
     token = create_session(user_id=user_row["id"])
     conn.close()
     return redirect(url_for("index", token=token, _verified="1"))
+
+
+@app.route("/resend-verification", methods=["POST"])
+def resend_verification():
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "unverified":
+        return jsonify({"ok": False, "error": "No pending verification found for this account."})
+
+    user_id = user["id"]
+    last_ts = _resend_timestamps.get(user_id, 0)
+    wait = int(120 - (time.time() - last_ts))
+    if wait > 0:
+        return jsonify({"ok": False, "error": f"Please wait {wait} seconds before requesting another email."})
+
+    conn = get_db()
+    row = conn.execute("SELECT email_verify_token, first_name, email FROM users WHERE id = ?", (user_id,)).fetchone()
+    conn.close()
+
+    if not row or not row["email_verify_token"]:
+        return jsonify({"ok": False, "error": "No verification token found. Please contact support."})
+
+    verify_url = request.host_url.rstrip("/") + url_for("verify_signup", t=row["email_verify_token"])
+    ok = send_email(
+        to=row["email"],
+        subject="Verify your email — Project Brainstorm",
+        body_text=(
+            f"Hi {row['first_name']},\n\n"
+            "Here is your email verification link (resent at your request):\n\n"
+            f"{verify_url}\n\n"
+            "This link is valid until your account is activated.\n\n"
+            "If you did not sign up, please ignore this email.\n\n"
+            "— The Project Brainstorm Team"
+        ),
+    )
+    if ok:
+        _resend_timestamps[user_id] = time.time()
+        print(f"[resend-verification] Resent to user_id={user_id} email={row['email']}")
+        return jsonify({"ok": True})
+    else:
+        return jsonify({"ok": False, "error": "Email delivery failed. Please try again in a moment or contact support."})
 
 
 @app.route("/login", methods=["POST"])

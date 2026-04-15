@@ -444,11 +444,50 @@
             <p style="margin-top: 12px; font-size: 14px; color: #777;">
                 Once verified, your account will be reviewed by our team. You will receive another email when your access is confirmed.
             </p>
-            <p style="margin-top: 8px; font-size: 13px; color: #999;">
-                Didn't receive it? Check your spam folder or contact <a href="mailto:admin@projectbrainstorm.xyz">admin@projectbrainstorm.xyz</a>.
+            <p style="margin-top: 14px; font-size: 14px; color: #555;">
+                Didn't receive it? Check your spam folder, or click below to resend.
+            </p>
+            <div style="margin-top: 12px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                <button id="resend-btn" class="btn btn-primary" style="font-size: 14px;" onclick="resendVerificationEmail()">Resend verification email</button>
+                <span id="resend-status" style="font-size: 13px;"></span>
+            </div>
+            <p style="margin-top: 12px; font-size: 12px; color: #aaa;">
+                Still having trouble? Contact <a href="mailto:admin@projectbrainstorm.xyz">admin@projectbrainstorm.xyz</a>.
             </p>
         </div>
     </div>
+    <script>
+    function resendVerificationEmail() {
+        var btn = document.getElementById('resend-btn');
+        var status = document.getElementById('resend-status');
+        btn.disabled = true;
+        status.textContent = 'Sending\u2026';
+        status.style.color = '#555';
+        fetch('/resend-verification', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'token={{ token | urlencode }}'
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                status.textContent = '\u2713 Sent! Check your inbox (and spam folder).';
+                status.style.color = '#16a34a';
+                btn.textContent = 'Resend again';
+                setTimeout(function() { btn.disabled = false; }, 120000);
+            } else {
+                status.textContent = data.error || 'Failed to send. Please try again.';
+                status.style.color = '#dc2626';
+                btn.disabled = false;
+            }
+        })
+        .catch(function() {
+            status.textContent = 'Network error. Please try again.';
+            status.style.color = '#dc2626';
+            btn.disabled = false;
+        });
+    }
+    </script>
     {% endif %}
 
     {% if user and user.state == 'pending' %}
