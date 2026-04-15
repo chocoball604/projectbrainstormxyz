@@ -25,6 +25,7 @@ import os
 import sys
 import secrets
 import sqlite3
+import time
 from datetime import datetime, timezone
 
 from flask import (
@@ -274,7 +275,9 @@ os.makedirs(USER_UPLOADS_DIR, exist_ok=True)
 os.makedirs(ADMIN_UPLOADS_DIR, exist_ok=True)
 os.makedirs(SURVEY_IMAGES_DIR, exist_ok=True)
 
-BLOG_IMAGE_MAX_SIZE = 300 * 1024
+BLOG_IMAGE_MAX_SIZE = 2 * 1024 * 1024
+
+_pending_blog_errors = {}
 BLOG_IMAGE_ALLOWED = {"png", "jpg", "jpeg"}
 BLOG_STATIC_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "static", "blog"
@@ -3225,6 +3228,13 @@ def index():
     new_research_step = request.args.get("new_research")
     new_research_type = request.args.get("nr_type", "")
 
+    blog_error = None
+    _be = _pending_blog_errors.get(token)
+    if _be and time.time() - _be[1] < 30:
+        blog_error = _be[0]
+    elif _be:
+        del _pending_blog_errors[token]
+
     return render_template(
         "index.html",
         user=user,
@@ -3302,6 +3312,7 @@ def index():
         monthly_study_limit=FREE_TIER_MONTHLY_LIMIT,
         test_user_email=TEST_USER_EMAIL,
         test_user_password=TEST_USER_PASSWORD,
+        blog_error=blog_error,
     )
 
 
@@ -3675,7 +3686,8 @@ def admin_create_blog_post():
 
     def blog_err(msg):
         print(f"[create-blog-post] ERROR: {msg}")
-        return redirect(url_for("index", token=token, blog_error=msg))
+        _pending_blog_errors[token] = (msg, time.time())
+        return redirect(url_for("index", token=token))
 
     title = (request.form.get("blog_title") or "").strip()
     body = (request.form.get("blog_body") or "").strip()
@@ -3704,7 +3716,7 @@ def admin_create_blog_post():
         img_data = img_file.read()
         if len(img_data) > BLOG_IMAGE_MAX_SIZE:
             return blog_err(
-                f"Blog image must be under 300KB. Got: {len(img_data) // 1024}KB"
+                f"Blog image must be under 2MB. Got: {len(img_data) // 1024}KB"
             )
         safe_name = f"{int(datetime.utcnow().timestamp())}_{secrets.token_hex(4)}.{ext}"
         dest = os.path.join(BLOG_STATIC_DIR, safe_name)
@@ -3756,6 +3768,7 @@ def admin_create_blog_post():
     )
     conn.commit()
     conn.close()
+    _pending_blog_errors.pop(token, None)
     return redirect(url_for("index", token=token))
 
 

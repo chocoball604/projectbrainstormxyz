@@ -4501,9 +4501,9 @@
                 <h2>Blog / News Management</h2>
                 <span class="admin-acc-arrow" id="acc-blog-body-arrow">&#9654;</span>
             </div>
-            <div class="admin-acc-body" id="acc-blog-body"{% if request.args.get('blog_error') %} style="display:block;"{% endif %}>
-                {% if request.args.get('blog_error') %}
-                <div style="background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:500;margin-bottom:14px;">{{ request.args.get('blog_error') }}</div>
+            <div class="admin-acc-body" id="acc-blog-body"{% if blog_error %} style="display:block;"{% endif %}>
+                {% if blog_error %}
+                <div style="background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:500;margin-bottom:14px;">{{ blog_error }}</div>
                 {% endif %}
                 <p style="font-size: 13px; color: #777; margin-bottom: 16px;">Create blog posts visible on the public blog page and landing page.</p>
                 <form action="/admin/create-blog-post" method="POST" enctype="multipart/form-data">
@@ -4882,7 +4882,7 @@
             if (el) setTimeout(function() { el.scrollIntoView({ behavior: 'smooth' }); }, 200);
         }
     })();
-    {% if request.args.get('blog_error') %}
+    {% if blog_error %}
     (function(){
         var el = document.getElementById('acc-blog');
         if (el) setTimeout(function() { el.scrollIntoView({ behavior: 'smooth' }); }, 200);
