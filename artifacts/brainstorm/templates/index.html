@@ -4608,7 +4608,7 @@
                                 <button type="button" onclick="blogExec('insertOrderedList')" style="padding:2px 8px;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Numbered list">1.</button>
                                 <button type="button" onclick="blogExec('removeFormat')" style="padding:2px 8px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Clear formatting">&#10006;</button>
                             </div>
-                            <div id="blog-editor" contenteditable="true" style="min-height:160px;padding:10px;font-family:inherit;font-size:14px;outline:none;overflow-y:auto;max-height:400px;">{{ blog_draft.get('blog_body', '') }}</div>
+                            <div id="blog-editor" contenteditable="true" style="min-height:160px;padding:10px 10px 10px 30px;font-family:inherit;font-size:14px;outline:none;overflow-y:auto;max-height:400px;">{{ blog_draft.get('blog_body', '') }}</div>
                         </div>
                         <textarea id="blog-body" name="blog_body" required style="display:none;">{{ blog_draft.get('blog_body', '') | e }}</textarea>
                     </div>
