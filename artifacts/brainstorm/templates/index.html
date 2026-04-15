@@ -3865,6 +3865,10 @@
                                 {% else %}
                                 <span style="font-size:12px;color:#888;">Awaiting email verification</span>
                                 {% endif %}
+                                <form action="/admin/delete-user/{{ u.id }}" method="POST" style="display:inline; margin-left: 4px;" onsubmit="return confirm('Permanently delete {{ u.email }}? This cannot be undone.');">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-small" style="background:#c0392b;color:#fff;">Delete</button>
+                                </form>
                             </td>
                         </tr>
                         {% endfor %}
@@ -3913,6 +3917,12 @@
                                 <form action="/admin/disable/{{ u.id }}" method="POST" style="display:inline;">
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-danger btn-small">Disable</button>
+                                </form>
+                                {% endif %}
+                                {% if u.state in ('pending', 'unverified') %}
+                                <form action="/admin/delete-user/{{ u.id }}" method="POST" style="display:inline; margin-left: 2px;" onsubmit="return confirm('Permanently delete {{ u.email }}? This cannot be undone.');">
+                                    <input type="hidden" name="token" value="{{ token }}">
+                                    <button type="submit" class="btn btn-small" style="background:#c0392b;color:#fff;">Delete</button>
                                 </form>
                                 {% endif %}
                             </td>

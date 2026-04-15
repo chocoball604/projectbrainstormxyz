@@ -3961,6 +3961,30 @@ def admin_disable(user_id):
     return redirect(url_for("index", token=token))
 
 
+@app.route("/admin/delete-user/<int:user_id>", methods=["POST"])
+def admin_delete_user(user_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    conn = get_db()
+    user = conn.execute("SELECT id, email, state FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        conn.close()
+        return render_error("User not found.")
+    if user["state"] not in ("pending", "unverified"):
+        conn.close()
+        return render_error("Only pending or unverified users can be deleted.")
+
+    conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    print(f"[admin] Deleted user id={user_id} email={user['email']} state={user['state']}")
+    return redirect(url_for("index", token=token))
+
+
 @app.route("/send-message", methods=["POST"])
 def send_message():
     token = get_token()
@@ -10115,6 +10139,8 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         monthly_study_limit=FREE_TIER_MONTHLY_LIMIT,
         test_user_email=TEST_USER_EMAIL,
         test_user_password=TEST_USER_PASSWORD,
+        blog_error=None,
+        blog_draft={},
     )
 
 
