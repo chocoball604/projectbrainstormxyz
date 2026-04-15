@@ -457,6 +457,7 @@
         </div>
     </div>
     <script>
+    var _resendCountdownTimer = null;
     function resendVerificationEmail() {
         var btn = document.getElementById('resend-btn');
         var status = document.getElementById('resend-status');
@@ -474,11 +475,16 @@
                 status.textContent = '\u2713 Sent! Check your inbox (and spam folder).';
                 status.style.color = '#16a34a';
                 btn.textContent = 'Resend again';
-                setTimeout(function() { btn.disabled = false; }, 120000);
+                startResendCountdown(btn, status, 120);
             } else {
-                status.textContent = data.error || 'Failed to send. Please try again.';
-                status.style.color = '#dc2626';
-                btn.disabled = false;
+                var match = data.error && data.error.match(/(\d+)\s+second/);
+                if (match) {
+                    startResendCountdown(btn, status, parseInt(match[1], 10));
+                } else {
+                    status.textContent = data.error || 'Failed to send. Please try again.';
+                    status.style.color = '#dc2626';
+                    btn.disabled = false;
+                }
             }
         })
         .catch(function() {
@@ -486,6 +492,25 @@
             status.style.color = '#dc2626';
             btn.disabled = false;
         });
+    }
+    function startResendCountdown(btn, status, seconds) {
+        if (_resendCountdownTimer) clearInterval(_resendCountdownTimer);
+        var remaining = seconds;
+        btn.disabled = true;
+        function tick() {
+            if (remaining <= 0) {
+                clearInterval(_resendCountdownTimer);
+                _resendCountdownTimer = null;
+                status.textContent = '';
+                btn.disabled = false;
+                return;
+            }
+            status.textContent = 'Please wait ' + remaining + ' second' + (remaining === 1 ? '' : 's') + ' before requesting another email.';
+            status.style.color = '#dc2626';
+            remaining--;
+        }
+        tick();
+        _resendCountdownTimer = setInterval(tick, 1000);
     }
     </script>
     {% endif %}
