@@ -4608,9 +4608,9 @@
                                 <button type="button" onclick="blogExec('insertOrderedList')" style="padding:2px 8px;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Numbered list">1.</button>
                                 <button type="button" onclick="blogExec('removeFormat')" style="padding:2px 8px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Clear formatting">&#10006;</button>
                             </div>
-                            <div id="blog-editor" contenteditable="true" style="min-height:160px;padding:10px 10px 10px 30px;font-family:inherit;font-size:14px;outline:none;overflow-y:auto;max-height:400px;">{{ blog_draft.get('blog_body', '') }}</div>
+                            <div id="blog-editor" contenteditable="true" style="min-height:160px;padding:10px 14px;font-family:inherit;font-size:14px;outline:none;overflow-y:auto;max-height:400px;list-style-position:inside;">{{ blog_draft.get('blog_body', '') }}</div>
                         </div>
-                        <textarea id="blog-body" name="blog_body" required style="display:none;">{{ blog_draft.get('blog_body', '') | e }}</textarea>
+                        <textarea id="blog-body" name="blog_body" style="display:none;">{{ blog_draft.get('blog_body', '') | e }}</textarea>
                     </div>
                     <div class="form-group">
                         <label for="blog-image">Thumbnail Image (optional, PNG/JPG, max 2MB){% if blog_draft and blog_error %} <span style="color:#c0392b;font-size:12px;">— image not retained, please re-select</span>{% endif %}</label>
@@ -5002,10 +5002,16 @@
     (function() {
         var form = document.querySelector('form[action="/admin/create-blog-post"]');
         if (form) {
-            form.addEventListener('submit', function() {
+            form.addEventListener('submit', function(e) {
                 var editor = document.getElementById('blog-editor');
                 var hidden = document.getElementById('blog-body');
                 if (editor && hidden) {
+                    var html = editor.innerHTML.replace(/<br\s*\/?>/gi, '').replace(/&nbsp;/gi, '').trim();
+                    if (!html || html === '<div></div>' || html === '<p></p>') {
+                        e.preventDefault();
+                        alert('Blog post body is required.');
+                        return;
+                    }
                     hidden.value = editor.innerHTML;
                 }
             });
