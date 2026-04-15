@@ -4588,7 +4588,29 @@
                     </div>
                     <div class="form-group">
                         <label for="blog-body">Post Body</label>
-                        <textarea id="blog-body" name="blog_body" rows="8" required style="width: 100%; font-family: inherit; font-size: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">{{ blog_draft.get('blog_body', '') | e }}</textarea>
+                        <div style="border:1px solid #ccc;border-radius:6px;overflow:hidden;">
+                            <div id="blog-toolbar" style="display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;background:#f0f0f0;border-bottom:1px solid #ccc;align-items:center;">
+                                <select onchange="blogExec('fontSize',this.value);this.selectedIndex=0;" style="padding:2px 4px;font-size:12px;border:1px solid #bbb;border-radius:3px;cursor:pointer;" title="Font size">
+                                    <option value="">Size</option>
+                                    <option value="1">Small</option>
+                                    <option value="3">Normal</option>
+                                    <option value="4">Large</option>
+                                    <option value="5">X-Large</option>
+                                    <option value="6">XX-Large</option>
+                                </select>
+                                <button type="button" onclick="blogExec('bold')" style="padding:2px 8px;font-weight:bold;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Bold"><b>B</b></button>
+                                <button type="button" onclick="blogExec('italic')" style="padding:2px 8px;font-style:italic;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Italic"><i>I</i></button>
+                                <button type="button" onclick="blogExec('underline')" style="padding:2px 8px;text-decoration:underline;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Underline"><u>U</u></button>
+                                <button type="button" onclick="blogExec('strikeThrough')" style="padding:2px 8px;text-decoration:line-through;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Strikethrough"><s>S</s></button>
+                                <label style="padding:2px 4px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;display:flex;align-items:center;gap:3px;" title="Text colour">A<input type="color" value="#000000" onchange="blogExec('foreColor',this.value)" style="width:18px;height:18px;border:none;padding:0;cursor:pointer;"></label>
+                                <label style="padding:2px 4px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;display:flex;align-items:center;gap:3px;" title="Highlight">&#9608;<input type="color" value="#ffff00" onchange="blogExec('hiliteColor',this.value)" style="width:18px;height:18px;border:none;padding:0;cursor:pointer;"></label>
+                                <button type="button" onclick="blogExec('insertUnorderedList')" style="padding:2px 8px;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Bullet list">&#8226;</button>
+                                <button type="button" onclick="blogExec('insertOrderedList')" style="padding:2px 8px;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Numbered list">1.</button>
+                                <button type="button" onclick="blogExec('removeFormat')" style="padding:2px 8px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Clear formatting">&#10006;</button>
+                            </div>
+                            <div id="blog-editor" contenteditable="true" style="min-height:160px;padding:10px;font-family:inherit;font-size:14px;outline:none;overflow-y:auto;max-height:400px;">{{ blog_draft.get('blog_body', '') }}</div>
+                        </div>
+                        <textarea id="blog-body" name="blog_body" required style="display:none;">{{ blog_draft.get('blog_body', '') | e }}</textarea>
                     </div>
                     <div class="form-group">
                         <label for="blog-image">Thumbnail Image (optional, PNG/JPG, max 2MB){% if blog_draft and blog_error %} <span style="color:#c0392b;font-size:12px;">— image not retained, please re-select</span>{% endif %}</label>
@@ -4611,6 +4633,9 @@
                             <option value="1"{% if blog_draft.get('blog_pin_rank','1') == '1' %} selected{% endif %}>1</option>
                             <option value="2"{% if blog_draft.get('blog_pin_rank') == '2' %} selected{% endif %}>2</option>
                             <option value="3"{% if blog_draft.get('blog_pin_rank') == '3' %} selected{% endif %}>3</option>
+                            <option value="4"{% if blog_draft.get('blog_pin_rank') == '4' %} selected{% endif %}>4</option>
+                            <option value="5"{% if blog_draft.get('blog_pin_rank') == '5' %} selected{% endif %}>5</option>
+                            <option value="6"{% if blog_draft.get('blog_pin_rank') == '6' %} selected{% endif %}>6</option>
                         </select>
                     </div>
                     <button type="submit" class="btn btn-primary">Create Post</button>
@@ -4648,6 +4673,9 @@
                                         <option value="1">1</option>
                                         <option value="2">2</option>
                                         <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                        <option value="6">6</option>
                                     </select>
                                     <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px;">Pin</button>
                                     {% endif %}
@@ -4965,6 +4993,24 @@
         if (arrow) arrow.classList.add('open');
     })();
     {% endif %}
+
+    function blogExec(cmd, val) {
+        var editor = document.getElementById('blog-editor');
+        if (editor) editor.focus();
+        document.execCommand(cmd, false, val || null);
+    }
+    (function() {
+        var form = document.querySelector('form[action="/admin/create-blog-post"]');
+        if (form) {
+            form.addEventListener('submit', function() {
+                var editor = document.getElementById('blog-editor');
+                var hidden = document.getElementById('blog-body');
+                if (editor && hidden) {
+                    hidden.value = editor.innerHTML;
+                }
+            });
+        }
+    })();
 </script>
 
 <div style="background: #1a1a2e; color: rgba(255,255,255,0.6); text-align: center; padding: 24px 20px; font-size: 11px; line-height: 1.6; margin-top: 40px;">

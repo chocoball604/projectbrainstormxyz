@@ -3783,16 +3783,16 @@ def admin_create_blog_post():
     pinned_rank = None
     if is_pinned:
         rank_val = request.form.get("blog_pin_rank", "").strip()
-        if rank_val not in ("1", "2", "3"):
-            return blog_err("Pin position must be 1, 2, or 3.")
+        if rank_val not in ("1", "2", "3", "4", "5", "6"):
+            return blog_err("Pin position must be 1–6.")
         pinned_rank = int(rank_val)
         conn = get_db()
         pin_count = conn.execute(
             "SELECT COUNT(*) FROM blog_posts WHERE is_pinned = 1"
         ).fetchone()[0]
-        if pin_count >= 3:
+        if pin_count >= 6:
             conn.close()
-            return blog_err("You can pin up to 3 posts. Unpin another post first.")
+            return blog_err("You can pin up to 6 posts. Unpin another post first.")
         existing_rank = conn.execute(
             "SELECT id FROM blog_posts WHERE is_pinned = 1 AND pinned_rank = ?",
             (pinned_rank,),
@@ -3847,17 +3847,17 @@ def admin_toggle_pin(post_id):
         return redirect(url_for("index", token=token))
     elif action == "pin":
         rank_val = request.form.get("pin_rank", "").strip()
-        if rank_val not in ("1", "2", "3"):
+        if rank_val not in ("1", "2", "3", "4", "5", "6"):
             conn.close()
-            return render_error("Pin position must be 1, 2, or 3.")
+            return render_error("Pin position must be 1–6.")
         pinned_rank = int(rank_val)
         pin_count = conn.execute(
             "SELECT COUNT(*) FROM blog_posts WHERE is_pinned = 1 AND id != ?",
             (post_id,),
         ).fetchone()[0]
-        if pin_count >= 3:
+        if pin_count >= 6:
             conn.close()
-            return render_error("You can pin up to 3 posts. Unpin another post first.")
+            return render_error("You can pin up to 6 posts. Unpin another post first.")
         existing_rank = conn.execute(
             "SELECT id FROM blog_posts WHERE is_pinned = 1 AND pinned_rank = ? AND id != ?",
             (pinned_rank, post_id),
