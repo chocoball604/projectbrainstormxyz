@@ -3673,14 +3673,20 @@ def admin_create_blog_post():
     if not is_admin:
         return render_error("Admin access required.")
 
+    def blog_err(msg):
+        print(f"[create-blog-post] ERROR: {msg}")
+        return redirect(url_for("index", token=token, blog_error=msg))
+
     title = (request.form.get("blog_title") or "").strip()
     body = (request.form.get("blog_body") or "").strip()
     status = request.form.get("blog_status", "published").strip()
     if status not in ("published", "draft"):
         status = "published"
 
+    print(f"[create-blog-post] title={repr(title[:60] if title else '')}, body_len={len(body)}, status={status}")
+
     if not title or not body:
-        return render_error("Blog post title and body are required.")
+        return blog_err("Blog post title and body are required.")
 
     slug = title.lower().replace(" ", "-")
     slug = "".join(c for c in slug if c.isalnum() or c == "-")[:80]
@@ -3694,10 +3700,10 @@ def admin_create_blog_post():
         fname = img_file.filename
         ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
         if ext not in BLOG_IMAGE_ALLOWED:
-            return render_error(f"Blog image must be PNG or JPG. Got: .{ext}")
+            return blog_err(f"Blog image must be PNG or JPG. Got: .{ext}")
         img_data = img_file.read()
         if len(img_data) > BLOG_IMAGE_MAX_SIZE:
-            return render_error(
+            return blog_err(
                 f"Blog image must be under 300KB. Got: {len(img_data) // 1024}KB"
             )
         safe_name = f"{int(datetime.utcnow().timestamp())}_{secrets.token_hex(4)}.{ext}"
@@ -3713,7 +3719,7 @@ def admin_create_blog_post():
     if is_pinned:
         rank_val = request.form.get("blog_pin_rank", "").strip()
         if rank_val not in ("1", "2", "3"):
-            return render_error("Pin position must be 1, 2, or 3.")
+            return blog_err("Pin position must be 1, 2, or 3.")
         pinned_rank = int(rank_val)
         conn = get_db()
         pin_count = conn.execute(
@@ -3721,14 +3727,14 @@ def admin_create_blog_post():
         ).fetchone()[0]
         if pin_count >= 3:
             conn.close()
-            return render_error("You can pin up to 3 posts. Unpin another post first.")
+            return blog_err("You can pin up to 3 posts. Unpin another post first.")
         existing_rank = conn.execute(
             "SELECT id FROM blog_posts WHERE is_pinned = 1 AND pinned_rank = ?",
             (pinned_rank,),
         ).fetchone()
         if existing_rank:
             conn.close()
-            return render_error(
+            return blog_err(
                 "Pin position already in use. Choose another position or unpin the existing one."
             )
         conn.close()
