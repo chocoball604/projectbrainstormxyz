@@ -4580,7 +4580,7 @@
                 <div style="background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:500;margin-bottom:14px;">{{ blog_error }}</div>
                 {% endif %}
                 <p style="font-size: 13px; color: #777; margin-bottom: 16px;">Create blog posts visible on the public blog page and landing page.</p>
-                <form action="/admin/create-blog-post" method="POST" enctype="multipart/form-data">
+                <form action="/admin/create-blog-post" method="POST" enctype="multipart/form-data" onsubmit="var e=document.getElementById('blog-editor'),h=document.getElementById('blog-body');if(e&&h){h.value=e.innerHTML;}">
                     <input type="hidden" name="token" value="{{ token }}">
                     <div class="form-group">
                         <label for="blog-title">Post Title</label>
@@ -4998,37 +4998,7 @@
         var editor = document.getElementById('blog-editor');
         if (editor) editor.focus();
         document.execCommand(cmd, false, val || null);
-        blogSync();
     }
-    function blogSync() {
-        var editor = document.getElementById('blog-editor');
-        var hidden = document.getElementById('blog-body');
-        if (editor && hidden) hidden.value = editor.innerHTML;
-    }
-    (function() {
-        var editor = document.getElementById('blog-editor');
-        if (editor) {
-            editor.addEventListener('input', blogSync);
-            editor.addEventListener('keyup', blogSync);
-            editor.addEventListener('paste', function() { setTimeout(blogSync, 0); });
-            blogSync();
-        }
-        var form = document.querySelector('form[action="/admin/create-blog-post"]');
-        if (form) {
-            form.addEventListener('submit', function(e) {
-                blogSync();
-                var hidden = document.getElementById('blog-body');
-                if (hidden) {
-                    var txt = hidden.value.replace(/<br\s*\/?>/gi, '').replace(/&nbsp;/gi, '').replace(/<\/?div>/gi, '').replace(/<\/?p>/gi, '').trim();
-                    if (!txt) {
-                        e.preventDefault();
-                        alert('Blog post body is required.');
-                        return;
-                    }
-                }
-            });
-        }
-    })();
 </script>
 
 <div style="background: #1a1a2e; color: rgba(255,255,255,0.6); text-align: center; padding: 24px 20px; font-size: 11px; line-height: 1.6; margin-top: 40px;">
