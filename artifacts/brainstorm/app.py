@@ -3229,9 +3229,11 @@ def index():
     new_research_type = request.args.get("nr_type", "")
 
     blog_error = None
+    blog_draft = {}
     _be = _pending_blog_errors.get(token)
     if _be and time.time() - _be[1] < 30:
         blog_error = _be[0]
+        blog_draft = _be[2] if len(_be) > 2 else {}
     elif _be:
         del _pending_blog_errors[token]
 
@@ -3313,6 +3315,7 @@ def index():
         test_user_email=TEST_USER_EMAIL,
         test_user_password=TEST_USER_PASSWORD,
         blog_error=blog_error,
+        blog_draft=blog_draft,
     )
 
 
@@ -3686,7 +3689,14 @@ def admin_create_blog_post():
 
     def blog_err(msg):
         print(f"[create-blog-post] ERROR: {msg}")
-        _pending_blog_errors[token] = (msg, time.time())
+        draft = {
+            "blog_title": request.form.get("blog_title", ""),
+            "blog_body": request.form.get("blog_body", ""),
+            "blog_status": request.form.get("blog_status", "published"),
+            "blog_pin": request.form.get("blog_pin", ""),
+            "blog_pin_rank": request.form.get("blog_pin_rank", "1"),
+        }
+        _pending_blog_errors[token] = (msg, time.time(), draft)
         return redirect(url_for("index", token=token))
 
     title = (request.form.get("blog_title") or "").strip()

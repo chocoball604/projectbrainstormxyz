@@ -4510,32 +4510,33 @@
                     <input type="hidden" name="token" value="{{ token }}">
                     <div class="form-group">
                         <label for="blog-title">Post Title</label>
-                        <input type="text" id="blog-title" name="blog_title" required style="width: 100%;">
+                        <input type="text" id="blog-title" name="blog_title" required style="width: 100%;" value="{{ blog_draft.get('blog_title', '') | e }}">
                     </div>
                     <div class="form-group">
                         <label for="blog-body">Post Body</label>
-                        <textarea id="blog-body" name="blog_body" rows="8" required style="width: 100%; font-family: inherit; font-size: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 6px;"></textarea>
+                        <textarea id="blog-body" name="blog_body" rows="8" required style="width: 100%; font-family: inherit; font-size: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">{{ blog_draft.get('blog_body', '') | e }}</textarea>
                     </div>
                     <div class="form-group">
-                        <label for="blog-image">Thumbnail Image (optional, PNG/JPG, max 300KB)</label>
+                        <label for="blog-image">Thumbnail Image (optional, PNG/JPG, max 2MB){% if blog_draft and blog_error %} <span style="color:#c0392b;font-size:12px;">— image not retained, please re-select</span>{% endif %}</label>
                         <input type="file" id="blog-image" name="blog_image" accept=".png,.jpg,.jpeg">
                     </div>
                     <div class="form-group">
                         <label for="blog-status">Status</label>
                         <select id="blog-status" name="blog_status" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px;">
-                            <option value="published">Published</option>
-                            <option value="draft">Draft</option>
+                            <option value="published"{% if blog_draft.get('blog_status','published') == 'published' %} selected{% endif %}>Published</option>
+                            <option value="draft"{% if blog_draft.get('blog_status') == 'draft' %} selected{% endif %}>Draft</option>
                         </select>
                     </div>
+                    {% set _pin_checked = blog_draft.get('blog_pin') == '1' %}
                     <div class="form-group">
-                        <label><input type="checkbox" name="blog_pin" value="1" id="blog-pin-checkbox" onchange="document.getElementById('blog-pin-rank-group').style.display=this.checked?'block':'none'"> Pin this post</label>
+                        <label><input type="checkbox" name="blog_pin" value="1" id="blog-pin-checkbox" onchange="document.getElementById('blog-pin-rank-group').style.display=this.checked?'block':'none'"{% if _pin_checked %} checked{% endif %}> Pin this post</label>
                     </div>
-                    <div class="form-group" id="blog-pin-rank-group" style="display:none;">
+                    <div class="form-group" id="blog-pin-rank-group" style="display:{% if _pin_checked %}block{% else %}none{% endif %};">
                         <label for="blog-pin-rank">Pin position</label>
                         <select id="blog-pin-rank" name="blog_pin_rank" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px;">
-                            <option value="1">1</option>
-                            <option value="2">2</option>
-                            <option value="3">3</option>
+                            <option value="1"{% if blog_draft.get('blog_pin_rank','1') == '1' %} selected{% endif %}>1</option>
+                            <option value="2"{% if blog_draft.get('blog_pin_rank') == '2' %} selected{% endif %}>2</option>
+                            <option value="3"{% if blog_draft.get('blog_pin_rank') == '3' %} selected{% endif %}>3</option>
                         </select>
                     </div>
                     <button type="submit" class="btn btn-primary">Create Post</button>
