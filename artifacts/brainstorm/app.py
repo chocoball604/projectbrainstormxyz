@@ -3044,10 +3044,11 @@ def index():
 
         personas_page = max(1, int(request.args.get("personas_page", "1") or "1"))
         personas_q = (request.args.get("personas_q") or "").strip()
+        _p_search_where = "(persona_instance_id LIKE ? OR name LIKE ? OR COALESCE(market_geography,'') LIKE ? OR COALESCE(target_audience,'') LIKE ?)"
         if personas_q:
             personas_total = conn.execute(
-                "SELECT COUNT(*) FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?)",
-                (user["id"], f"%{personas_q}%", f"%{personas_q}%"),
+                f"SELECT COUNT(*) FROM personas WHERE user_id = ? AND {_p_search_where}",
+                (user["id"], f"%{personas_q}%", f"%{personas_q}%", f"%{personas_q}%", f"%{personas_q}%"),
             ).fetchone()[0]
         else:
             personas_total = conn.execute(
@@ -3057,15 +3058,28 @@ def index():
         personas_total_pages = max(1, (personas_total + PAGE_SIZE - 1) // PAGE_SIZE)
         personas_page = min(personas_page, personas_total_pages)
         p_offset = (personas_page - 1) * PAGE_SIZE
-        _p_sel = "persona_instance_id, name, created_at, content_language, translated_content"
+        _p_sel = "persona_instance_id, name, created_at, content_language, translated_content, market_geography, target_audience"
+        _p_sort_col = request.args.get("personas_sort", "")
+        _p_sort_dir = request.args.get("personas_dir", "desc").lower()
+        if _p_sort_dir not in ("asc", "desc"):
+            _p_sort_dir = "desc"
+        _p_order_map = {
+            "market_geography": "COALESCE(market_geography,'')",
+            "target_audience": "COALESCE(target_audience,'')",
+            "created_at": "created_at",
+        }
+        _p_order_expr = _p_order_map.get(_p_sort_col, "id")
+        _p_order_clause = f"{_p_order_expr} {_p_sort_dir.upper()}"
+        if _p_sort_col in _p_order_map:
+            _p_order_clause += ", id DESC"
         if personas_q:
             _p_rows = conn.execute(
-                f"SELECT {_p_sel} FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
-                (user["id"], f"%{personas_q}%", f"%{personas_q}%", PAGE_SIZE, p_offset),
+                f"SELECT {_p_sel} FROM personas WHERE user_id = ? AND {_p_search_where} ORDER BY {_p_order_clause} LIMIT ? OFFSET ?",
+                (user["id"], f"%{personas_q}%", f"%{personas_q}%", f"%{personas_q}%", f"%{personas_q}%", PAGE_SIZE, p_offset),
             ).fetchall()
         else:
             _p_rows = conn.execute(
-                f"SELECT {_p_sel} FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                f"SELECT {_p_sel} FROM personas WHERE user_id = ? ORDER BY {_p_order_clause} LIMIT ? OFFSET ?",
                 (user["id"], PAGE_SIZE, p_offset),
             ).fetchall()
         _p_user_lang = request.cookies.get("pb_lang", "en")
@@ -3073,7 +3087,7 @@ def index():
             _p_user_lang = "en"
         personas_list = []
         for _pr in _p_rows:
-            _pi = {"persona_instance_id": _pr["persona_instance_id"], "name": _pr["name"], "created_at": _pr["created_at"]}
+            _pi = {"persona_instance_id": _pr["persona_instance_id"], "name": _pr["name"], "created_at": _pr["created_at"], "market_geography": _pr["market_geography"] or "", "target_audience": _pr["target_audience"] or ""}
             _pcl = _pr["content_language"] or "en"
             if _pcl != _p_user_lang and _pr["translated_content"]:
                 try:
@@ -9560,10 +9574,11 @@ def api_personas_list():
     ps = 10
 
     conn = get_db()
+    _search_where = "(persona_instance_id LIKE ? OR name LIKE ? OR COALESCE(market_geography,'') LIKE ? OR COALESCE(target_audience,'') LIKE ?)"
     if q:
         total = conn.execute(
-            "SELECT COUNT(*) FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?)",
-            (user["id"], f"%{q}%", f"%{q}%"),
+            f"SELECT COUNT(*) FROM personas WHERE user_id = ? AND {_search_where}",
+            (user["id"], f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"),
         ).fetchone()[0]
     else:
         total = conn.execute(
@@ -9575,15 +9590,29 @@ def api_personas_list():
     page = min(page, total_pages)
     offset = (page - 1) * ps
 
-    _sel_cols = "persona_instance_id, name, created_at, content_language, translated_content"
+    _sel_cols = "persona_instance_id, name, created_at, content_language, translated_content, market_geography, target_audience"
+    _sort_col = request.args.get("sort", "")
+    _sort_dir = request.args.get("dir", "desc").lower()
+    if _sort_dir not in ("asc", "desc"):
+        _sort_dir = "desc"
+    _order_map = {
+        "market_geography": "COALESCE(market_geography,'')",
+        "target_audience": "COALESCE(target_audience,'')",
+        "created_at": "created_at",
+    }
+    _order_expr = _order_map.get(_sort_col, "id")
+    _order_clause = f"{_order_expr} {_sort_dir.upper()}"
+    if _sort_col in _order_map:
+        _order_clause += ", id DESC"
+
     if q:
         rows = conn.execute(
-            f"SELECT {_sel_cols} FROM personas WHERE user_id = ? AND (persona_instance_id LIKE ? OR name LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
-            (user["id"], f"%{q}%", f"%{q}%", ps, offset),
+            f"SELECT {_sel_cols} FROM personas WHERE user_id = ? AND {_search_where} ORDER BY {_order_clause} LIMIT ? OFFSET ?",
+            (user["id"], f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%", ps, offset),
         ).fetchall()
     else:
         rows = conn.execute(
-            f"SELECT {_sel_cols} FROM personas WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+            f"SELECT {_sel_cols} FROM personas WHERE user_id = ? ORDER BY {_order_clause} LIMIT ? OFFSET ?",
             (user["id"], ps, offset),
         ).fetchall()
 
@@ -9594,7 +9623,7 @@ def api_personas_list():
 
     personas = []
     for r in rows:
-        p_item = {"persona_instance_id": r[0], "name": r[1], "created_at": r[2]}
+        p_item = {"persona_instance_id": r[0], "name": r[1], "created_at": r[2], "market_geography": r[5] or "", "target_audience": r[6] or ""}
         _p_clang = r[3] or "en"
         if _p_clang != _user_lang and r[4]:
             try:

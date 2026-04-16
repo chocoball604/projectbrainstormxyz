@@ -3299,7 +3299,7 @@
 
             <form id="personas-search-form" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
                 <div style="flex: 1;">
-                    <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by Persona ID or name</label>
+                    <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by name, Persona ID, market/geography, or target audience</label>
                     <input type="text" id="personas-search-input" value="{{ personas_q }}" placeholder="Search personas..." style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
                 </div>
                 <button type="submit" class="btn btn-primary btn-small" style="height: 34px;">Search</button>
@@ -3308,11 +3308,15 @@
 
             <div id="personas-list-container">
             {% if personas_list %}
+            <div style="overflow-x:auto;">
             <table>
                 <thead>
                     <tr>
                         <th>Name</th>
                         <th>Persona ID</th>
+                        <th style="cursor:pointer;white-space:nowrap;" class="persona-sort-hdr" data-col="market_geography">Market / Geo <span style="color:#bbb;font-size:10px;">⇅</span></th>
+                        <th style="cursor:pointer;white-space:nowrap;" class="persona-sort-hdr" data-col="target_audience">Target Aud. <span style="color:#bbb;font-size:10px;">⇅</span></th>
+                        <th style="cursor:pointer;white-space:nowrap;" class="persona-sort-hdr" data-col="created_at">Created <span style="color:#bbb;font-size:10px;">⇅</span></th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -3321,7 +3325,10 @@
                     <tr>
                         <td>{% if p.translated_name %}{{ p.translated_name }} <span style="color:#999;font-size:12px;">({{ p.name }})</span>{% else %}{{ p.name }}{% endif %}</td>
                         <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ p.persona_instance_id }}</code></td>
-                        <td>
+                        <td style="font-size:12px;color:#555;">{{ p.market_geography or '—' }}</td>
+                        <td style="font-size:12px;color:#555;">{{ p.target_audience or '—' }}</td>
+                        <td style="font-size:12px;color:#777;white-space:nowrap;">{{ p.created_at[:10] if p.created_at else '—' }}</td>
+                        <td style="white-space:nowrap;">
                             <button type="button" class="btn btn-primary btn-small persona-view-btn" data-pid="{{ p.persona_instance_id }}">View</button>
                             <form action="/delete-persona/{{ p.persona_instance_id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this persona?');">
                                 <input type="hidden" name="token" value="{{ token }}">
@@ -3332,6 +3339,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: #777;">
                 <span>{{ personas_total }} personas total — Page {{ personas_page }} of {{ personas_total_pages }}</span>
@@ -3362,6 +3370,8 @@
                 var _pToken = '{{ token }}';
                 var _pQuery = '{{ personas_q }}';
                 var _pPage = {{ personas_page }};
+                var _pSort = '';
+                var _pDir = 'desc';
 
                 function escHtml(s) {
                     if (!s) return '';
@@ -3485,6 +3495,27 @@
                     });
                 }
 
+                function sortArrow(col) {
+                    if (_pSort !== col) return ' <span style="color:#bbb;font-size:10px;">⇅</span>';
+                    return _pDir === 'asc' ? ' <span style="font-size:10px;">▲</span>' : ' <span style="font-size:10px;">▼</span>';
+                }
+
+                function bindSortHdrs() {
+                    document.querySelectorAll('.persona-sort-hdr').forEach(function(th) {
+                        th.addEventListener('click', function(ev) {
+                            ev.preventDefault();
+                            var col = th.getAttribute('data-col');
+                            if (_pSort === col) {
+                                _pDir = _pDir === 'asc' ? 'desc' : 'asc';
+                            } else {
+                                _pSort = col;
+                                _pDir = col === 'created_at' ? 'desc' : 'asc';
+                            }
+                            loadPersonasPage(1, _pQuery);
+                        });
+                    });
+                }
+
                 function renderPersonasList(data) {
                     var container = document.getElementById('personas-list-container');
                     var detail = document.getElementById('persona-inline-detail');
@@ -3499,21 +3530,30 @@
                         if (clearEmpty) clearEmpty.addEventListener('click', function(ev) { ev.preventDefault(); clearPersonasSearch(); });
                         return;
                     }
-                    var html = '<table><thead><tr><th>Name</th><th>Persona ID</th><th>Action</th></tr></thead><tbody>';
+                    var html = '<div style="overflow-x:auto;"><table><thead><tr>'
+                        + '<th>Name</th><th>Persona ID</th>'
+                        + '<th style="cursor:pointer;white-space:nowrap;" class="persona-sort-hdr" data-col="market_geography">Market / Geo' + sortArrow('market_geography') + '</th>'
+                        + '<th style="cursor:pointer;white-space:nowrap;" class="persona-sort-hdr" data-col="target_audience">Target Aud.' + sortArrow('target_audience') + '</th>'
+                        + '<th style="cursor:pointer;white-space:nowrap;" class="persona-sort-hdr" data-col="created_at">Created' + sortArrow('created_at') + '</th>'
+                        + '<th>Action</th></tr></thead><tbody>';
                     data.personas.forEach(function(p) {
                         var nameCell = escHtml(p.name);
                         if (p.translated_name) {
                             nameCell = escHtml(p.translated_name) + ' <span style="color:#999;font-size:12px;">(' + escHtml(p.name) + ')</span>';
                         }
+                        var createdShort = (p.created_at || '').substring(0, 10) || '—';
                         html += '<tr><td>' + nameCell + '</td>'
                             + '<td><code style="font-size:12px;background:#f0f0f0;padding:2px 6px;border-radius:3px;">' + escHtml(p.persona_instance_id) + '</code></td>'
-                            + '<td><button type="button" class="btn btn-primary btn-small persona-view-btn" data-pid="' + escHtml(p.persona_instance_id) + '">View</button>'
+                            + '<td style="font-size:12px;color:#555;">' + (escHtml(p.market_geography) || '—') + '</td>'
+                            + '<td style="font-size:12px;color:#555;">' + (escHtml(p.target_audience) || '—') + '</td>'
+                            + '<td style="font-size:12px;color:#777;white-space:nowrap;">' + escHtml(createdShort) + '</td>'
+                            + '<td style="white-space:nowrap;"><button type="button" class="btn btn-primary btn-small persona-view-btn" data-pid="' + escHtml(p.persona_instance_id) + '">View</button>'
                             + ' <form action="/delete-persona/' + encodeURIComponent(p.persona_instance_id) + '" method="POST" style="display:inline;" onsubmit="return confirm(\'Delete this persona?\');">'
                             + '<input type="hidden" name="token" value="' + escHtml(_pToken) + '">'
                             + '<button type="submit" class="btn btn-danger btn-small">Delete</button></form>'
                             + '</td></tr>';
                     });
-                    html += '</tbody></table>';
+                    html += '</tbody></table></div>';
                     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:#777;">';
                     html += '<span>' + data.total + ' personas total — Page ' + data.page + ' of ' + data.total_pages + '</span>';
                     html += '<div style="display:flex;gap:6px;">';
@@ -3523,6 +3563,7 @@
                     container.innerHTML = html;
                     bindPageBtns();
                     bindViewBtns();
+                    bindSortHdrs();
                     _pPage = data.page;
                     _pQuery = data.q || '';
                 }
@@ -3530,6 +3571,7 @@
                 function loadPersonasPage(page, q) {
                     var url = '/_bapi/personas-list?token=' + encodeURIComponent(_pToken) + '&page=' + page;
                     if (q) url += '&q=' + encodeURIComponent(q);
+                    if (_pSort) url += '&sort=' + encodeURIComponent(_pSort) + '&dir=' + encodeURIComponent(_pDir);
                     fetch(url)
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
@@ -3564,6 +3606,7 @@
 
                 bindPageBtns();
                 bindViewBtns();
+                bindSortHdrs();
 
                 function clearPersonasSearch() {
                     document.getElementById('personas-search-input').value = '';
