@@ -169,5 +169,18 @@
     "sender_name": "georgia123",
     "recipient_type": "admin",
     "recipient_user_id": null
+  },
+  {
+    "id": "4cfd5bd14fbe0972",
+    "timestamp": "2026-04-16 03:52:11",
+    "subject": "Help",
+    "body": "Help test",
+    "category": "Help",
+    "read": true,
+    "sender_type": "user",
+    "sender_id": 9,
+    "sender_name": "TestAdmin",
+    "recipient_type": "admin",
+    "recipient_user_id": null
   }
 ]

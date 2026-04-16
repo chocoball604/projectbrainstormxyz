@@ -10399,9 +10399,9 @@ def admin_export_users_csv():
     import csv, io
 
     conn = get_db()
-    rows = conn.execute("SELECT id, email, username, state, created_at, name, company, role, location FROM users ORDER BY id").fetchall()
+    rows = conn.execute("SELECT id, email, username, first_name, surname, state, created_at, name, company, role, location, linkedin, tos_agreed_at, last_email_verification_timestamp FROM users ORDER BY id").fetchall()
     conn.close()
-    cols = ["id", "email", "username", "state", "created_at", "name", "company", "role", "location"]
+    cols = ["id", "email", "username", "first_name", "surname", "state", "created_at", "name", "company", "role", "location", "linkedin", "tos_agreed_at", "last_email_verification_timestamp"]
     si = io.StringIO()
     w = csv.writer(si)
     w.writerow(cols)
