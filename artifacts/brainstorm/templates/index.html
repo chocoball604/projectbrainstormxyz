@@ -1343,6 +1343,7 @@
                 <h3 style="font-size: 15px; color: #1a1a2e; margin: 0 0 12px; border-bottom: 2px solid #5C7E8F; padding-bottom: 8px;">Brief So Far</h3>
 
                 <div style="font-size: 13px; color: #555; margin-bottom: 12px;">
+                    <div style="margin-bottom: 4px;"><strong>Study ID:</strong> <code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ configure_study.study_ref or '—' }}</code></div>
                     <div style="margin-bottom: 4px;"><strong>Title:</strong> {{ configure_study.title }}</div>
                     <div style="margin-bottom: 4px;"><strong>Type:</strong> {{ configure_study.study_type or 'Not set' }}</div>
                     <div><strong>Status:</strong> <span class="badge badge-{{ configure_study.status }}">{{ configure_study.status }}</span></div>
@@ -2505,6 +2506,7 @@
                 <a href="/?token={{ token }}" class="btn btn-secondary btn-small">Back to Dashboard</a>
             </div>
             <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ view_study_output.study_ref or '—' }}</code>
                 <span class="badge badge-{{ view_study_output.status }}">{{ view_study_output.status }}</span>
                 <span style="font-size: 13px; color: #777;">Type: {{ view_study_output.study_type or '—' }}</span>
                 {% if view_study_output.qa_status == 'pass' %}
@@ -3221,6 +3223,7 @@
             <table>
                 <thead>
                     <tr>
+                        <th>Study ID</th>
                         <th>Title</th>
                         <th>Type</th>
                         <th>Status</th>
@@ -3231,6 +3234,7 @@
                 <tbody>
                     {% for s in studies %}
                     <tr>
+                        <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ s.study_ref or '—' }}</code></td>
                         <td>{{ s.title }}</td>
                         <td>{{ s.study_type or '—' }}</td>
                         <td>
@@ -3709,6 +3713,17 @@
             <p style="font-size: 13px; color: #999; margin-bottom: 16px;">
                 Persona ID: <code>{{ view_persona.persona_instance_id }}</code> | Created: {{ view_persona.created_at }}
             </p>
+
+            {% if view_persona.market_geography or view_persona.target_audience %}
+            <div style="margin-bottom: 16px; padding: 12px 14px; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 13px; color: #555;">
+                {% if view_persona.market_geography %}
+                <div style="margin-bottom: 6px;"><strong style="color: #1a1a2e;">Market / Geography:</strong> {{ view_persona.market_geography }}</div>
+                {% endif %}
+                {% if view_persona.target_audience %}
+                <div><strong style="color: #1a1a2e;">Target Audience:</strong> {{ view_persona.target_audience }}</div>
+                {% endif %}
+            </div>
+            {% endif %}
 
             {% if view_persona.needs_translation %}
             <div id="persona-translate-bar" style="margin-bottom: 16px; padding: 10px 14px; background: #f0f4ff; border: 1px solid #d0d8e8; border-radius: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">

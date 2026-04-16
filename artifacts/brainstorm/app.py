@@ -2210,6 +2210,19 @@ def migrate_db(conn):
         conn.execute("ALTER TABLE studies ADD COLUMN translated_output TEXT")
     if "exec_grounding_data" not in study_cols:
         conn.execute("ALTER TABLE studies ADD COLUMN exec_grounding_data TEXT")
+    if "study_ref" not in study_cols:
+        conn.execute("ALTER TABLE studies ADD COLUMN study_ref TEXT")
+        for row in conn.execute("SELECT id FROM studies WHERE study_ref IS NULL").fetchall():
+            conn.execute(
+                "UPDATE studies SET study_ref = ? WHERE id = ?",
+                (f"S-{secrets.token_hex(4).upper()}", row["id"]),
+            )
+
+    persona_cols = [row[1] for row in conn.execute("PRAGMA table_info(personas)").fetchall()]
+    if "market_geography" not in persona_cols:
+        conn.execute("ALTER TABLE personas ADD COLUMN market_geography TEXT")
+    if "target_audience" not in persona_cols:
+        conn.execute("ALTER TABLE personas ADD COLUMN target_audience TEXT")
 
     fu_info = conn.execute("PRAGMA table_info(followups)").fetchall()
     fu_cols = [r[1] for r in fu_info]
@@ -2847,7 +2860,7 @@ def index():
             studies = [
                 dict(r)
                 for r in conn.execute(
-                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language FROM studies WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language, study_ref FROM studies WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
                     (user["id"], f"%{studies_q}%", PAGE_SIZE, s_offset),
                 ).fetchall()
             ]
@@ -2855,7 +2868,7 @@ def index():
             studies = [
                 dict(r)
                 for r in conn.execute(
-                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language FROM studies WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language, study_ref FROM studies WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
                     (user["id"], PAGE_SIZE, s_offset),
                 ).fetchall()
             ]
@@ -4253,8 +4266,8 @@ def create_study():
         conn.execute(
             """INSERT INTO studies
                (user_id, title, status, study_type, respondent_count, question_count,
-                survey_brief, survey_questions)
-               VALUES (?, ?, 'draft', ?, ?, ?, ?, ?)""",
+                survey_brief, survey_questions, study_ref)
+               VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)""",
             (
                 user["id"],
                 title,
@@ -4263,6 +4276,7 @@ def create_study():
                 question_count,
                 survey_brief,
                 json.dumps(survey_questions),
+                f"S-{secrets.token_hex(4).upper()}",
             ),
         )
         conn.commit()
@@ -4284,8 +4298,8 @@ def create_study():
         conn.execute(
             """INSERT INTO studies
                (user_id, title, status, study_type, business_problem, decision_to_support,
-                known_vs_unknown, target_audience, study_fit, definition_useful_insight)
-               VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)""",
+                known_vs_unknown, target_audience, study_fit, definition_useful_insight, study_ref)
+               VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 user["id"],
                 title,
@@ -4296,6 +4310,7 @@ def create_study():
                 brief["target_audience"],
                 brief["study_fit"],
                 definition_useful_insight_val,
+                f"S-{secrets.token_hex(4).upper()}",
             ),
         )
         conn.commit()
@@ -4332,9 +4347,10 @@ def create_study_tbd():
         return render_error(f'A study titled "{title}" already exists. Please choose a different title.')
 
     conn = get_db()
+    _new_study_ref = f"S-{secrets.token_hex(4).upper()}"
     conn.execute(
-        "INSERT INTO studies (user_id, title, status, study_type) VALUES (?, ?, 'draft', '')",
-        (user["id"], title),
+        "INSERT INTO studies (user_id, title, status, study_type, study_ref) VALUES (?, ?, 'draft', '', ?)",
+        (user["id"], title, _new_study_ref),
     )
     conn.commit()
     study_id = conn.execute(
@@ -6519,7 +6535,8 @@ def auto_ben_precheck(conn, study, user_id):
     conn.commit()
     study_dict["qa_status"] = "precheck_passed" if not failures else "precheck_failed"
     study_dict["qa_notes"] = json.dumps(failures) if failures else None
-    print(f"AUTO_PRECHECK study={study_id} result={'FAIL' if failures else 'PASS'} failures={failures}", flush=True)
+    _sref = study_dict.get("study_ref") or f"id={study_id}"
+    print(f"AUTO_PRECHECK study={study_id} ref={_sref} result={'FAIL' if failures else 'PASS'} failures={failures}", flush=True)
 
 
 @app.route("/ready-for-qa/<int:study_id>", methods=["POST"])
@@ -7996,6 +8013,8 @@ def run_study(study_id):
                 if len(generated) > auto_n:
                     print(f"PERSONA_GEN_CLIP study={study_id} generated={len(generated)} auto_n={auto_n}", flush=True)
                     generated = generated[:auto_n]
+                _p_market_geo = (study_snapshot.get("study_fit") or "").strip()
+                _p_target_aud = (study_snapshot.get("target_audience") or "").strip()
                 for p_data in generated:
                     p_instance_id = f"P-{secrets.token_hex(4).upper()}"
                     p_persona_id = f"PID-{secrets.token_hex(4).upper()}"
@@ -8006,8 +8025,8 @@ def run_study(study_id):
                             persona_summary, demographic_frame, psychographic_profile,
                             contextual_constraints, behavioural_tendencies,
                             ai_model_provenance, grounding_sources, confidence_and_limits,
-                            content_language)
-                           VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            content_language, market_geography, target_audience)
+                           VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             user["id"],
                             p_persona_id,
@@ -8022,6 +8041,8 @@ def run_study(study_id):
                             _mlg_grounding_text if _mlg_grounding_text else _pstr(p_data.get("grounding_sources", "")),
                             _pstr(p_data.get("confidence_and_limits", "")),
                             _persona_content_lang,
+                            _p_market_geo,
+                            _p_target_aud,
                         ),
                     )
                     create_grounding_trace(
@@ -10016,7 +10037,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         studies = [
             dict(r)
             for r in conn.execute(
-                "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language FROM studies WHERE user_id = ? ORDER BY created_at DESC",
+                "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language, study_ref FROM studies WHERE user_id = ? ORDER BY created_at DESC",
                 (user["id"],),
             ).fetchall()
         ]
@@ -10328,8 +10349,8 @@ def admin_dev_inject_invalid_qual_study():
     conn.execute(
         """INSERT INTO studies (user_id, title, study_type, status,
            business_problem, decision_to_support, known_vs_unknown,
-           target_audience, study_fit, definition_useful_insight, personas_used)
-           VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, '[]')""",
+           target_audience, study_fit, definition_useful_insight, personas_used, study_ref)
+           VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, '[]', ?)""",
         (
             admin_user["id"],
             f"DEV_INVALID_{study_type}_{blank_field}",
@@ -10340,6 +10361,7 @@ def admin_dev_inject_invalid_qual_study():
             anchors["target_audience"],
             anchors["study_fit"],
             anchors["definition_useful_insight"],
+            f"S-{secrets.token_hex(4).upper()}",
         ),
     )
     conn.commit()
