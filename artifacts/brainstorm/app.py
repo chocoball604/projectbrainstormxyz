@@ -2872,10 +2872,12 @@ def index():
 
         studies_page = max(1, int(request.args.get("studies_page", "1") or "1"))
         studies_q = (request.args.get("studies_q") or "").strip()
+        _st_search_where = "(title LIKE ? OR COALESCE(study_ref,'') LIKE ? OR COALESCE(study_type,'') LIKE ? OR status LIKE ?)"
         if studies_q:
+            _sq = f"%{studies_q}%"
             studies_total = conn.execute(
-                "SELECT COUNT(*) FROM studies WHERE user_id = ? AND title LIKE ?",
-                (user["id"], f"%{studies_q}%"),
+                f"SELECT COUNT(*) FROM studies WHERE user_id = ? AND {_st_search_where}",
+                (user["id"], _sq, _sq, _sq, _sq),
             ).fetchone()[0]
         else:
             studies_total = conn.execute(
@@ -2885,19 +2887,35 @@ def index():
         studies_total_pages = max(1, (studies_total + PAGE_SIZE - 1) // PAGE_SIZE)
         studies_page = min(studies_page, studies_total_pages)
         s_offset = (studies_page - 1) * PAGE_SIZE
+        studies_sort = request.args.get("studies_sort", "")
+        studies_dir = request.args.get("studies_dir", "desc").lower()
+        if studies_dir not in ("asc", "desc"):
+            studies_dir = "desc"
+        _st_order_map = {
+            "title": "title",
+            "study_type": "COALESCE(study_type,'')",
+            "status": "status",
+            "created_at": "created_at",
+        }
+        _st_order_expr = _st_order_map.get(studies_sort, "created_at")
+        _st_order_clause = f"{_st_order_expr} {studies_dir.upper()}"
+        if studies_sort in _st_order_map and studies_sort != "created_at":
+            _st_order_clause += ", created_at DESC"
+        _st_sel = "id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language, study_ref"
         if studies_q:
+            _sq = f"%{studies_q}%"
             studies = [
                 dict(r)
                 for r in conn.execute(
-                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language, study_ref FROM studies WHERE user_id = ? AND title LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                    (user["id"], f"%{studies_q}%", PAGE_SIZE, s_offset),
+                    f"SELECT {_st_sel} FROM studies WHERE user_id = ? AND {_st_search_where} ORDER BY {_st_order_clause} LIMIT ? OFFSET ?",
+                    (user["id"], _sq, _sq, _sq, _sq, PAGE_SIZE, s_offset),
                 ).fetchall()
             ]
         else:
             studies = [
                 dict(r)
                 for r in conn.execute(
-                    "SELECT id, title, study_type, status, created_at, study_output, qa_status, confidence_summary, final_report, output_language, study_ref FROM studies WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    f"SELECT {_st_sel} FROM studies WHERE user_id = ? ORDER BY {_st_order_clause} LIMIT ? OFFSET ?",
                     (user["id"], PAGE_SIZE, s_offset),
                 ).fetchall()
             ]
@@ -3112,10 +3130,11 @@ def index():
             docs_q.upper().replace("DOC-", "").replace("D-", "") if docs_q else ""
         )
         doc_id_like = f"%{doc_id_num}%" if doc_id_num else ""
+        _doc_search_where = "(filename LIKE ? OR CAST(id AS TEXT) LIKE ? OR COALESCE(file_type,'') LIKE ? OR status LIKE ?)"
         if docs_q:
             docs_total = conn.execute(
-                "SELECT COUNT(*) FROM user_uploads WHERE user_id = ? AND (filename LIKE ? OR CAST(id AS TEXT) LIKE ?)",
-                (user["id"], f"%{docs_q}%", doc_id_like),
+                f"SELECT COUNT(*) FROM user_uploads WHERE user_id = ? AND {_doc_search_where}",
+                (user["id"], f"%{docs_q}%", doc_id_like, f"%{docs_q}%", f"%{docs_q}%"),
             ).fetchone()[0]
         else:
             docs_total = conn.execute(
@@ -3125,19 +3144,34 @@ def index():
         docs_total_pages = max(1, (docs_total + DOCS_PAGE_SIZE - 1) // DOCS_PAGE_SIZE)
         docs_page = min(docs_page, docs_total_pages)
         d_offset = (docs_page - 1) * DOCS_PAGE_SIZE
+        docs_sort = request.args.get("docs_sort", "")
+        docs_dir = request.args.get("docs_dir", "desc").lower()
+        if docs_dir not in ("asc", "desc"):
+            docs_dir = "desc"
+        _doc_order_map = {
+            "filename": "filename",
+            "file_type": "COALESCE(file_type,'')",
+            "file_size_bytes": "file_size_bytes",
+            "uploaded_at": "uploaded_at",
+            "status": "status",
+        }
+        _doc_order_expr = _doc_order_map.get(docs_sort, "id")
+        _doc_order_clause = f"{_doc_order_expr} {docs_dir.upper()}"
+        if docs_sort in _doc_order_map and docs_sort != "uploaded_at":
+            _doc_order_clause += ", id DESC"
         if docs_q:
             docs_list = [
                 dict(r)
                 for r in conn.execute(
-                    "SELECT * FROM user_uploads WHERE user_id = ? AND (filename LIKE ? OR CAST(id AS TEXT) LIKE ?) ORDER BY id DESC LIMIT ? OFFSET ?",
-                    (user["id"], f"%{docs_q}%", doc_id_like, DOCS_PAGE_SIZE, d_offset),
+                    f"SELECT * FROM user_uploads WHERE user_id = ? AND {_doc_search_where} ORDER BY {_doc_order_clause} LIMIT ? OFFSET ?",
+                    (user["id"], f"%{docs_q}%", doc_id_like, f"%{docs_q}%", f"%{docs_q}%", DOCS_PAGE_SIZE, d_offset),
                 ).fetchall()
             ]
         else:
             docs_list = [
                 dict(r)
                 for r in conn.execute(
-                    "SELECT * FROM user_uploads WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                    f"SELECT * FROM user_uploads WHERE user_id = ? ORDER BY {_doc_order_clause} LIMIT ? OFFSET ?",
                     (user["id"], DOCS_PAGE_SIZE, d_offset),
                 ).fetchall()
             ]
@@ -3330,6 +3364,8 @@ def index():
         chat_save_buttons=chat_save_buttons,
         studies_page=studies_page,
         studies_q=studies_q,
+        studies_sort=studies_sort,
+        studies_dir=studies_dir,
         studies_total_pages=studies_total_pages,
         studies_total=studies_total,
         personas_page=personas_page,
@@ -3353,6 +3389,8 @@ def index():
         docs_list=docs_list,
         docs_page=docs_page,
         docs_q=docs_q,
+        docs_sort=docs_sort,
+        docs_dir=docs_dir,
         docs_total_pages=docs_total_pages,
         docs_total=docs_total,
         user_storage_used=user_storage_used,
@@ -10191,6 +10229,8 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         chat_save_buttons=[],
         studies_page=1,
         studies_q="",
+        studies_sort="",
+        studies_dir="desc",
         studies_total_pages=1,
         studies_total=0,
         personas_page=1,
@@ -10214,6 +10254,8 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         docs_list=[],
         docs_page=1,
         docs_q="",
+        docs_sort="",
+        docs_dir="desc",
         docs_total_pages=1,
         docs_total=0,
         user_storage_used=0,

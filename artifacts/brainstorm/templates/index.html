@@ -3209,25 +3209,30 @@
 
             <form method="GET" action="/" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
                 <input type="hidden" name="token" value="{{ token }}">
+                {% if studies_sort %}<input type="hidden" name="studies_sort" value="{{ studies_sort }}"><input type="hidden" name="studies_dir" value="{{ studies_dir }}">{% endif %}
                 <div style="flex: 1;">
-                    <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by title</label>
+                    <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by title, Study ID, type, or status</label>
                     <input type="text" name="studies_q" value="{{ studies_q }}" placeholder="Search studies..." style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
                 </div>
                 <button type="submit" class="btn btn-primary btn-small" style="height: 34px;">Search</button>
                 {% if studies_q %}
-                <a href="/?token={{ token }}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
+                <a href="/?token={{ token }}{% if studies_sort %}&studies_sort={{ studies_sort }}&studies_dir={{ studies_dir }}{% endif %}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
                 {% endif %}
             </form>
 
+            {% macro studies_sort_url(col) %}/?token={{ token }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}&studies_sort={{ col }}&studies_dir={{ 'asc' if studies_sort == col and studies_dir == 'desc' else 'desc' if studies_sort == col and studies_dir == 'asc' else ('desc' if col == 'created_at' else 'asc') }}{% endmacro %}
+            {% macro studies_sort_arrow(col) %}{% if studies_sort == col %}{{ '▲' if studies_dir == 'asc' else '▼' }}{% else %}<span style="color:#bbb;">⇅</span>{% endif %}{% endmacro %}
+
             {% if studies %}
+            <div style="overflow-x:auto;">
             <table>
                 <thead>
                     <tr>
                         <th>Study ID</th>
-                        <th>Title</th>
-                        <th>Type</th>
-                        <th>Status</th>
-                        <th>Created</th>
+                        <th><a href="{{ studies_sort_url('title') }}" style="color:inherit;text-decoration:none;white-space:nowrap;">Title {{ studies_sort_arrow('title') }}</a></th>
+                        <th><a href="{{ studies_sort_url('study_type') }}" style="color:inherit;text-decoration:none;white-space:nowrap;">Type {{ studies_sort_arrow('study_type') }}</a></th>
+                        <th><a href="{{ studies_sort_url('status') }}" style="color:inherit;text-decoration:none;white-space:nowrap;">Status {{ studies_sort_arrow('status') }}</a></th>
+                        <th><a href="{{ studies_sort_url('created_at') }}" style="color:inherit;text-decoration:none;white-space:nowrap;">Created {{ studies_sort_arrow('created_at') }}</a></th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -3251,7 +3256,7 @@
                             <span class="badge badge-qa-downgrade" style="margin-left: 4px;">QA: Downgrade</span>
                             {% endif %}
                         </td>
-                        <td>{{ s.created_at }}</td>
+                        <td style="white-space:nowrap;font-size:12px;">{{ s.created_at[:10] if s.created_at else '—' }}</td>
                         <td>
                             {% if s.status == 'draft' %}
                             <a href="/?token={{ token }}&configure={{ s.id }}" class="btn btn-primary btn-small">Open Study</a>
@@ -3266,15 +3271,17 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
 
+            {% set _st_sort_params %}{% if studies_sort %}&studies_sort={{ studies_sort }}&studies_dir={{ studies_dir }}{% endif %}{% endset %}
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: #777;">
                 <span>{{ studies_total }} studies total — Page {{ studies_page }} of {{ studies_total_pages }}</span>
                 <div style="display: flex; gap: 6px;">
                     {% if studies_page > 1 %}
-                    <a href="/?token={{ token }}&studies_page={{ studies_page - 1 }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}" class="btn btn-secondary btn-small">Prev</a>
+                    <a href="/?token={{ token }}&studies_page={{ studies_page - 1 }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}{{ _st_sort_params }}" class="btn btn-secondary btn-small">Prev</a>
                     {% endif %}
                     {% if studies_page < studies_total_pages %}
-                    <a href="/?token={{ token }}&studies_page={{ studies_page + 1 }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}" class="btn btn-secondary btn-small">Next</a>
+                    <a href="/?token={{ token }}&studies_page={{ studies_page + 1 }}{% if studies_q %}&studies_q={{ studies_q }}{% endif %}{{ _st_sort_params }}" class="btn btn-secondary btn-small">Next</a>
                     {% endif %}
                 </div>
             </div>
@@ -3651,13 +3658,14 @@
             <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end;">
                 <form method="GET" action="/" style="display: flex; gap: 8px; align-items: flex-end; flex: 1;">
                     <input type="hidden" name="token" value="{{ token }}">
+                    {% if docs_sort %}<input type="hidden" name="docs_sort" value="{{ docs_sort }}"><input type="hidden" name="docs_dir" value="{{ docs_dir }}">{% endif %}
                     <div style="flex: 1;">
-                        <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by filename or Doc ID</label>
+                        <label style="font-size: 12px; color: #777; display: block; margin-bottom: 2px;">Search by filename, Doc ID, type, or status</label>
                         <input type="text" name="docs_q" value="{{ docs_q }}" placeholder="e.g. report.pdf or D-42" style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px;">
                     </div>
                     <button type="submit" class="btn btn-primary btn-small" style="height: 34px;">Search</button>
                     {% if docs_q %}
-                    <a href="/?token={{ token }}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
+                    <a href="/?token={{ token }}{% if docs_sort %}&docs_sort={{ docs_sort }}&docs_dir={{ docs_dir }}{% endif %}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
                     {% endif %}
                 </form>
                 <form action="/upload-user-doc" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
@@ -3667,16 +3675,20 @@
                 </form>
             </div>
 
+            {% macro docs_sort_url(col) %}/?token={{ token }}{% if docs_q %}&docs_q={{ docs_q }}{% endif %}&docs_sort={{ col }}&docs_dir={{ 'asc' if docs_sort == col and docs_dir == 'desc' else 'desc' if docs_sort == col and docs_dir == 'asc' else ('desc' if col in ('uploaded_at', 'file_size_bytes') else 'asc') }}{% endmacro %}
+            {% macro docs_sort_arrow(col) %}{% if docs_sort == col %}{{ '▲' if docs_dir == 'asc' else '▼' }}{% else %}<span style="color:#bbb;">⇅</span>{% endif %}{% endmacro %}
+
             {% if docs_list %}
+            <div style="overflow-x:auto;">
             <table style="font-size: 13px;">
                 <thead>
                     <tr>
                         <th>Doc ID</th>
-                        <th>Filename</th>
-                        <th>Type</th>
-                        <th>Size</th>
-                        <th>Uploaded</th>
-                        <th>Status</th>
+                        <th><a href="{{ docs_sort_url('filename') }}" style="color:inherit;text-decoration:none;white-space:nowrap;">Filename {{ docs_sort_arrow('filename') }}</a></th>
+                        <th><a href="{{ docs_sort_url('file_type') }}" style="color:inherit;text-decoration:none;white-space:nowrap;">Type {{ docs_sort_arrow('file_type') }}</a></th>
+                        <th><a href="{{ docs_sort_url('file_size_bytes') }}" style="color:inherit;text-decoration:none;white-space:nowrap;">Size {{ docs_sort_arrow('file_size_bytes') }}</a></th>
+                        <th><a href="{{ docs_sort_url('uploaded_at') }}" style="color:inherit;text-decoration:none;white-space:nowrap;">Uploaded {{ docs_sort_arrow('uploaded_at') }}</a></th>
+                        <th><a href="{{ docs_sort_url('status') }}" style="color:inherit;text-decoration:none;white-space:nowrap;">Status {{ docs_sort_arrow('status') }}</a></th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -3686,8 +3698,8 @@
                         <td><code style="font-size: 11px;">D-{{ doc.id }}</code></td>
                         <td>{{ doc.filename }}</td>
                         <td><code>{{ doc.file_type }}</code></td>
-                        <td>{{ (doc.file_size_bytes / 1024)|round(1) }} KB</td>
-                        <td style="font-size: 12px;">{{ doc.uploaded_at }}</td>
+                        <td style="white-space:nowrap;">{{ (doc.file_size_bytes / 1024)|round(1) }} KB</td>
+                        <td style="font-size: 12px; white-space:nowrap;">{{ doc.uploaded_at[:10] if doc.uploaded_at else '—' }}</td>
                         <td>
                             {% if doc.status == 'deleted' %}
                             <span class="badge badge-disabled">Deleted</span>
@@ -3696,7 +3708,7 @@
                             <span class="badge badge-active">Active</span>
                             {% endif %}
                         </td>
-                        <td>
+                        <td style="white-space:nowrap;">
                             {% if doc.status == 'active' %}
                             <form action="/delete-user-doc/{{ doc.id }}" method="POST" style="display: inline;">
                                 <input type="hidden" name="token" value="{{ token }}">
@@ -3710,15 +3722,17 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
 
+            {% set _doc_sort_params %}{% if docs_sort %}&docs_sort={{ docs_sort }}&docs_dir={{ docs_dir }}{% endif %}{% endset %}
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 13px; color: #777;">
                 <span>{{ docs_total }} documents total — Page {{ docs_page }} of {{ docs_total_pages }}</span>
                 <div style="display: flex; gap: 6px;">
                     {% if docs_page > 1 %}
-                    <a href="/?token={{ token }}&docs_page={{ docs_page - 1 }}{% if docs_q %}&docs_q={{ docs_q }}{% endif %}" class="btn btn-secondary btn-small">Prev</a>
+                    <a href="/?token={{ token }}&docs_page={{ docs_page - 1 }}{% if docs_q %}&docs_q={{ docs_q }}{% endif %}{{ _doc_sort_params }}" class="btn btn-secondary btn-small">Prev</a>
                     {% endif %}
                     {% if docs_page < docs_total_pages %}
-                    <a href="/?token={{ token }}&docs_page={{ docs_page + 1 }}{% if docs_q %}&docs_q={{ docs_q }}{% endif %}" class="btn btn-secondary btn-small">Next</a>
+                    <a href="/?token={{ token }}&docs_page={{ docs_page + 1 }}{% if docs_q %}&docs_q={{ docs_q }}{% endif %}{{ _doc_sort_params }}" class="btn btn-secondary btn-small">Next</a>
                     {% endif %}
                 </div>
             </div>
