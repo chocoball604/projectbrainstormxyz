@@ -4176,28 +4176,28 @@
                             </select>
                         </div>
                     </div>
-                    <p style="font-size: 12px; color: #999; margin-bottom: 8px;">
+                    <p style="font-size: 12px; color: #999; margin-bottom: 8px; white-space: nowrap;">
                         Current: Mark = <code>{{ model_config.get('mark_model', 'not set') }}</code>
-                        {% set mark_s = health_map.get(model_config.get('mark_model',''), '') %}
-                        {% if mark_s == 'pass' %}<span class="badge badge-active" style="font-size:10px;padding:1px 5px;vertical-align:middle;">PASS</span>
-                        {% elif mark_s == 'fail' %}<span class="badge badge-disabled" style="font-size:10px;padding:1px 5px;vertical-align:middle;">FAIL</span>
-                        {% elif mark_s == 'not_connected' %}<span class="badge" style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">NOT CONNECTED</span>
-                        {% elif mark_s %}<span class="badge" style="background:#6b7280;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">UNKNOWN</span>
-                        {% endif %} |
+                        {%- set mark_s = health_map.get(model_config.get('mark_model',''), '') -%}
+                        {%- if mark_s == 'pass' %} <span class="badge badge-active" style="font-size:10px;padding:1px 5px;vertical-align:middle;">PASS</span>
+                        {%- elif mark_s == 'fail' %} <span class="badge badge-disabled" style="font-size:10px;padding:1px 5px;vertical-align:middle;">FAIL</span>
+                        {%- elif mark_s == 'not_connected' %} <span class="badge" style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">NOT CONNECTED</span>
+                        {%- elif mark_s %} <span class="badge" style="background:#6b7280;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">UNKNOWN</span>
+                        {%- endif %} |
                         Lisa = <code>{{ model_config.get('lisa_model', 'not set') }}</code>
-                        {% set lisa_s = health_map.get(model_config.get('lisa_model',''), '') %}
-                        {% if lisa_s == 'pass' %}<span class="badge badge-active" style="font-size:10px;padding:1px 5px;vertical-align:middle;">PASS</span>
-                        {% elif lisa_s == 'fail' %}<span class="badge badge-disabled" style="font-size:10px;padding:1px 5px;vertical-align:middle;">FAIL</span>
-                        {% elif lisa_s == 'not_connected' %}<span class="badge" style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">NOT CONNECTED</span>
-                        {% elif lisa_s %}<span class="badge" style="background:#6b7280;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">UNKNOWN</span>
-                        {% endif %} |
+                        {%- set lisa_s = health_map.get(model_config.get('lisa_model',''), '') -%}
+                        {%- if lisa_s == 'pass' %} <span class="badge badge-active" style="font-size:10px;padding:1px 5px;vertical-align:middle;">PASS</span>
+                        {%- elif lisa_s == 'fail' %} <span class="badge badge-disabled" style="font-size:10px;padding:1px 5px;vertical-align:middle;">FAIL</span>
+                        {%- elif lisa_s == 'not_connected' %} <span class="badge" style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">NOT CONNECTED</span>
+                        {%- elif lisa_s %} <span class="badge" style="background:#6b7280;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">UNKNOWN</span>
+                        {%- endif %} |
                         Ben = <code>{{ model_config.get('ben_model', 'not set') }}</code>
-                        {% set ben_s = health_map.get(model_config.get('ben_model',''), '') %}
-                        {% if ben_s == 'pass' %}<span class="badge badge-active" style="font-size:10px;padding:1px 5px;vertical-align:middle;">PASS</span>
-                        {% elif ben_s == 'fail' %}<span class="badge badge-disabled" style="font-size:10px;padding:1px 5px;vertical-align:middle;">FAIL</span>
-                        {% elif ben_s == 'not_connected' %}<span class="badge" style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">NOT CONNECTED</span>
-                        {% elif ben_s %}<span class="badge" style="background:#6b7280;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">UNKNOWN</span>
-                        {% endif %}
+                        {%- set ben_s = health_map.get(model_config.get('ben_model',''), '') -%}
+                        {%- if ben_s == 'pass' %} <span class="badge badge-active" style="font-size:10px;padding:1px 5px;vertical-align:middle;">PASS</span>
+                        {%- elif ben_s == 'fail' %} <span class="badge badge-disabled" style="font-size:10px;padding:1px 5px;vertical-align:middle;">FAIL</span>
+                        {%- elif ben_s == 'not_connected' %} <span class="badge" style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">NOT CONNECTED</span>
+                        {%- elif ben_s %} <span class="badge" style="background:#6b7280;color:#fff;font-size:10px;padding:1px 5px;vertical-align:middle;">UNKNOWN</span>
+                        {%- endif %}
                     </p>
                     <button type="submit" class="btn btn-success">Save Model Configuration</button>
                 </form>
