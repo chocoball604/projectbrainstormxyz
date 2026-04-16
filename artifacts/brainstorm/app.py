@@ -2224,6 +2224,35 @@ def migrate_db(conn):
     if "target_audience" not in persona_cols:
         conn.execute("ALTER TABLE personas ADD COLUMN target_audience TEXT")
 
+    _unfilled = conn.execute(
+        "SELECT persona_instance_id FROM personas WHERE market_geography IS NULL AND target_audience IS NULL"
+    ).fetchall()
+    if _unfilled:
+        _pid_set = {r["persona_instance_id"] for r in _unfilled}
+        _studies = conn.execute(
+            "SELECT id, study_fit, target_audience, personas_used FROM studies WHERE personas_used IS NOT NULL AND personas_used != '[]'"
+        ).fetchall()
+        _pid_to_study = {}
+        for _st in _studies:
+            _sg = (_st["study_fit"] or "").strip()
+            _sta = (_st["target_audience"] or "").strip()
+            if not _sg and not _sta:
+                continue
+            try:
+                _pids = json.loads(_st["personas_used"]) if isinstance(_st["personas_used"], str) else _st["personas_used"]
+            except (json.JSONDecodeError, TypeError):
+                continue
+            for _pid in (_pids if isinstance(_pids, list) else []):
+                if isinstance(_pid, str) and _pid in _pid_set and _pid not in _pid_to_study:
+                    _pid_to_study[_pid] = (_sg, _sta)
+        for _pid, (_mg, _ta) in _pid_to_study.items():
+            conn.execute(
+                "UPDATE personas SET market_geography = ?, target_audience = ? WHERE persona_instance_id = ?",
+                (_mg or None, _ta or None, _pid),
+            )
+        if _pid_to_study:
+            print(f"PERSONA_DEMO_BACKFILL: updated {len(_pid_to_study)} personas with study demographics", flush=True)
+
     fu_info = conn.execute("PRAGMA table_info(followups)").fetchall()
     fu_cols = [r[1] for r in fu_info]
     if fu_cols and "qa_status" not in fu_cols:
