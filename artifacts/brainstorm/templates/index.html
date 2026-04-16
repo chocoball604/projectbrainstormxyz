@@ -1367,9 +1367,6 @@
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_ta_panel else '#e74c3c' }};">
                         {{ '✓' if has_ta_panel else '✗' }} Target Audience (Demographics / Socio-economics)
                     </li>
-                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_dui_panel else '#999' }};">
-                        {{ '✓' if has_dui_panel else '–' }} Definition of Useful Insight <span style="font-size:11px;color:#999;">(optional)</span>
-                    </li>
                     <li style="padding: 8px 0 4px; border-top: 1px solid #eee; margin-top: 4px; color: {{ '#27ae60' if rc_panel >= 25 else '#e74c3c' }};">
                         {{ '✓' if rc_panel >= 25 else '✗' }} Respondent count{% if rc_panel >= 25 %} ({{ rc_panel }}){% endif %}
                     </li>
@@ -1404,9 +1401,6 @@
                     </li>
                     <li style="padding: 4px 0; color: {{ '#27ae60' if has_ta_panel else '#e74c3c' }};">
                         {{ '✓' if has_ta_panel else '✗' }} Target Audience (Demographics / Socio-economics)
-                    </li>
-                    <li style="padding: 4px 0; color: {{ '#27ae60' if has_dui_panel else '#999' }};">
-                        {{ '✓' if has_dui_panel else '–' }} Definition of Useful Insight <span style="font-size:11px;color:#999;">(optional)</span>
                     </li>
                     <li style="padding: 8px 0 4px; border-top: 1px solid #eee; margin-top: 4px;
                         color: {{ '#27ae60' if personas_complete else '#e67e22' }};">
@@ -1483,8 +1477,7 @@
                         {key: 'has_ds', label: 'Decision to Support', optional: false},
                         {key: 'has_mg', label: 'Market / Geography', optional: false},
                         {key: 'has_pc', label: 'Product / Concept', optional: false},
-                        {key: 'has_ta', label: 'Target Audience (Demographics / Socio-economics)', optional: false},
-                        {key: 'has_dui', label: 'Definition of Useful Insight', optional: true}
+                        {key: 'has_ta', label: 'Target Audience (Demographics / Socio-economics)', optional: false}
                     ];
                     for (var i = 0; i < sFields.length && i < items.length; i++) {
                         var done = pc[sFields[i].key];
@@ -1520,8 +1513,7 @@
                         {key: 'has_ds', label: 'Decision to Support', optional: false},
                         {key: 'has_mg', label: 'Market / Geography', optional: false},
                         {key: 'has_pc', label: 'Product / Concept', optional: false},
-                        {key: 'has_ta', label: 'Target Audience (Demographics / Socio-economics)', optional: false},
-                        {key: 'has_dui', label: 'Definition of Useful Insight', optional: true}
+                        {key: 'has_ta', label: 'Target Audience (Demographics / Socio-economics)', optional: false}
                     ];
                     for (var i = 0; i < fields.length && i < items.length; i++) {
                         var done = pc[fields[i].key];
