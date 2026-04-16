@@ -35,7 +35,7 @@
         html[data-lang="zh-Hant"] body { font-family: "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif; }
         h1,h2,h3,h4,h5 { font-size: var(--font-heading); font-weight: 600; line-height: var(--line-heading); }
         .brand-lockup {
-            display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;
+            display: flex; align-items: center; gap: 10px; color: inherit;
         }
         .brand-lockup img { height: 36px; width: 36px; object-fit: contain; }
         .brand-wordmark { font-size: var(--font-brand); font-weight: 700; white-space: nowrap; letter-spacing: -0.3px; }
@@ -195,25 +195,36 @@
 <body>
 
 <div class="blog-header">
-    <a href="/" class="brand-lockup">
+    <div class="brand-lockup">
         <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
         <span class="brand-wordmark"><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思計劃</span></span>
-    </a>
+    </div>
     <div class="blog-header-right">
+        {% if logged_in %}
+        <a href="/?token={{ token }}">Dashboard</a>
+        <a href="/blog{% if token %}?token={{ token }}{% endif %}">Blog / News</a>
+        {% else %}
         <a href="/">Home</a>
         <a href="/blog">Blog / News</a>
+        {% endif %}
         <select class="lang-selector" aria-label="Language" id="lang-selector">
             <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
             <option value="zh-Hans"{% if lang == 'zh-Hans' %} selected{% endif %}>CN-Simplified简</option>
             <option value="zh-Hant"{% if lang == 'zh-Hant' %} selected{% endif %}>CN-Traditional繁</option>
         </select>
+        {% if not logged_in %}
         <a href="/?show_auth_tab=login">Login</a>
         <a href="/?show_auth_tab=signup" class="btn-header">Sign Up</a>
+        {% endif %}
     </div>
 </div>
 
 <div class="container">
-    <a href="/" class="back-link">&larr; Back to Dashboard</a>
+    {% if logged_in %}
+    <a href="/?token={{ token }}" class="back-link">&larr; Back to Dashboard</a>
+    {% else %}
+    <a href="/" class="back-link">&larr; Back</a>
+    {% endif %}
     <h1 class="page-title">Blog / News</h1>
 
     {% if error %}
@@ -229,7 +240,7 @@
             <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm" class="post-thumbnail" style="object-fit: contain; background: #f5f5f5; padding: 8px;">
             {% endif %}
             <div class="post-content">
-                <h2><a href="/blog/{{ post.id }}">{{ post.title }}</a>{% if post.is_pinned %}<span class="pin-badge">Pinned</span>{% endif %}</h2>
+                <h2><a href="/blog/{{ post.id }}{% if token %}?token={{ token }}{% endif %}">{{ post.title }}</a>{% if post.is_pinned %}<span class="pin-badge">Pinned</span>{% endif %}</h2>
                 <div class="post-date">{{ post.created_at }}</div>
             </div>
         </div>
@@ -237,11 +248,11 @@
 
         <div class="pagination">
             {% if page > 1 %}
-            <a href="/blog?page={{ page - 1 }}">&laquo; Prev</a>
+            <a href="/blog?page={{ page - 1 }}{% if token %}&token={{ token }}{% endif %}">&laquo; Prev</a>
             {% endif %}
             <span class="page-info">Page {{ page }} of {{ total_pages }}</span>
             {% if page < total_pages %}
-            <a href="/blog?page={{ page + 1 }}">Next &raquo;</a>
+            <a href="/blog?page={{ page + 1 }}{% if token %}&token={{ token }}{% endif %}">Next &raquo;</a>
             {% endif %}
         </div>
     {% else %}

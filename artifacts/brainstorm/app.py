@@ -3761,7 +3761,8 @@ def disclaimer_page():
 
 @app.route("/blog")
 def blog_page():
-    token = get_token()  # ADD THIS
+    token = get_token()
+    user, is_admin = get_session_data(token) if token else (None, False)
 
     page = max(1, int(request.args.get("page", "1") or "1"))
     conn = get_db()
@@ -3817,13 +3818,15 @@ def blog_page():
         posts=posts,
         page=page,
         total_pages=total_pages,
-        token=token,  # ADD THIS
+        token=token,
+        logged_in=user is not None or is_admin,
     )
 
 
 @app.route("/blog/<int:post_id>")
 def blog_post(post_id):
-    token = get_token()  # ADD THIS
+    token = get_token()
+    user, is_admin = get_session_data(token) if token else (None, False)
 
     conn = get_db()
     post = conn.execute(
@@ -3838,7 +3841,8 @@ def blog_post(post_id):
                 "blog_list.html",
                 posts=[],
                 error="Post not found.",
-                token=token,  # ADD THIS
+                token=token,
+                logged_in=user is not None or is_admin,
             ),
             404,
         )
@@ -3846,7 +3850,8 @@ def blog_post(post_id):
     return render_template(
         "blog_post.html",
         post=dict(post),
-        token=token,  # ADD THIS
+        token=token,
+        logged_in=user is not None or is_admin,
     )
 
 

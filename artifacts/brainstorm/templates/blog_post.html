@@ -35,7 +35,7 @@
         html[data-lang="zh-Hant"] body { font-family: "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif; }
         h1,h2,h3,h4,h5 { font-size: var(--font-heading); font-weight: 600; line-height: var(--line-heading); }
         .brand-lockup {
-            display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit;
+            display: flex; align-items: center; gap: 10px; color: inherit;
         }
         .brand-lockup img { height: 36px; width: 36px; object-fit: contain; }
         .brand-wordmark { font-size: var(--font-brand); font-weight: 700; white-space: nowrap; letter-spacing: -0.3px; }
@@ -142,25 +142,32 @@
 <body>
 
 <div class="blog-header">
-    <a href="/" class="brand-lockup">
+    <div class="brand-lockup">
         <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
         <span class="brand-wordmark"><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思計劃</span></span>
-    </a>
+    </div>
     <div class="blog-header-right">
+        {% if logged_in %}
+        <a href="/?token={{ token }}">Dashboard</a>
+        <a href="/blog{% if token %}?token={{ token }}{% endif %}">Blog / News</a>
+        {% else %}
         <a href="/">Home</a>
         <a href="/blog">Blog / News</a>
+        {% endif %}
         <select class="lang-selector" aria-label="Language" id="lang-selector">
             <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
             <option value="zh-Hans"{% if lang == 'zh-Hans' %} selected{% endif %}>CN-Simplified简</option>
             <option value="zh-Hant"{% if lang == 'zh-Hant' %} selected{% endif %}>CN-Traditional繁</option>
         </select>
+        {% if not logged_in %}
         <a href="/?show_auth_tab=login">Login</a>
         <a href="/?show_auth_tab=signup" class="btn-header">Sign Up</a>
+        {% endif %}
     </div>
 </div>
 
 <div class="container">
-    <a href="/blog" class="back-link">&larr; Back to Blog Index</a>
+    <a href="/blog{% if token %}?token={{ token }}{% endif %}" class="back-link">&larr; Back to Blog Index</a>
     <article class="post-article">
         <h1>{{ post.title }}</h1>
         <div class="post-date">{{ post.created_at }}</div>

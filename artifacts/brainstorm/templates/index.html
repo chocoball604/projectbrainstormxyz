@@ -234,10 +234,10 @@
 <body>
 
 <div class="header">
-    <a href="{% if token %}/?token={{ token }}{% else %}/{% endif %}" class="brand-lockup">
+    <div class="brand-lockup">
         <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
         <span class="brand-wordmark" id="brand-wordmark"><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思計劃</span></span>
-    </a>
+    </div>
     <div class="header-right">
         {% if is_admin %}
             <a href="#acc-messages" onclick="toggleAdminAcc('acc-messages-body');document.getElementById('acc-messages').scrollIntoView({behavior:'smooth'});return false;" style="position: relative; cursor:pointer;">
@@ -257,7 +257,7 @@
             <a href="/?token={{ token }}">&larr; Dashboard</a>
             <span>|</span>
             {% endif %}
-            <a href="/blog">Blog / News</a>
+            <a href="/blog?token={{ token }}">Blog / News</a>
             <span>|</span>
             <a href="/?token={{ token }}&view=messages" style="position: relative;">
                 &#9993; Messages
