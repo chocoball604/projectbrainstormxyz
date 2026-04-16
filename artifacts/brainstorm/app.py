@@ -2148,6 +2148,14 @@ def init_db():
             (SEED_ALLOWED_MODELS[2],),
         )
     migrate_db(conn)
+    global FREE_TIER_MONTHLY_LIMIT
+    _saved_limit = conn.execute("SELECT value FROM app_settings WHERE key = 'monthly_study_limit'").fetchone()
+    if _saved_limit:
+        try:
+            FREE_TIER_MONTHLY_LIMIT = max(1, int(_saved_limit["value"]))
+            print(f"SETTINGS_LOAD: monthly_study_limit = {FREE_TIER_MONTHLY_LIMIT}", flush=True)
+        except (ValueError, TypeError):
+            pass
     test_row = conn.execute("SELECT id FROM users WHERE email = ?", (TEST_USER_EMAIL,)).fetchone()
     if not test_row:
         from werkzeug.security import generate_password_hash as _gph
@@ -2383,6 +2391,19 @@ def migrate_db(conn):
         )
     if "pinned_rank" not in bp_cols:
         conn.execute("ALTER TABLE blog_posts ADD COLUMN pinned_rank INTEGER")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+    existing = conn.execute("SELECT value FROM app_settings WHERE key = 'monthly_study_limit'").fetchone()
+    if not existing:
+        conn.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('monthly_study_limit', ?)",
+            (str(FREE_TIER_MONTHLY_LIMIT),),
+        )
 
 
 def create_session(user_id=None, is_admin=False):
@@ -4239,6 +4260,14 @@ def admin_update_quota():
         return render_error("Monthly limit must be between 1 and 9999.")
 
     FREE_TIER_MONTHLY_LIMIT = new_limit
+    conn = get_db()
+    conn.execute(
+        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('monthly_study_limit', ?)",
+        (str(new_limit),),
+    )
+    conn.commit()
+    conn.close()
+    print(f"SETTINGS_UPDATE: monthly_study_limit = {new_limit}", flush=True)
     if ajax:
         return jsonify({"ok": True})
     return redirect(url_for("index", token=token))
