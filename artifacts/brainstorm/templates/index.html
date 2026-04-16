@@ -1727,9 +1727,12 @@
                 if (_execMsgIv) { clearInterval(_execMsgIv); _execMsgIv = null; }
             }
 
+            window.addEventListener('pagehide', stopExecProgress);
+
             function autoRunStudy() {
                 if (_executionRunning) return;
                 _executionRunning = true;
+                stopExecProgress();
                 var strip = document.getElementById('exec-control-strip');
                 var sid = strip ? strip.getAttribute('data-study-id') : studyId;
                 if (!sid) { _executionRunning = false; return; }
