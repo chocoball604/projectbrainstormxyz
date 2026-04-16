@@ -4698,8 +4698,12 @@
                 {% if blog_error %}
                 <div style="background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:6px;font-size:13px;font-weight:500;margin-bottom:14px;">{{ blog_error }}</div>
                 {% endif %}
-                <p style="font-size: 13px; color: #777; margin-bottom: 16px;">Create blog posts visible on the public blog page and landing page.</p>
-                <form action="/admin/create-blog-post" method="POST" enctype="multipart/form-data" onsubmit="var e=document.getElementById('blog-editor'),h=document.getElementById('blog-body');if(e&&h){h.value=e.innerHTML;}">
+                <p style="font-size: 13px; color: #777; margin-bottom: 16px;">Create or edit blog posts visible on the public blog page and landing page.</p>
+                <div id="blog-edit-banner" style="display:none;background:#e0f2fe;border:1px solid #7dd3fc;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#0369a1;">
+                    Editing post #<span id="blog-edit-id"></span>: <strong id="blog-edit-title-label"></strong>
+                    <button type="button" onclick="blogCancelEdit()" style="margin-left:12px;padding:3px 10px;font-size:12px;border:1px solid #0369a1;border-radius:4px;background:#fff;color:#0369a1;cursor:pointer;">Cancel Edit</button>
+                </div>
+                <form id="blog-form" action="/admin/create-blog-post" method="POST" enctype="multipart/form-data" onsubmit="var e=document.getElementById('blog-editor'),h=document.getElementById('blog-body');if(e&&h){h.value=e.innerHTML;}">
                     <input type="hidden" name="token" value="{{ token }}">
                     <div class="form-group">
                         <label for="blog-title">Post Title</label>
@@ -4757,7 +4761,7 @@
                             <option value="6"{% if blog_draft.get('blog_pin_rank') == '6' %} selected{% endif %}>6</option>
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary">Create Post</button>
+                    <button type="submit" class="btn btn-primary" id="blog-submit-btn">Create Post</button>
                 </form>
                 {% if all_blog_posts %}
                 <h3 style="margin-top: 24px;">Existing Posts</h3>
@@ -4799,6 +4803,7 @@
                                     <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px;">Pin</button>
                                     {% endif %}
                                 </form>
+                                <button type="button" class="btn" style="padding: 4px 10px; font-size: 12px; background: #2563eb; color: #fff; margin-right: 6px;" onclick="blogStartEdit({{ bp.id }})">Edit</button>
                                 <form action="/admin/delete-blog-post/{{ bp.id }}" method="POST" style="display:inline; margin-left: 6px;" data-confirm="Are you sure? This will permanently delete the post.">
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px; background: #c0392b; color: #fff;">Delete</button>
@@ -5117,6 +5122,51 @@
         var editor = document.getElementById('blog-editor');
         if (editor) editor.focus();
         document.execCommand(cmd, false, val || null);
+    }
+
+    var _blogEditId = null;
+    function blogStartEdit(postId) {
+        fetch('/admin/edit-blog/' + postId + '?token={{ token }}')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) { alert(data.error || 'Failed to load post.'); return; }
+                var p = data.post;
+                _blogEditId = p.id;
+                document.getElementById('blog-form').action = '/admin/update-blog-post/' + p.id;
+                document.getElementById('blog-submit-btn').textContent = 'Update Post';
+                document.getElementById('blog-title').value = p.title;
+                document.getElementById('blog-editor').innerHTML = p.body;
+                document.getElementById('blog-body').value = p.body;
+                document.getElementById('blog-status').value = p.status;
+                var pinCb = document.getElementById('blog-pin-checkbox');
+                var pinRankGroup = document.getElementById('blog-pin-rank-group');
+                if (p.is_pinned) {
+                    pinCb.checked = true;
+                    pinRankGroup.style.display = 'block';
+                    document.getElementById('blog-pin-rank').value = String(p.pinned_rank || 1);
+                } else {
+                    pinCb.checked = false;
+                    pinRankGroup.style.display = 'none';
+                }
+                document.getElementById('blog-edit-id').textContent = p.id;
+                document.getElementById('blog-edit-title-label').textContent = p.title;
+                document.getElementById('blog-edit-banner').style.display = 'block';
+                document.getElementById('blog-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            })
+            .catch(function(err) { alert('Error loading post: ' + err); });
+    }
+
+    function blogCancelEdit() {
+        _blogEditId = null;
+        document.getElementById('blog-form').action = '/admin/create-blog-post';
+        document.getElementById('blog-submit-btn').textContent = 'Create Post';
+        document.getElementById('blog-title').value = '';
+        document.getElementById('blog-editor').innerHTML = '';
+        document.getElementById('blog-body').value = '';
+        document.getElementById('blog-status').value = 'published';
+        document.getElementById('blog-pin-checkbox').checked = false;
+        document.getElementById('blog-pin-rank-group').style.display = 'none';
+        document.getElementById('blog-edit-banner').style.display = 'none';
     }
 </script>
 

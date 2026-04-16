@@ -3952,6 +3952,128 @@ def admin_create_blog_post():
     return redirect(url_for("index", token=token))
 
 
+@app.route("/admin/edit-blog/<int:post_id>", methods=["GET"])
+def admin_get_blog_post(post_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return jsonify({"ok": False, "error": "Admin access required."}), 403
+    conn = get_db()
+    row = conn.execute("SELECT * FROM blog_posts WHERE id = ?", (post_id,)).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"ok": False, "error": "Blog post not found."}), 404
+    return jsonify({
+        "ok": True,
+        "post": {
+            "id": row["id"],
+            "title": row["title"],
+            "body": row["body"],
+            "status": row["status"],
+            "image_path": row["image_path"],
+            "is_pinned": row["is_pinned"],
+            "pinned_rank": row["pinned_rank"],
+        },
+    })
+
+
+@app.route("/admin/update-blog-post/<int:post_id>", methods=["POST"])
+def admin_update_blog_post(post_id):
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    def blog_err(msg):
+        print(f"[update-blog-post] ERROR: {msg}")
+        draft = {
+            "blog_title": request.form.get("blog_title", ""),
+            "blog_body": request.form.get("blog_body", ""),
+            "blog_status": request.form.get("blog_status", "published"),
+            "blog_pin": request.form.get("blog_pin", ""),
+            "blog_pin_rank": request.form.get("blog_pin_rank", "1"),
+        }
+        _pending_blog_errors[token] = (msg, time.time(), draft)
+        return redirect(url_for("index", token=token))
+
+    conn = get_db()
+    existing = conn.execute("SELECT * FROM blog_posts WHERE id = ?", (post_id,)).fetchone()
+    if not existing:
+        conn.close()
+        return render_error("Blog post not found.")
+
+    title = (request.form.get("blog_title") or "").strip()
+    body = (request.form.get("blog_body") or "").strip()
+    status = request.form.get("blog_status", "published").strip()
+    if status not in ("published", "draft"):
+        status = "published"
+
+    if not title or not body:
+        conn.close()
+        return blog_err("Blog post title and body are required.")
+
+    slug = title.lower().replace(" ", "-")
+    slug = "".join(c for c in slug if c.isalnum() or c == "-")[:80]
+
+    image_path = existing["image_path"]
+    image_type = existing["image_type"]
+    image_size_bytes = existing["image_size_bytes"]
+
+    img_file = request.files.get("blog_image")
+    if img_file and img_file.filename:
+        fname = img_file.filename
+        ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+        if ext not in BLOG_IMAGE_ALLOWED:
+            conn.close()
+            return blog_err(f"Blog image must be PNG or JPG. Got: .{ext}")
+        img_data = img_file.read()
+        if len(img_data) > BLOG_IMAGE_MAX_SIZE:
+            conn.close()
+            return blog_err(f"Blog image must be under 2MB. Got: {len(img_data) // 1024}KB")
+        safe_name = f"{int(datetime.utcnow().timestamp())}_{secrets.token_hex(4)}.{ext}"
+        dest = os.path.join(BLOG_STATIC_DIR, safe_name)
+        with open(dest, "wb") as f:
+            f.write(img_data)
+        if existing["image_path"]:
+            old_path = os.path.join(BLOG_STATIC_DIR, existing["image_path"])
+            if os.path.exists(old_path):
+                os.remove(old_path)
+        image_path = safe_name
+        image_type = ext
+        image_size_bytes = len(img_data)
+
+    is_pinned = 1 if request.form.get("blog_pin") else 0
+    pinned_rank = None
+    if is_pinned:
+        rank_val = request.form.get("blog_pin_rank", "").strip()
+        if rank_val not in ("1", "2", "3", "4", "5", "6"):
+            conn.close()
+            return blog_err("Pin position must be 1–6.")
+        pinned_rank = int(rank_val)
+        pin_count = conn.execute(
+            "SELECT COUNT(*) FROM blog_posts WHERE is_pinned = 1 AND id != ?", (post_id,)
+        ).fetchone()[0]
+        if pin_count >= 6:
+            conn.close()
+            return blog_err("You can pin up to 6 posts. Unpin another post first.")
+        existing_rank = conn.execute(
+            "SELECT id FROM blog_posts WHERE is_pinned = 1 AND pinned_rank = ? AND id != ?",
+            (pinned_rank, post_id),
+        ).fetchone()
+        if existing_rank:
+            conn.close()
+            return blog_err("Pin position already in use. Choose another position or unpin the existing one.")
+
+    conn.execute(
+        "UPDATE blog_posts SET title=?, slug=?, body=?, status=?, image_path=?, image_type=?, image_size_bytes=?, is_pinned=?, pinned_rank=? WHERE id=?",
+        (title, slug, body, status, image_path, image_type, image_size_bytes, is_pinned, pinned_rank, post_id),
+    )
+    conn.commit()
+    conn.close()
+    _pending_blog_errors.pop(token, None)
+    return redirect(url_for("index", token=token))
+
+
 @app.route("/admin/toggle-pin/<int:post_id>", methods=["POST"])
 def admin_toggle_pin(post_id):
     token = get_token()
