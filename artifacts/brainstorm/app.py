@@ -2754,6 +2754,8 @@ def index():
     docs_q = ""
     docs_total_pages = 1
     docs_total = 0
+    docs_sort = ""
+    docs_dir = "desc"
     user_storage_used = 0
     user_storage_cap_mb = UPLOAD_USER_STORAGE_CAP // (1024 * 1024)
 
@@ -2866,6 +2868,8 @@ def index():
     studies_q = ""
     studies_total_pages = 1
     studies_total = 0
+    studies_sort = ""
+    studies_dir = "desc"
     personas_page = 1
     personas_q = ""
     personas_total_pages = 1
