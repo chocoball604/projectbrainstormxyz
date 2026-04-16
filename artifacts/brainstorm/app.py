@@ -6465,9 +6465,10 @@ def ben_precheck(study, persona_count, persona_dossiers=None):
                     geo_tokens = [t.strip() for t in mg_lower.replace(",", " ").split() if len(t.strip()) > 3]
                     geo_match = any(tok in p_text for tok in geo_tokens)
                     if not geo_match and geo_tokens:
-                        failures.append(
-                            f"Persona '{p_name}' may not match Market / Geography '{market_geo}'. "
-                            "Review persona dossier for geographic fit."
+                        print(
+                            f"GEO_FIT_WARNING: Persona '{p_name}' may not match "
+                            f"Market / Geography '{market_geo}' (non-blocking).",
+                            flush=True,
                         )
     else:
         failures.append(f"Unknown study type: {st}")
