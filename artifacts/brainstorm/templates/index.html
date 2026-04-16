@@ -1672,6 +1672,61 @@
                 if (oc) oc.style.display = 'none';
             }
 
+            var _execTimerIv = null;
+            var _execMsgIv = null;
+            var _execMessages = [
+                'Lisa is preparing your research framework\u2026',
+                'Activating persona perspectives\u2026',
+                'Analyzing market dynamics and trends\u2026',
+                'Cross-referencing persona insights\u2026',
+                'Evaluating competitive landscape\u2026',
+                'Synthesizing qualitative findings\u2026',
+                'Generating strategic recommendations\u2026',
+                'Compiling and formatting results\u2026',
+                'Running final quality checks\u2026',
+                'Almost there \u2014 polishing the output\u2026'
+            ];
+
+            function startExecProgress(ob) {
+                var startTime = Date.now();
+                var msgIdx = 0;
+                ob.innerHTML = '<div style="text-align:center;padding:24px;">'
+                    + '<div style="display:inline-block;width:28px;height:28px;border:3px solid #5C7E8F;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px;"></div>'
+                    + '<p id="exec-progress-msg" style="font-size:14px;color:#004085;font-weight:600;margin:0 0 6px;transition:opacity 0.3s ease;">' + _execMessages[0] + '</p>'
+                    + '<p id="exec-progress-timer" style="font-size:13px;color:#555;margin:0 0 8px;font-variant-numeric:tabular-nums;">0:00 elapsed / ~5 min</p>'
+                    + '<p style="font-size:11px;color:#999;margin:0;">Beta: execution may take up to 5 minutes. Please do not close this page.</p>'
+                    + '</div>';
+
+                if (_execTimerIv) clearInterval(_execTimerIv);
+                if (_execMsgIv) clearInterval(_execMsgIv);
+
+                _execTimerIv = setInterval(function() {
+                    var el = document.getElementById('exec-progress-timer');
+                    if (!el) return;
+                    var elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    var m = Math.floor(elapsed / 60);
+                    var s = elapsed % 60;
+                    el.textContent = m + ':' + (s < 10 ? '0' : '') + s + ' elapsed / ~5 min';
+                }, 1000);
+
+                _execMsgIv = setInterval(function() {
+                    msgIdx = (msgIdx + 1) % _execMessages.length;
+                    var el = document.getElementById('exec-progress-msg');
+                    if (el) {
+                        el.style.opacity = '0';
+                        setTimeout(function() {
+                            el.textContent = _execMessages[msgIdx];
+                            el.style.opacity = '1';
+                        }, 300);
+                    }
+                }, 15000);
+            }
+
+            function stopExecProgress() {
+                if (_execTimerIv) { clearInterval(_execTimerIv); _execTimerIv = null; }
+                if (_execMsgIv) { clearInterval(_execMsgIv); _execMsgIv = null; }
+            }
+
             function autoRunStudy() {
                 if (_executionRunning) return;
                 _executionRunning = true;
@@ -1683,19 +1738,14 @@
                 var oc = document.getElementById('exec-output-container');
                 var ob = document.getElementById('exec-output-body');
                 if (oc) oc.style.display = '';
-                if (ob) {
-                    ob.innerHTML = '<div style="text-align:center;padding:24px;">'
-                        + '<div style="display:inline-block;width:28px;height:28px;border:3px solid #5C7E8F;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px;"></div>'
-                        + '<p style="font-size:14px;color:#004085;font-weight:600;margin:0 0 4px;">Executing study\u2026</p>'
-                        + '<p style="font-size:12px;color:#666;margin:0;">Lisa is generating your research output. This may take a few minutes.</p>'
-                        + '</div>';
-                }
+                if (ob) startExecProgress(ob);
 
                 var _resolved = false;
                 var _fetchDone = false;
                 function finishSuccess() {
                     if (_resolved) return;
                     _resolved = true;
+                    stopExecProgress();
                     window.location.href = '/?token=' + encodeURIComponent(token) + '&view_output=' + sid;
                 }
 
@@ -1708,6 +1758,7 @@
                                 finishSuccess();
                             } else if (d.status === 'draft' && _fetchDone) {
                                 clearInterval(pollIv);
+                                stopExecProgress();
                                 renderExecError(ob, sid, 'Study execution failed. The study has been reset to draft.');
                             }
                         })
@@ -1739,6 +1790,7 @@
                         finishSuccess();
                     } else if (!_resolved) {
                         clearInterval(pollIv);
+                        stopExecProgress();
                         renderExecError(ob, sid, (data && data.error) || 'Execution failed.');
                     }
                 })
@@ -1752,26 +1804,15 @@
                                 clearInterval(pollIv);
                                 finishSuccess();
                             } else if (d.status === 'running') {
-                                if (ob) {
-                                    ob.innerHTML = '<div style="text-align:center;padding:24px;">'
-                                        + '<div style="display:inline-block;width:28px;height:28px;border:3px solid #5C7E8F;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px;"></div>'
-                                        + '<p style="font-size:14px;color:#004085;font-weight:600;margin:0 0 4px;">Study still running\u2026</p>'
-                                        + '<p style="font-size:12px;color:#666;margin:0;">Lisa is generating personas and research output. This may take several minutes for complex studies.</p>'
-                                        + '</div>';
-                                }
+                                /* keep progress indicator running — already showing */
                             } else {
                                 clearInterval(pollIv);
+                                stopExecProgress();
                                 renderExecError(ob, sid, 'Network error during execution. Please reload the page and check your study status.');
                             }
                         })
                         .catch(function() {
-                            if (ob) {
-                                ob.innerHTML = '<div style="text-align:center;padding:24px;">'
-                                    + '<div style="display:inline-block;width:28px;height:28px;border:3px solid #5C7E8F;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px;"></div>'
-                                    + '<p style="font-size:14px;color:#004085;font-weight:600;margin:0 0 4px;">Connection interrupted</p>'
-                                    + '<p style="font-size:12px;color:#666;margin:0;">The study may still be running. Polling will continue\u2026</p>'
-                                    + '</div>';
-                            }
+                            /* keep progress indicator running — connection will retry via poll */
                         });
                 });
             }
