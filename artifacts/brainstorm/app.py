@@ -9652,6 +9652,8 @@ def api_persona_detail(instance_id):
             "content_lang_name": LANG_CODE_TO_NAME.get(content_lang, content_lang),
             "translated_fields": translated_fields,
             "translated_name": translated_name,
+            "market_geography": p.get("market_geography") or "",
+            "target_audience": p.get("target_audience") or "",
         },
     })
 

@@ -3415,6 +3415,16 @@
                         html += '<button type="button" class="btn btn-secondary btn-small" id="persona-detail-close">Close</button>';
                         html += '</div>';
                         html += '<p style="font-size:13px;color:#999;margin-bottom:16px;">Persona ID: <code>' + escHtml(p.persona_instance_id) + '</code> | Created: ' + escHtml(p.created_at) + '</p>';
+                        if (p.market_geography || p.target_audience) {
+                            html += '<div style="margin-bottom:16px;padding:12px 14px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;color:#555;">';
+                            if (p.market_geography) {
+                                html += '<div style="margin-bottom:6px;"><strong style="color:#1a1a2e;">Market / Geography:</strong> ' + escHtml(p.market_geography) + '</div>';
+                            }
+                            if (p.target_audience) {
+                                html += '<div><strong style="color:#1a1a2e;">Target Audience:</strong> ' + escHtml(p.target_audience) + '</div>';
+                            }
+                            html += '</div>';
+                        }
                         if (p.needs_translation) {
                             html += '<div id="persona-translate-status-inline" style="margin-bottom:12px;padding:8px 12px;background:#f0f4ff;border:1px solid #d0d8e8;border-radius:6px;">';
                             html += '<span style="font-size:13px;color:#555;">Content language: <strong>' + escHtml(clName) + '</strong></span>';
