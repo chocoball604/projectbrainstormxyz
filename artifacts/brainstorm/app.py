@@ -3082,6 +3082,8 @@ def index():
         if _p_sort_dir not in ("asc", "desc"):
             _p_sort_dir = "desc"
         _p_order_map = {
+            "persona_instance_id": "persona_instance_id",
+            "name": "name",
             "market_geography": "COALESCE(market_geography,'')",
             "target_audience": "COALESCE(target_audience,'')",
             "created_at": "created_at",
@@ -9634,6 +9636,8 @@ def api_personas_list():
     if _sort_dir not in ("asc", "desc"):
         _sort_dir = "desc"
     _order_map = {
+        "persona_instance_id": "persona_instance_id",
+        "name": "name",
         "market_geography": "COALESCE(market_geography,'')",
         "target_audience": "COALESCE(target_audience,'')",
         "created_at": "created_at",
