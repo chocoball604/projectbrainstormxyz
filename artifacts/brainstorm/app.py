@@ -5030,10 +5030,8 @@ def save_discovery(study_id):
         if _is_ajax(request):
             return jsonify({"ok": False, "error": "Invalid discovery field."}), 400
         return render_error("Invalid discovery field.")
-    if mode == "checkpoint" and not value:
-        if _is_ajax(request):
-            return jsonify({"ok": False, "error": "Value cannot be empty."}), 400
-        return render_error("Value cannot be empty.")
+    # Both autosave and checkpoint may write empty values — fields are always editable
+    # and the user may legitimately clear a draft before redrafting.
     if len(value) > 2000:
         if _is_ajax(request):
             return jsonify({"ok": False, "error": "Value must be 2000 characters or fewer."}), 400
