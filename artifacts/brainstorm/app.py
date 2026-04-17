@@ -29,6 +29,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
+import step1_pattern_library
 from step1_pattern_library import (
     load_library as load_step1_library,
     save_library as save_step1_library,
@@ -1849,11 +1850,13 @@ def compute_step1_weakness(value):
     if len(text) < 25:
         return True, "too_short"
     low = text.lower()
-    for kw in STEP1_SOLUTION_KEYWORDS:
-        if kw in low:
+    triggers = step1_pattern_library.solution_bias_triggers() or STEP1_SOLUTION_KEYWORDS
+    for kw in triggers:
+        if kw and kw.lower() in low:
             return True, "solution_bias"
-    for marker in STEP1_UNCERTAINTY_MARKERS:
-        if marker in low:
+    markers = step1_pattern_library.uncertainty_markers() or STEP1_UNCERTAINTY_MARKERS
+    for marker in markers:
+        if marker and marker.lower() in low:
             return False, "ok"
     return True, "missing_uncertainty"
 

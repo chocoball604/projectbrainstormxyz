@@ -87,6 +87,17 @@ _FALLBACK_LIBRARY = {
         "feature", "tactic", "pricing", "launch", "campaign", "roadmap",
         "intervention", "go-to-market",
     ],
+    "uncertainty_markers": [
+        "don't know", "do not know", "don't yet", "do not yet",
+        "unsure", "uncertain", "unclear",
+        "not sure", "haven't yet", "have not yet",
+        "don't understand", "do not understand", "don't yet understand",
+        "we are uncertain", "it is unclear", "it's unclear",
+    ],
+    "bias_fail_keywords": [
+        "feature", "tactic", "pricing", "launch", "campaign", "roadmap",
+        "intervention", "go-to-market",
+    ],
 }
 
 
@@ -108,6 +119,9 @@ def validate_library(data):
     fails = data.get("bias_fail_keywords")
     if not _is_str_list(fails, min_len=1):
         return False, "'bias_fail_keywords' must be a non-empty list of strings"
+    if "uncertainty_markers" in data:
+        if not _is_str_list(data["uncertainty_markers"], min_len=1):
+            return False, "'uncertainty_markers' must be a non-empty list of strings"
 
     all_pattern_ids = set()
     all_template_ids = set()
@@ -320,9 +334,35 @@ def match_template_id(rewrite_text, applies_to):
     return best
 
 
+def library_is_fallback():
+    """True when the in-code fallback library is in effect (file missing
+    or invalid). Callers should prefer their own hard-coded defaults over
+    fallback-library values in that case."""
+    return load_library() is _FALLBACK_LIBRARY
+
+
 def solution_bias_triggers():
-    """Return the current bias-trigger list (loader-cached)."""
+    """Return the current bias-trigger list (loader-cached).
+
+    Returns an empty list when the file-backed library is missing or
+    invalid so callers can fall back to their own defaults rather than
+    the in-code fallback library values.
+    """
+    if library_is_fallback():
+        return []
     return list(load_library().get("solution_bias_triggers") or [])
+
+
+def uncertainty_markers():
+    """Return the current uncertainty-marker list (loader-cached).
+
+    Optional in the library; returns an empty list when missing, empty,
+    or when the loader is using the in-code fallback library so callers
+    can fall back to their own defaults.
+    """
+    if library_is_fallback():
+        return []
+    return list(load_library().get("uncertainty_markers") or [])
 
 
 def bias_fail_keywords():

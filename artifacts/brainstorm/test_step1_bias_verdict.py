@@ -1,6 +1,60 @@
 import sys
 import os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mark_reply_worker import enforce_step1_format, classify_bias_verdict
+import step1_pattern_library
+import app as brainstorm_app
+
+print("=== compute_step1_weakness reads triggers from library ===")
+draft = ("We don't yet understand whether our zorblax metric reflects "
+         "real demand or just measurement noise.")
+weak, reason = brainstorm_app.compute_step1_weakness(draft)
+print(f"baseline (no zorblax in triggers): weak={weak} reason={reason} (expected weak=False reason=ok)")
+assert weak is False and reason == "ok", (weak, reason)
+
+_orig_load = step1_pattern_library.load_library
+try:
+    custom = {"solution_bias_triggers": ["zorblax"], "uncertainty_markers": []}
+    step1_pattern_library.load_library = lambda: custom
+    weak2, reason2 = brainstorm_app.compute_step1_weakness(draft)
+    print(f"after editing library to add 'zorblax': weak={weak2} reason={reason2} (expected weak=True reason=solution_bias)")
+    assert weak2 is True and reason2 == "solution_bias", (weak2, reason2)
+
+    custom2 = {"solution_bias_triggers": ["nothingmatchesthis"],
+               "uncertainty_markers": ["zorblax"]}
+    step1_pattern_library.load_library = lambda: custom2
+    plain = "Our team will launch a new pricing tier and roadmap update next quarter."
+    weak3, reason3 = brainstorm_app.compute_step1_weakness(plain)
+    print(f"with library overriding triggers/markers: weak={weak3} reason={reason3} (expected weak=True reason=missing_uncertainty)")
+    assert weak3 is True and reason3 == "missing_uncertainty", (weak3, reason3)
+    step1_pattern_library.load_library = lambda: step1_pattern_library._FALLBACK_LIBRARY
+    plain_solution = "We will launch a new pricing campaign next quarter for sure."
+    weak4, reason4 = brainstorm_app.compute_step1_weakness(plain_solution)
+    print(f"missing/invalid library -> uses in-code constants: weak={weak4} reason={reason4} (expected weak=True reason=solution_bias)")
+    assert weak4 is True and reason4 == "solution_bias", (weak4, reason4)
+
+    uncertain_text = "We don't know whether xyzzy demand is real or just measurement noise yet."
+    weak5, reason5 = brainstorm_app.compute_step1_weakness(uncertain_text)
+    print(f"missing/invalid library -> uncertainty constants: weak={weak5} reason={reason5} (expected weak=False reason=ok)")
+    assert weak5 is False and reason5 == "ok", (weak5, reason5)
+finally:
+    step1_pattern_library.load_library = _orig_load
+
+print("=== validate_library rejects empty solution_bias_triggers ===")
+import copy
+base = copy.deepcopy(step1_pattern_library._FALLBACK_LIBRARY)
+base["version"] = 1
+base["solution_bias_triggers"] = []
+ok, err = step1_pattern_library.validate_library(base)
+print(f"empty triggers: ok={ok} err={err}")
+assert not ok and "solution_bias_triggers" in err
+
+base2 = copy.deepcopy(step1_pattern_library._FALLBACK_LIBRARY)
+base2["version"] = 1
+base2["uncertainty_markers"] = []
+ok, err = step1_pattern_library.validate_library(base2)
+print(f"empty uncertainty_markers: ok={ok} err={err}")
+assert not ok and "uncertainty_markers" in err
+print()
 
 print("=== classify_bias_verdict ===")
 samples = [
