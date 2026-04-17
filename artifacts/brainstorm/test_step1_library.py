@@ -92,6 +92,20 @@ class ValidateLibraryTests(unittest.TestCase):
         ok, err = lib.validate_library(bad)
         self.assertFalse(ok)
 
+    def test_global_template_id_uniqueness_across_fields(self):
+        bad = json.loads(json.dumps(self.seed))
+        bad["decision_to_support"]["templates"][0]["id"] = "BP_1_RATE_AND_DRIVER"
+        ok, err = lib.validate_library(bad)
+        self.assertFalse(ok)
+        self.assertIn("BP_1_RATE_AND_DRIVER", err)
+
+    def test_bias_fail_keywords_required(self):
+        bad = json.loads(json.dumps(self.seed))
+        bad["bias_fail_keywords"] = []
+        ok, err = lib.validate_library(bad)
+        self.assertFalse(ok)
+        self.assertIn("bias_fail_keywords", err)
+
     def test_solution_bias_triggers_required(self):
         bad = json.loads(json.dumps(self.seed))
         bad["solution_bias_triggers"] = []
@@ -129,6 +143,15 @@ class HelperTests(unittest.TestCase):
         triggers = lib.solution_bias_triggers()
         self.assertIsInstance(triggers, list)
         self.assertIn("feature", triggers)
+
+    def test_bias_fail_keywords_helper_drives_worker(self):
+        kws = lib.bias_fail_keywords()
+        self.assertIsInstance(kws, list)
+        for required in ("feature", "go to market", "names a solution"):
+            self.assertIn(required, kws)
+        import mark_reply_worker as worker
+        worker_kws = worker._BIAS_FAIL_KEYWORDS()
+        self.assertEqual(tuple(kws), tuple(worker_kws))
 
 
 class TelemetryWriterTests(unittest.TestCase):

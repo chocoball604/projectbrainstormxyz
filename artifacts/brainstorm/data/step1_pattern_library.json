@@ -181,5 +181,14 @@
   "solution_bias_triggers": [
     "feature", "tactic", "tactical", "pricing", "launch", "campaign",
     "roadmap", "intervention", "go-to-market"
+  ],
+  "bias_fail_keywords": [
+    "feature", "tactic", "tactical", "pricing", "launch", "campaign",
+    "roadmap", "intervention", "go-to-market", "go to market",
+    "implies an intervention", "implies a solution",
+    "sneaks in", "sneaks-in",
+    "solution-leaning", "solution leaning",
+    "biased toward", "biased towards",
+    "prescribes", "names a solution"
   ]
 }

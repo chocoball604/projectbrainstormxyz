@@ -146,28 +146,23 @@ _BIAS_PASS_PHRASES = (
     "no major issues",
 )
 
-_BIAS_FAIL_KEYWORDS = (
-    "feature",
-    "tactic",
-    "tactical",
-    "pricing",
-    "launch",
-    "campaign",
-    "roadmap",
-    "intervention",
-    "go-to-market",
-    "go to market",
-    "implies an intervention",
-    "implies a solution",
-    "sneaks in",
-    "sneaks-in",
-    "solution-leaning",
-    "solution leaning",
-    "biased toward",
-    "biased towards",
-    "prescribes",
-    "names a solution",
-)
+try:
+    from step1_pattern_library import bias_fail_keywords as _bias_fail_keywords_loader
+except Exception:  # pragma: no cover - defensive
+    _bias_fail_keywords_loader = lambda: []
+
+
+def _BIAS_FAIL_KEYWORDS():
+    """Single source of truth: load from step1_pattern_library JSON.
+    Returns a tuple of fail keywords; falls back to a minimal set if the
+    library cannot be loaded."""
+    kws = _bias_fail_keywords_loader()
+    if kws:
+        return tuple(kws)
+    return (
+        "feature", "tactic", "tactical", "pricing", "launch", "campaign",
+        "roadmap", "intervention", "go-to-market", "go to market",
+    )
 
 
 def classify_bias_verdict(bias_line, any_weak):
@@ -189,7 +184,7 @@ def classify_bias_verdict(bias_line, any_weak):
                        "lacking ", "free of ", "absent ", "no concrete",
                        "no explicit", "no specific", "no named")
     has_fail = False
-    for kw in _BIAS_FAIL_KEYWORDS:
+    for kw in _BIAS_FAIL_KEYWORDS():
         start = 0
         while True:
             idx = body.find(kw, start)

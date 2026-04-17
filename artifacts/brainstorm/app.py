@@ -7995,26 +7995,28 @@ def send_chat(study_id):
         raw_message = message_text or ""
         first_line = raw_message.lstrip().split("\n", 1)[0].strip().upper()
         if first_line.startswith("ACTION:REWRITE_PROBLEM"):
-            step1_action = "REWRITE_PROBLEM"
-            step1_action_field = "business_problem"
+            step1_action = "rewrite_problem"
         elif first_line.startswith("ACTION:REWRITE_DECISION"):
-            step1_action = "REWRITE_DECISION"
-            step1_action_field = "decision_to_support"
+            step1_action = "rewrite_decision"
         elif first_line.startswith("ACTION:BIAS_CHECK"):
-            step1_action = "BIAS_CHECK"
-            step1_action_field = None
+            step1_action = "bias_check"
         else:
-            step1_action = "FULL"
-            step1_action_field = None
+            step1_action = "full"
 
-        if step1_action != "FULL":
+        _STEP1_QA_CANONICAL = {
+            "rewrite_problem": ("REWRITE_PROBLEM", "business_problem"),
+            "rewrite_decision": ("REWRITE_DECISION", "decision_to_support"),
+            "bias_check": ("BIAS_CHECK", None),
+        }
+        if step1_action != "full":
+            qa_name, qa_field = _STEP1_QA_CANONICAL[step1_action]
             record_step1_event(
                 "quick_action_used",
                 study_id=study_id,
                 user_id=user["id"],
                 session_id=step1_session_id,
-                field=step1_action_field,
-                quick_action=step1_action,
+                field=qa_field,
+                quick_action=qa_name,
             )
         if bp_weak:
             record_step1_event(

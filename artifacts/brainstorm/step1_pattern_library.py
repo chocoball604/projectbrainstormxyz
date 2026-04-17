@@ -105,8 +105,12 @@ def validate_library(data):
     triggers = data.get("solution_bias_triggers")
     if not _is_str_list(triggers, min_len=1):
         return False, "'solution_bias_triggers' must be a non-empty list of strings"
+    fails = data.get("bias_fail_keywords")
+    if not _is_str_list(fails, min_len=1):
+        return False, "'bias_fail_keywords' must be a non-empty list of strings"
 
     all_pattern_ids = set()
+    all_template_ids = set()
     for fld in _FIELDS:
         if fld not in data or not isinstance(data[fld], dict):
             return False, f"missing field block '{fld}'"
@@ -124,7 +128,10 @@ def validate_library(data):
                     return False, f"{fld}.templates entry missing string '{k}'"
             if tpl["id"] in tpl_ids:
                 return False, f"{fld}.templates duplicate id '{tpl['id']}'"
+            if tpl["id"] in all_template_ids:
+                return False, f"duplicate template id '{tpl['id']}' across library"
             tpl_ids.add(tpl["id"])
+            all_template_ids.add(tpl["id"])
             if "match_signature" in tpl and not isinstance(tpl["match_signature"], list):
                 return False, f"{fld}.templates['{tpl['id']}'].match_signature must be a list"
 
@@ -316,3 +323,10 @@ def match_template_id(rewrite_text, applies_to):
 def solution_bias_triggers():
     """Return the current bias-trigger list (loader-cached)."""
     return list(load_library().get("solution_bias_triggers") or [])
+
+
+def bias_fail_keywords():
+    """Return the canonical bias-fail keyword list used by the
+    Mark-reply worker to classify the `Bias check:` line as fail.
+    Single source of truth across prompt + worker."""
+    return list(load_library().get("bias_fail_keywords") or [])
