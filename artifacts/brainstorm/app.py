@@ -7960,14 +7960,21 @@ def send_chat(study_id):
         next_step_value = "Revise again" if any_weak else "Save checkpoint"
 
         if step1_action == "rewrite_problem":
+            tip_when_weak = bp_weak
+        elif step1_action == "rewrite_decision":
+            tip_when_weak = ds_weak
+        else:
+            tip_when_weak = any_weak
+
+        if step1_action == "rewrite_problem":
             format_block = (
                 "RESPONSE FORMAT (MANDATORY -- intent: REWRITE_PROBLEM only):\n"
                 "Output EXACTLY these lines, nothing before or after:\n"
-                "Rewrite (Problem): <one sentence rewrite of the Business Problem, "
-                "framed as an uncertainty>\n"
+                "Rewrite (Problem): <one sentence, two-part rewrite per the BP "
+                "templates above>\n"
                 + (
                     f"Tip: {chosen_tip}\n"
-                    if any_weak
+                    if tip_when_weak
                     else ""
                 )
                 + "\nFORBIDDEN in this mode: any 'Rewrite (Decision)' line, any "
@@ -7977,8 +7984,8 @@ def send_chat(study_id):
                 "the rewrite, produce a best-effort rewrite from the user's "
                 "current draft anyway.\n"
                 + (
-                    "If neither field is weak, omit the Tip line entirely.\n"
-                    if not any_weak
+                    "Because bp_weak is false, OMIT the Tip line entirely.\n"
+                    if not tip_when_weak
                     else "Use the Tip line text VERBATIM as given above.\n"
                 )
             )
@@ -7986,11 +7993,11 @@ def send_chat(study_id):
             format_block = (
                 "RESPONSE FORMAT (MANDATORY -- intent: REWRITE_DECISION only):\n"
                 "Output EXACTLY these lines, nothing before or after:\n"
-                "Rewrite (Decision): <one sentence rewrite of the Decision, "
-                "framed as the decision blocked by the uncertainty>\n"
+                "Rewrite (Decision): <one sentence rewrite per the DS templates "
+                "above>\n"
                 + (
                     f"Tip: {chosen_tip}\n"
-                    if any_weak
+                    if tip_when_weak
                     else ""
                 )
                 + "\nFORBIDDEN in this mode: any 'Rewrite (Problem)' line, any "
@@ -8000,8 +8007,8 @@ def send_chat(study_id):
                 "the rewrite, produce a best-effort rewrite from the user's "
                 "current draft anyway.\n"
                 + (
-                    "If neither field is weak, omit the Tip line entirely.\n"
-                    if not any_weak
+                    "Because ds_weak is false, OMIT the Tip line entirely.\n"
+                    if not tip_when_weak
                     else "Use the Tip line text VERBATIM as given above.\n"
                 )
             )
@@ -8009,13 +8016,11 @@ def send_chat(study_id):
             format_block = (
                 "RESPONSE FORMAT (MANDATORY -- intent: BIAS_CHECK only):\n"
                 "Output EXACTLY these lines, nothing before or after:\n"
-                "Bias check: <one line: does the current draft sneak in a "
-                "feature/tactic/pricing/launch decision? If so, name it. If "
-                "not, say so plainly.>\n"
+                "Bias check: <one line per the bias-check rule above>\n"
                 f"Next step: {next_step_value}\n"
                 + (
                     f"Tip: {chosen_tip}\n"
-                    if any_weak
+                    if tip_when_weak
                     else ""
                 )
                 + "\nFORBIDDEN in this mode: any 'Rewrite (Problem)' or "
@@ -8025,8 +8030,8 @@ def send_chat(study_id):
                 f"The 'Next step:' line MUST read exactly \"{next_step_value}\" "
                 "for this turn -- do not change it.\n"
                 + (
-                    "If neither field is weak, omit the Tip line entirely.\n"
-                    if not any_weak
+                    "Because neither field is weak, OMIT the Tip line entirely.\n"
+                    if not tip_when_weak
                     else "Use the Tip line text VERBATIM as given above.\n"
                 )
             )
@@ -8035,17 +8040,15 @@ def send_chat(study_id):
                 "RESPONSE FORMAT (MANDATORY -- free-form Step 1 reply):\n"
                 "Output EXACTLY these four lines, in this order, nothing "
                 "before or after:\n"
-                "Rewrite (Problem): <one sentence rewrite of the Business "
-                "Problem framed as an uncertainty>\n"
-                "Rewrite (Decision): <one sentence rewrite of the Decision "
-                "framed as the decision blocked by that uncertainty>\n"
-                "Bias check: <one line: does the current draft sneak in a "
-                "feature/tactic/pricing/launch decision? If so, name it. If "
-                "not, say so plainly.>\n"
+                "Rewrite (Problem): <one sentence, two-part rewrite per the BP "
+                "templates above>\n"
+                "Rewrite (Decision): <one sentence rewrite per the DS templates "
+                "above>\n"
+                "Bias check: <one line per the bias-check rule above>\n"
                 f"Next step: {next_step_value}\n"
                 + (
                     f"Tip: {chosen_tip}\n"
-                    if any_weak
+                    if tip_when_weak
                     else ""
                 )
                 + "\nFORBIDDEN: '(no change)', 'N/A', or any placeholder line. "
@@ -8054,8 +8057,8 @@ def send_chat(study_id):
                 f"The 'Next step:' line MUST read exactly \"{next_step_value}\" "
                 "for this turn -- do not change it.\n"
                 + (
-                    "If neither field is weak, omit the Tip line entirely.\n"
-                    if not any_weak
+                    "Because neither field is weak, OMIT the Tip line entirely.\n"
+                    if not tip_when_weak
                     else "Use the Tip line text VERBATIM as given above.\n"
                 )
             )
@@ -8066,30 +8069,94 @@ def send_chat(study_id):
             flush=True,
         )
 
+        action_tag_display = {
+            "rewrite_problem": "ACTION:REWRITE_PROBLEM",
+            "rewrite_decision": "ACTION:REWRITE_DECISION",
+            "bias_check": "ACTION:BIAS_CHECK",
+            "full": "(none)",
+        }[step1_action]
+
         system_prompt = (
-            "You are Mark, the Market Intelligence Copilot for Project Brainstorm, "
-            "operating in STEP 1 framing mode (no study type chosen yet).\n\n"
-            "Your only job here is to help the user tighten their Business Problem and Decision "
-            "so they describe an UNCERTAINTY blocking a real DECISION -- not a plan, feature, "
-            "tactic, or solution.\n\n"
-            "CURRENT STEP 1 FIELD STATE (verbatim):\n"
-            f"Business Problem (current draft): \"{bp_display}\"\n"
-            f"Decision to Support (current draft): \"{ds_display}\"\n"
-            f"Weakness flags: business_problem_weak={'true' if bp_weak else 'false'} "
-            f"({bp_reason}); decision_weak={'true' if ds_weak else 'false'} ({ds_reason})\n\n"
+            "SYSTEM: Mark -- Step 1 Problem Framing Mode (V1A)\n\n"
+            "You are Mark, operating in Step 1 Problem Framing Mode only.\n\n"
+            "YOUR JOB (Step 1 only):\n"
+            "Help the user write two fields in disciplined discovery framing:\n"
+            "- Business Problem = an UNCERTAINTY (not a plan, tactic, or solution).\n"
+            "- Decision to Support = a CHOICE blocked by uncertainty (not an "
+            "execution decision).\n"
+            "Be concise, specific, and non-tactical.\n\n"
+            "INPUTS FOR THIS TURN:\n"
+            f"- bp_draft (prefer over saved): \"{bp_display}\"\n"
+            f"- bp_saved: \"{bp_display}\"\n"
+            f"- ds_draft: \"{ds_display}\"\n"
+            f"- ds_saved: \"{ds_display}\"\n"
+            f"- bp_weak: {'true' if bp_weak else 'false'} ({bp_reason})\n"
+            f"- ds_weak: {'true' if ds_weak else 'false'} ({ds_reason})\n"
+            f"- action_tag: {action_tag_display}\n"
+            f"- tip_text (use VERBATIM if a Tip line is required): \"{chosen_tip}\"\n"
+            "Always prefer draft over saved. Saved is not final.\n\n"
+            "HARD GUARDRAILS (non-negotiable):\n"
+            "- Do NOT suggest pricing, launch plans, features, campaigns, "
+            "roadmaps, or tactics.\n"
+            "- Do NOT prescribe or recommend a study type until BOTH fields "
+            "are adequate (bp_weak=false AND ds_weak=false).\n"
+            "- Do NOT say \"this field is already saved\" or block rewrites "
+            "due to saved state.\n"
+            "- Do NOT ask multiple questions.\n"
+            "- Do NOT output any anchor update block (never output "
+            "\"Proposed updates:\" or anything similar).\n"
+            "- NEVER print \"(no change)\" or \"N/A\". If you cannot improve "
+            "something, still produce a best-effort rewrite.\n\n"
+            "QUALITY CONSTRAINTS -- BUSINESS PROBLEM REWRITE:\n"
+            "Your rewrite must be ONE sentence and must be specific. It must "
+            "include TWO parts:\n"
+            "  1) what is changing or what is observed (rate, trigger, pattern, "
+            "threshold, segment, context)\n"
+            "  2) what is unknown about why / when / under what conditions it "
+            "changes\n"
+            "Avoid vague filler such as \"which factors\" unless you name at "
+            "least one category (e.g., seasonality, environment, constraints, "
+            "trust, workflow, privacy, cost).\n"
+            "Prefer one of these templates (choose the best fit):\n"
+            "- BP-1 (rate + driver): \"We don't yet understand how "
+            "fast/where/when [phenomenon] is changing or what is driving that "
+            "change.\"\n"
+            "- BP-2 (trigger + conditions): \"We don't yet understand what "
+            "triggers [phenomenon] and under what conditions it accelerates "
+            "or slows.\"\n"
+            "- BP-3 (A vs B interpretation): \"It's unclear whether [observed "
+            "signal] reflects [meaning/cause A] or [meaning/cause B].\"\n"
+            "When the user asks \"what can we do,\" convert it into an "
+            "uncertainty about the mechanism or drivers, not an intervention.\n\n"
+            "QUALITY CONSTRAINTS -- DECISION REWRITE:\n"
+            "Your rewrite must be ONE sentence and must be a discovery-stage "
+            "decision frame. Use one of these templates:\n"
+            "- DS-1 (invest vs pause): \"Whether to invest in deeper "
+            "exploration of this opportunity or pause until the key "
+            "assumptions are clearer.\"\n"
+            "- DS-2 (continue vs redirect): \"Whether our current direction is "
+            "promising enough to pursue, or whether we should redirect to "
+            "alternatives.\"\n"
+            "- DS-3 (narrow directions): \"How to narrow the plausible "
+            "directions before committing resources to one.\"\n"
+            "Never suggest execution decisions (pricing/features/launch).\n\n"
+            "BIAS CHECK RULE (one line):\n"
+            "State whether the original text was solution-leaning and why, in "
+            "ONE line. Examples:\n"
+            "- \"Bias check: The draft implies an intervention ('what can we "
+            "do') rather than an uncertainty; rewrite focuses on "
+            "drivers/conditions.\"\n"
+            "- \"Bias check: No major solution bias; the draft is already "
+            "framed as an uncertainty.\"\n\n"
+            "NEXT STEP RULE:\n"
+            "- If bp_weak=false AND ds_weak=false -> \"Next step: Save checkpoint\"\n"
+            "- Otherwise -> \"Next step: Revise again\"\n"
+            f"For THIS turn, the deterministic Next step value is: \"{next_step_value}\".\n\n"
+            "TIP RULE (verbatim):\n"
+            "If a Tip line is required for this turn (gated per the output "
+            "rules below), output the Tip line EXACTLY as given in tip_text. "
+            "Do not alter wording. If not required, omit the Tip line.\n\n"
             + format_block
-            + "\nHARD GUARDRAILS (Step 1 only):\n"
-            "- Do NOT suggest pricing, launch plans, feature roadmaps, campaign tactics, "
-            "go-to-market plans, or any execution solution.\n"
-            "- Do NOT recommend or name a study type while either field is weak. "
-            "If asked, your Bias check line should say: "
-            "\"We're not ready to choose a method yet -- please tighten the framing.\"\n"
-            "- Once both fields are not weak, you MAY say in the Bias check line "
-            "\"Now we can choose a study type\" -- but do NOT prescribe one unless the user explicitly asks.\n"
-            "- Do NOT ask multiple questions. Do NOT ask the user to click any button.\n"
-            "- Do NOT output any \"Proposed updates:\" block, anchor update block, or schema-style "
-            "structured update. Step 1 has no anchor parsing.\n"
-            "- Do NOT add paragraphs, preamble, or commentary outside the format above."
         )
     else:
         snapshot_lines = [f"Study Title: {study_dict.get('title', 'Untitled')}"]
@@ -8213,6 +8280,7 @@ def send_chat(study_id):
             prompt_data["step1_enforce"] = {
                 "action": step1_action,
                 "any_weak": bool(any_weak),
+                "tip_when_weak": bool(tip_when_weak),
                 "next_step": next_step_value,
                 "tip": chosen_tip,
             }

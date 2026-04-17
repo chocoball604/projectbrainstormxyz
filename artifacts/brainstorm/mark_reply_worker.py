@@ -133,6 +133,10 @@ def enforce_step1_format(reply, enforce):
         return reply
     action = enforce.get("action") or "full"
     any_weak = bool(enforce.get("any_weak"))
+    if "tip_when_weak" in enforce:
+        tip_when_weak = bool(enforce.get("tip_when_weak"))
+    else:
+        tip_when_weak = any_weak
     next_step_value = enforce.get("next_step") or "Revise again"
     tip_value = enforce.get("tip") or ""
 
@@ -167,7 +171,7 @@ def enforce_step1_format(reply, enforce):
             out.append(parsed["bias_check"])
         out.append(f"Next step: {next_step_value}")
 
-    if any_weak and tip_value:
+    if tip_when_weak and tip_value:
         out.append(f"Tip: {tip_value}")
 
     return "\n".join(out).strip()
