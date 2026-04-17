@@ -1,8 +1,9 @@
 """Step 1 Pattern Library loader, validator, and helpers (Prompt 3).
 
 The library lives at ``data/step1_pattern_library.json``. It contains the
-canonical BP/DS templates, good/avoid examples, and the per-weakness
-"patterns" that Mark uses for Step 1 framing coaching.
+canonical BP/DS templates, per-pattern good/avoid examples (one entry per
+weakness reason), and the ``solution_bias_triggers`` list Mark uses for
+Step 1 framing coaching.
 
 Loading is mtime-cached. If the file is missing or invalid, a small in-code
 fallback library is returned so the app never crashes.
@@ -21,8 +22,23 @@ BACKUPS_DIR = os.path.join(_HERE, "data", "step1_pattern_library_backups")
 _FIELDS = ("business_problem", "decision_to_support")
 _VALID_REASONS = ("empty", "too_short", "solution_bias", "missing_uncertainty")
 
+MAX_PAYLOAD_BYTES = 64 * 1024
+
 _cache_lock = threading.Lock()
 _cache = {"mtime": None, "data": None}
+
+
+def _fb_pattern(pid, reason, label):
+    return {
+        "pattern_id": pid,
+        "label": label,
+        "weakness_reason": reason,
+        "description": label,
+        "good_examples": ["(fallback example)"],
+        "avoid_examples": ["(fallback example)"],
+        "advice": "Reframe as an uncertainty.",
+        "suggested_template_ids": [],
+    }
 
 
 _FALLBACK_LIBRARY = {
@@ -31,52 +47,40 @@ _FALLBACK_LIBRARY = {
     "updated_by": "fallback",
     "business_problem": {
         "templates": [
-            {"id": "BP-1", "label": "rate + driver",
+            {"id": "BP_1_RATE_AND_DRIVER", "label": "rate + driver",
              "text": "We don't yet understand how fast/where/when [phenomenon] is changing or what is driving that change.",
              "match_signature": ["don't yet understand", "driving"]},
-            {"id": "BP-2", "label": "trigger + conditions",
+            {"id": "BP_2_TRIGGER_AND_CONDITIONS", "label": "trigger + conditions",
              "text": "We don't yet understand what triggers [phenomenon] and under what conditions it accelerates or slows.",
              "match_signature": ["triggers", "conditions"]},
-            {"id": "BP-3", "label": "A vs B interpretation",
+            {"id": "BP_3_INTERPRETATION_A_VS_B", "label": "A vs B interpretation",
              "text": "It's unclear whether [observed signal] reflects [meaning/cause A] or [meaning/cause B].",
              "match_signature": ["unclear whether", "reflects"]},
         ],
-        "good_examples": [],
-        "avoid_examples": [],
         "patterns": [
-            {"id": "bp_empty", "weakness_reason": "empty", "label": "Empty draft",
-             "advice": "Describe an uncertainty.", "suggested_template_ids": ["BP-3"]},
-            {"id": "bp_too_short", "weakness_reason": "too_short", "label": "Too short",
-             "advice": "Add observed change and unknown driver.", "suggested_template_ids": ["BP-1"]},
-            {"id": "bp_solution_bias", "weakness_reason": "solution_bias", "label": "Solution bias",
-             "advice": "Replace solution language with uncertainty.", "suggested_template_ids": ["BP-3"]},
-            {"id": "bp_missing_uncertainty", "weakness_reason": "missing_uncertainty", "label": "Missing uncertainty",
-             "advice": "Use uncertainty markers and name a driver.", "suggested_template_ids": ["BP-1"]},
+            _fb_pattern("bp_empty", "empty", "Empty draft"),
+            _fb_pattern("bp_too_short", "too_short", "Too short"),
+            _fb_pattern("bp_solution_bias", "solution_bias", "Solution bias"),
+            _fb_pattern("bp_missing_uncertainty", "missing_uncertainty", "Missing uncertainty"),
         ],
     },
     "decision_to_support": {
         "templates": [
-            {"id": "DS-1", "label": "invest vs pause",
+            {"id": "DS_1_INVEST_OR_PAUSE", "label": "invest vs pause",
              "text": "Whether to invest in deeper exploration of this opportunity or pause until the key assumptions are clearer.",
              "match_signature": ["invest", "pause"]},
-            {"id": "DS-2", "label": "continue vs redirect",
+            {"id": "DS_2_CONTINUE_OR_REDIRECT", "label": "continue vs redirect",
              "text": "Whether our current direction is promising enough to pursue, or whether we should redirect to alternatives.",
              "match_signature": ["redirect"]},
-            {"id": "DS-3", "label": "narrow directions",
+            {"id": "DS_3_NARROW_BEFORE_COMMIT", "label": "narrow directions",
              "text": "How to narrow the plausible directions before committing resources to one.",
              "match_signature": ["narrow", "directions"]},
         ],
-        "good_examples": [],
-        "avoid_examples": [],
         "patterns": [
-            {"id": "ds_empty", "weakness_reason": "empty", "label": "Empty draft",
-             "advice": "Describe a discovery-stage choice.", "suggested_template_ids": ["DS-1"]},
-            {"id": "ds_too_short", "weakness_reason": "too_short", "label": "Too short",
-             "advice": "Frame as invest/pause or continue/redirect.", "suggested_template_ids": ["DS-1"]},
-            {"id": "ds_solution_bias", "weakness_reason": "solution_bias", "label": "Solution bias",
-             "advice": "Replace execution decision with the discovery-stage decision.", "suggested_template_ids": ["DS-1"]},
-            {"id": "ds_missing_uncertainty", "weakness_reason": "missing_uncertainty", "label": "Missing uncertainty",
-             "advice": "Make the choice contingent on what is unknown.", "suggested_template_ids": ["DS-1"]},
+            _fb_pattern("ds_empty", "empty", "Empty draft"),
+            _fb_pattern("ds_too_short", "too_short", "Too short"),
+            _fb_pattern("ds_solution_bias", "solution_bias", "Solution bias"),
+            _fb_pattern("ds_missing_uncertainty", "missing_uncertainty", "Missing uncertainty"),
         ],
     },
     "solution_bias_triggers": [
@@ -86,18 +90,28 @@ _FALLBACK_LIBRARY = {
 }
 
 
+def _is_str_list(v, min_len=0):
+    if not isinstance(v, list) or len(v) < min_len:
+        return False
+    return all(isinstance(x, str) and x.strip() for x in v)
+
+
 def validate_library(data):
     """Return (ok: bool, error: str). Strict structural check."""
     if not isinstance(data, dict):
         return False, "library must be a JSON object"
     if "version" not in data or not isinstance(data["version"], int):
         return False, "missing or non-integer 'version'"
-    if not isinstance(data.get("solution_bias_triggers"), list):
-        return False, "missing 'solution_bias_triggers' list"
+    triggers = data.get("solution_bias_triggers")
+    if not _is_str_list(triggers, min_len=1):
+        return False, "'solution_bias_triggers' must be a non-empty list of strings"
+
+    all_pattern_ids = set()
     for fld in _FIELDS:
         if fld not in data or not isinstance(data[fld], dict):
             return False, f"missing field block '{fld}'"
         block = data[fld]
+
         templates = block.get("templates")
         if not isinstance(templates, list) or len(templates) < 1:
             return False, f"{fld}.templates must be a non-empty list"
@@ -113,6 +127,7 @@ def validate_library(data):
             tpl_ids.add(tpl["id"])
             if "match_signature" in tpl and not isinstance(tpl["match_signature"], list):
                 return False, f"{fld}.templates['{tpl['id']}'].match_signature must be a list"
+
         patterns = block.get("patterns")
         if not isinstance(patterns, list) or len(patterns) < 1:
             return False, f"{fld}.patterns must be a non-empty list"
@@ -120,26 +135,35 @@ def validate_library(data):
         for pat in patterns:
             if not isinstance(pat, dict):
                 return False, f"{fld}.patterns entries must be objects"
-            for k in ("id", "weakness_reason", "label", "advice"):
+            pid = pat.get("pattern_id")
+            if not pid or not isinstance(pid, str):
+                return False, f"{fld}.patterns entry missing string 'pattern_id'"
+            if pid in all_pattern_ids:
+                return False, f"duplicate pattern_id '{pid}' across library"
+            all_pattern_ids.add(pid)
+            for k in ("label", "weakness_reason"):
                 if not pat.get(k) or not isinstance(pat[k], str):
-                    return False, f"{fld}.patterns entry missing string '{k}'"
+                    return False, f"{fld}.patterns['{pid}'] missing string '{k}'"
             if pat["weakness_reason"] not in _VALID_REASONS:
-                return False, (f"{fld}.patterns['{pat['id']}'].weakness_reason "
+                return False, (f"{fld}.patterns['{pid}'].weakness_reason "
                                f"must be one of {_VALID_REASONS}")
             seen_reasons.add(pat["weakness_reason"])
+            if not _is_str_list(pat.get("good_examples"), min_len=1):
+                return False, f"{fld}.patterns['{pid}'].good_examples must be non-empty list of strings"
+            if not _is_str_list(pat.get("avoid_examples"), min_len=1):
+                return False, f"{fld}.patterns['{pid}'].avoid_examples must be non-empty list of strings"
+            if "description" in pat and not isinstance(pat["description"], str):
+                return False, f"{fld}.patterns['{pid}'].description must be a string"
             sti = pat.get("suggested_template_ids", [])
             if not isinstance(sti, list):
-                return False, f"{fld}.patterns['{pat['id']}'].suggested_template_ids must be list"
+                return False, f"{fld}.patterns['{pid}'].suggested_template_ids must be list"
             for tid in sti:
                 if tid not in tpl_ids:
-                    return False, (f"{fld}.patterns['{pat['id']}'] references "
+                    return False, (f"{fld}.patterns['{pid}'] references "
                                    f"unknown template id '{tid}'")
         for required in _VALID_REASONS:
             if required not in seen_reasons:
                 return False, f"{fld}.patterns missing entry for reason '{required}'"
-        for k in ("good_examples", "avoid_examples"):
-            if k in block and not isinstance(block[k], list):
-                return False, f"{fld}.{k} must be a list"
     return True, ""
 
 
@@ -177,10 +201,17 @@ def bump_cache():
 def save_library(new_data, updated_by="admin"):
     """Validate, back up the existing file, and atomically write the new one.
 
-    Returns (ok, error). On success, also bumps the cache.
+    Enforces a 64KB max payload size. Returns (ok, error). On success,
+    bumps the cache.
     """
     if not isinstance(new_data, dict):
         return False, "payload must be an object"
+    try:
+        size = len(json.dumps(new_data, ensure_ascii=False).encode("utf-8"))
+    except Exception as e:
+        return False, f"payload not serialisable: {e}"
+    if size > MAX_PAYLOAD_BYTES:
+        return False, f"payload too large ({size} bytes; max {MAX_PAYLOAD_BYTES})"
     new_data.setdefault("solution_bias_triggers",
                         load_library().get("solution_bias_triggers", []))
     new_data["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -243,7 +274,7 @@ def pattern_id_for_reason(field, reason):
     lib = load_library()
     for pat in lib[field].get("patterns", []):
         if pat.get("weakness_reason") == reason:
-            return pat.get("id")
+            return pat.get("pattern_id")
     return None
 
 
@@ -251,7 +282,7 @@ def match_template_id(rewrite_text, applies_to):
     """Best-effort match of a Mark rewrite to a canonical template id.
 
     `applies_to` is one of 'business_problem' or 'decision_to_support'.
-    Returns the template id (e.g. 'BP-2') or None.
+    Returns the template id (e.g. 'BP_2_TRIGGER_AND_CONDITIONS') or None.
     """
     if not rewrite_text or applies_to not in _FIELDS:
         return None
@@ -268,3 +299,8 @@ def match_template_id(rewrite_text, applies_to):
             best_hits = hits
             best = tpl.get("id")
     return best
+
+
+def solution_bias_triggers():
+    """Return the current bias-trigger list (loader-cached)."""
+    return list(load_library().get("solution_bias_triggers") or [])

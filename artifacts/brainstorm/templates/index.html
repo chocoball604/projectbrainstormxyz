@@ -906,20 +906,22 @@
                     <div id="discovery-examples-business_problem" class="discovery-examples" data-field="business_problem" style="display: none; margin-top: 8px; padding: 10px 12px; background: #f7f9ff; border: 1px dashed #c8d3ee; border-radius: 6px; font-size: 12px; color: #444; line-height: 1.6;">
                         {% if step1_library and step1_library.business_problem %}
                           {% set bp = step1_library.business_problem %}
-                          {% if bp.good_examples %}
-                            <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Good examples</div>
-                            <ul style="margin: 0 0 8px; padding-left: 18px;">
-                              {% for ex in bp.good_examples %}<li>{{ ex }}</li>{% endfor %}
-                            </ul>
-                          {% endif %}
-                          {% if bp.avoid_examples %}
-                            <div style="font-weight: 600; margin-bottom: 4px; color: #b00020;">Avoid</div>
-                            <ul style="margin: 0 0 8px; padding-left: 18px;">
-                              {% for ex in bp.avoid_examples %}<li>{{ ex }}</li>{% endfor %}
-                            </ul>
-                          {% endif %}
+                          {% for pat in bp.patterns %}
+                            <div style="margin-bottom: 10px;">
+                              <div style="font-weight: 600; color: #1a1a2e;">{{ pat.label }}</div>
+                              {% if pat.description %}<div style="font-size: 11px; color: #666; margin: 2px 0 4px;">{{ pat.description }}</div>{% endif %}
+                              <div style="font-weight: 600; margin-top: 4px; color: #1a1a2e;">Good</div>
+                              <ul style="margin: 0 0 4px; padding-left: 18px;">
+                                {% for ex in pat.good_examples %}<li>{{ ex }}</li>{% endfor %}
+                              </ul>
+                              <div style="font-weight: 600; color: #b00020;">Avoid</div>
+                              <ul style="margin: 0; padding-left: 18px;">
+                                {% for ex in pat.avoid_examples %}<li>{{ ex }}</li>{% endfor %}
+                              </ul>
+                            </div>
+                          {% endfor %}
                           {% if bp.templates %}
-                            <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Templates</div>
+                            <div style="font-weight: 600; margin-top: 8px; color: #1a1a2e;">Templates</div>
                             <ul style="margin: 0; padding-left: 18px;">
                               {% for tpl in bp.templates %}<li><strong>{{ tpl.id }}</strong> ({{ tpl.label }}): {{ tpl.text }}</li>{% endfor %}
                             </ul>
@@ -944,20 +946,22 @@
                     <div id="discovery-examples-decision_to_support" class="discovery-examples" data-field="decision_to_support" style="display: none; margin-top: 8px; padding: 10px 12px; background: #f7f9ff; border: 1px dashed #c8d3ee; border-radius: 6px; font-size: 12px; color: #444; line-height: 1.6;">
                         {% if step1_library and step1_library.decision_to_support %}
                           {% set ds = step1_library.decision_to_support %}
-                          {% if ds.good_examples %}
-                            <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Good examples</div>
-                            <ul style="margin: 0 0 8px; padding-left: 18px;">
-                              {% for ex in ds.good_examples %}<li>{{ ex }}</li>{% endfor %}
-                            </ul>
-                          {% endif %}
-                          {% if ds.avoid_examples %}
-                            <div style="font-weight: 600; margin-bottom: 4px; color: #b00020;">Avoid</div>
-                            <ul style="margin: 0 0 8px; padding-left: 18px;">
-                              {% for ex in ds.avoid_examples %}<li>{{ ex }}</li>{% endfor %}
-                            </ul>
-                          {% endif %}
+                          {% for pat in ds.patterns %}
+                            <div style="margin-bottom: 10px;">
+                              <div style="font-weight: 600; color: #1a1a2e;">{{ pat.label }}</div>
+                              {% if pat.description %}<div style="font-size: 11px; color: #666; margin: 2px 0 4px;">{{ pat.description }}</div>{% endif %}
+                              <div style="font-weight: 600; margin-top: 4px; color: #1a1a2e;">Good</div>
+                              <ul style="margin: 0 0 4px; padding-left: 18px;">
+                                {% for ex in pat.good_examples %}<li>{{ ex }}</li>{% endfor %}
+                              </ul>
+                              <div style="font-weight: 600; color: #b00020;">Avoid</div>
+                              <ul style="margin: 0; padding-left: 18px;">
+                                {% for ex in pat.avoid_examples %}<li>{{ ex }}</li>{% endfor %}
+                              </ul>
+                            </div>
+                          {% endfor %}
                           {% if ds.templates %}
-                            <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Templates</div>
+                            <div style="font-weight: 600; margin-top: 8px; color: #1a1a2e;">Templates</div>
                             <ul style="margin: 0; padding-left: 18px;">
                               {% for tpl in ds.templates %}<li><strong>{{ tpl.id }}</strong> ({{ tpl.label }}): {{ tpl.text }}</li>{% endfor %}
                             </ul>

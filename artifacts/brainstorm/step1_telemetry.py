@@ -2,6 +2,9 @@
 
 Telemetry events are append-only. The writer opens its own short-lived
 sqlite connection so it never holds the DB open across LLM / HTTP calls.
+
+Schema column ``created_at`` is the canonical timestamp. Older databases
+with ``occurred_at`` are migrated in-place by ``init_step1_telemetry``.
 """
 
 import os
@@ -17,12 +20,20 @@ EVENT_TYPES = (
 )
 
 
+def _existing_columns(conn, table):
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {row[1] for row in rows}
+
+
 def init_step1_telemetry(conn):
-    """Create the telemetry table if missing. Caller manages the connection."""
+    """Create the telemetry table if missing. Caller manages the connection.
+
+    Also migrates legacy ``occurred_at`` column to ``created_at``.
+    """
     conn.execute("""
         CREATE TABLE IF NOT EXISTS step1_telemetry_events (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            occurred_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+            created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             study_id        INTEGER,
             user_id         INTEGER,
             session_id      TEXT,
@@ -36,13 +47,31 @@ def init_step1_telemetry(conn):
             extra_json      TEXT
         )
     """)
+    cols = _existing_columns(conn, "step1_telemetry_events")
+    if "created_at" not in cols and "occurred_at" in cols:
+        try:
+            conn.execute(
+                "ALTER TABLE step1_telemetry_events "
+                "RENAME COLUMN occurred_at TO created_at"
+            )
+        except sqlite3.OperationalError as e:
+            print(f"STEP1_TEL_MIGRATE_ERROR: {e}", flush=True)
+    try:
+        conn.execute("DROP INDEX IF EXISTS idx_step1_tel_study")
+        conn.execute("DROP INDEX IF EXISTS idx_step1_tel_event")
+    except sqlite3.OperationalError:
+        pass
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_step1_tel_study "
-        "ON step1_telemetry_events (study_id, occurred_at)"
+        "ON step1_telemetry_events (study_id, created_at)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_step1_tel_event "
-        "ON step1_telemetry_events (event_type, occurred_at)"
+        "ON step1_telemetry_events (event_type, created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_step1_tel_session "
+        "ON step1_telemetry_events (session_id, event_type)"
     )
 
 
@@ -97,6 +126,39 @@ def record_step1_event(
     except Exception as e:
         print(f"STEP1_TEL_WRITE_ERROR event={event_type} study={study_id} err={e}",
               flush=True)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def count_session_quick_actions(session_id, quick_action_prefix, field=None):
+    """Count ``quick_action_used`` rows for a session, scoped to Step 1.
+
+    Used by ``save_discovery`` to compute session-scoped rewrite counts.
+    Returns 0 on any error or when ``session_id`` is empty.
+    """
+    if not session_id:
+        return 0
+    conn = None
+    try:
+        conn = _open()
+        sql = (
+            "SELECT COUNT(*) FROM step1_telemetry_events "
+            "WHERE event_type = 'quick_action_used' AND session_id = ? "
+            "AND quick_action LIKE ?"
+        )
+        params = [session_id, quick_action_prefix + "%"]
+        if field:
+            sql += " AND field = ?"
+            params.append(field)
+        row = conn.execute(sql, tuple(params)).fetchone()
+        return int(row[0]) if row else 0
+    except Exception as e:
+        print(f"STEP1_TEL_COUNT_ERROR err={e}", flush=True)
+        return 0
     finally:
         if conn is not None:
             try:

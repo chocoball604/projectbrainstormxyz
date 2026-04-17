@@ -1,128 +1,180 @@
 {
-  "version": 1,
+  "version": 2,
   "updated_at": "2026-04-17T00:00:00Z",
   "updated_by": "seed",
   "business_problem": {
     "templates": [
       {
-        "id": "BP-1",
+        "id": "BP_1_RATE_AND_DRIVER",
         "label": "rate + driver",
         "text": "We don't yet understand how fast/where/when [phenomenon] is changing or what is driving that change.",
         "match_signature": ["don't yet understand", "driving"]
       },
       {
-        "id": "BP-2",
+        "id": "BP_2_TRIGGER_AND_CONDITIONS",
         "label": "trigger + conditions",
         "text": "We don't yet understand what triggers [phenomenon] and under what conditions it accelerates or slows.",
         "match_signature": ["triggers", "conditions"]
       },
       {
-        "id": "BP-3",
+        "id": "BP_3_INTERPRETATION_A_VS_B",
         "label": "A vs B interpretation",
         "text": "It's unclear whether [observed signal] reflects [meaning/cause A] or [meaning/cause B].",
         "match_signature": ["unclear whether", "reflects"]
       }
     ],
-    "good_examples": [
-      "It's unclear whether [observed behaviour or signal] reflects [meaning A] or [meaning B].",
-      "We're seeing high trial rates but low repeat usage, but don't know what users find missing or disappointing.",
-      "We don't know how people think about personal finance tools outside of formal banking products."
-    ],
-    "avoid_examples": [
-      "We need to launch feature X.",
-      "We should redesign the pricing page.",
-      "Our campaign isn't converting."
-    ],
     "patterns": [
       {
-        "id": "bp_empty",
-        "weakness_reason": "empty",
+        "pattern_id": "bp_empty",
         "label": "Empty draft",
-        "advice": "Describe an uncertainty you don't yet understand \u2014 not a plan, tactic, or solution.",
-        "suggested_template_ids": ["BP-3", "BP-1"]
+        "weakness_reason": "empty",
+        "description": "The Business Problem field is blank. Mark needs an uncertainty to coach against.",
+        "good_examples": [
+          "It's unclear whether the recent dip in repeat purchases reflects price sensitivity or product-fit issues.",
+          "We don't yet understand what is driving the rise in support tickets from new sign-ups."
+        ],
+        "avoid_examples": [
+          "We need to launch feature X.",
+          "Redesign the onboarding screen."
+        ],
+        "advice": "Describe an uncertainty you don't yet understand -- not a plan, tactic, or solution.",
+        "suggested_template_ids": ["BP_3_INTERPRETATION_A_VS_B", "BP_1_RATE_AND_DRIVER"]
       },
       {
-        "id": "bp_too_short",
-        "weakness_reason": "too_short",
+        "pattern_id": "bp_too_short",
         "label": "Too short",
+        "weakness_reason": "too_short",
+        "description": "The draft is too brief to convey what is changing and what is unknown.",
+        "good_examples": [
+          "We're seeing high trial rates but low repeat usage, but don't know what users find missing or disappointing.",
+          "We don't yet understand how fast trial drop-off is changing or what is driving that change."
+        ],
+        "avoid_examples": [
+          "Trial drop-off.",
+          "Pricing problems."
+        ],
         "advice": "Add what is changing or observed and what is unknown about why or under what conditions.",
-        "suggested_template_ids": ["BP-1", "BP-2"]
+        "suggested_template_ids": ["BP_1_RATE_AND_DRIVER", "BP_2_TRIGGER_AND_CONDITIONS"]
       },
       {
-        "id": "bp_solution_bias",
-        "weakness_reason": "solution_bias",
+        "pattern_id": "bp_solution_bias",
         "label": "Solution bias",
+        "weakness_reason": "solution_bias",
+        "description": "The draft proposes a feature, tactic, or campaign instead of stating an uncertainty.",
+        "good_examples": [
+          "It's unclear whether checkout abandonment reflects pricing perception or trust concerns about the new payment provider.",
+          "We don't yet understand what is driving the gap between sign-up and first-action for the new persona."
+        ],
+        "avoid_examples": [
+          "Build a referral program to grow signups.",
+          "Add a discount banner on the pricing page."
+        ],
         "advice": "Replace the solution / feature / tactic language with the underlying uncertainty it is meant to resolve.",
-        "suggested_template_ids": ["BP-3"]
+        "suggested_template_ids": ["BP_3_INTERPRETATION_A_VS_B"]
       },
       {
-        "id": "bp_missing_uncertainty",
-        "weakness_reason": "missing_uncertainty",
+        "pattern_id": "bp_missing_uncertainty",
         "label": "Missing uncertainty",
+        "weakness_reason": "missing_uncertainty",
+        "description": "The draft describes a situation but does not name what is unknown or uncertain.",
+        "good_examples": [
+          "It's unclear whether daily active usage is dropping because of notification fatigue or because the core workflow no longer fits the new persona.",
+          "We don't yet understand under what conditions teams convert from free to paid after a workspace invite."
+        ],
+        "avoid_examples": [
+          "Engagement is going down.",
+          "We have a churn problem."
+        ],
         "advice": "Use uncertainty markers (don't know, unclear, uncertain, not yet understood) and name a driver, trigger or condition.",
-        "suggested_template_ids": ["BP-1", "BP-2"]
+        "suggested_template_ids": ["BP_1_RATE_AND_DRIVER", "BP_2_TRIGGER_AND_CONDITIONS"]
       }
     ]
   },
   "decision_to_support": {
     "templates": [
       {
-        "id": "DS-1",
+        "id": "DS_1_INVEST_OR_PAUSE",
         "label": "invest vs pause",
         "text": "Whether to invest in deeper exploration of this opportunity or pause until the key assumptions are clearer.",
         "match_signature": ["invest", "pause"]
       },
       {
-        "id": "DS-2",
+        "id": "DS_2_CONTINUE_OR_REDIRECT",
         "label": "continue vs redirect",
         "text": "Whether our current direction is promising enough to pursue, or whether we should redirect to alternatives.",
         "match_signature": ["redirect"]
       },
       {
-        "id": "DS-3",
+        "id": "DS_3_NARROW_BEFORE_COMMIT",
         "label": "narrow directions",
         "text": "How to narrow the plausible directions before committing resources to one.",
         "match_signature": ["narrow", "directions"]
       }
     ],
-    "good_examples": [
-      "Whether to invest in deeper exploration of this opportunity or pause further work until assumptions are clearer.",
-      "Whether our current direction is promising enough to pursue, or if we should redirect attention to alternative approaches.",
-      "How to narrow down the set of plausible directions before committing resources to one."
-    ],
-    "avoid_examples": [
-      "Decide whether to launch the new pricing tier.",
-      "Pick which features to build next quarter.",
-      "Choose the campaign creative."
-    ],
     "patterns": [
       {
-        "id": "ds_empty",
-        "weakness_reason": "empty",
+        "pattern_id": "ds_empty",
         "label": "Empty draft",
-        "advice": "Describe a discovery-stage choice blocked by uncertainty \u2014 not an execution decision.",
-        "suggested_template_ids": ["DS-1", "DS-3"]
+        "weakness_reason": "empty",
+        "description": "The Decision-to-support field is blank. Mark needs a discovery-stage choice to coach against.",
+        "good_examples": [
+          "Whether to invest in deeper exploration of this opportunity or pause further work until assumptions are clearer.",
+          "How to narrow the set of plausible directions before committing resources to one."
+        ],
+        "avoid_examples": [
+          "Decide whether to launch the new pricing tier.",
+          "Pick which features to ship next quarter."
+        ],
+        "advice": "Describe a discovery-stage choice blocked by uncertainty -- not an execution decision.",
+        "suggested_template_ids": ["DS_1_INVEST_OR_PAUSE", "DS_3_NARROW_BEFORE_COMMIT"]
       },
       {
-        "id": "ds_too_short",
-        "weakness_reason": "too_short",
+        "pattern_id": "ds_too_short",
         "label": "Too short",
+        "weakness_reason": "too_short",
+        "description": "The draft is too brief to convey what is being chosen and why it depends on what we learn.",
+        "good_examples": [
+          "Whether our current direction is promising enough to pursue, or if we should redirect attention to alternative approaches.",
+          "Whether to invest in a deeper second study or pause until we have stronger qualitative signal."
+        ],
+        "avoid_examples": [
+          "What to do next.",
+          "Pricing decision."
+        ],
         "advice": "Frame the choice in invest-vs-pause, continue-vs-redirect, or narrow-directions terms.",
-        "suggested_template_ids": ["DS-1", "DS-2"]
+        "suggested_template_ids": ["DS_1_INVEST_OR_PAUSE", "DS_2_CONTINUE_OR_REDIRECT"]
       },
       {
-        "id": "ds_solution_bias",
-        "weakness_reason": "solution_bias",
+        "pattern_id": "ds_solution_bias",
         "label": "Solution bias",
+        "weakness_reason": "solution_bias",
+        "description": "The draft is a build/launch/pricing decision rather than a discovery decision.",
+        "good_examples": [
+          "Whether to continue investing in the current onboarding hypothesis or redirect to a workspace-first hypothesis.",
+          "How to narrow between three persona segments before committing roadmap effort."
+        ],
+        "avoid_examples": [
+          "Whether to launch the new pricing tier in Q3.",
+          "Choose which campaign creative to run."
+        ],
         "advice": "Replace the feature / pricing / launch decision with the discovery-stage decision it should inform.",
-        "suggested_template_ids": ["DS-1", "DS-2"]
+        "suggested_template_ids": ["DS_1_INVEST_OR_PAUSE", "DS_2_CONTINUE_OR_REDIRECT"]
       },
       {
-        "id": "ds_missing_uncertainty",
-        "weakness_reason": "missing_uncertainty",
+        "pattern_id": "ds_missing_uncertainty",
         "label": "Missing uncertainty",
+        "weakness_reason": "missing_uncertainty",
+        "description": "The draft describes a choice but does not link it to what is still unknown.",
+        "good_examples": [
+          "Whether to invest in a deeper exploratory study or pause until we know whether the drop-off is driver A or driver B.",
+          "How to narrow our three candidate hypotheses before committing further engineering resources."
+        ],
+        "avoid_examples": [
+          "Decide on the next campaign.",
+          "Pick a roadmap theme."
+        ],
         "advice": "Make the choice contingent on what is still unknown (e.g. invest vs pause until we know more).",
-        "suggested_template_ids": ["DS-1", "DS-3"]
+        "suggested_template_ids": ["DS_1_INVEST_OR_PAUSE", "DS_3_NARROW_BEFORE_COMMIT"]
       }
     ]
   },

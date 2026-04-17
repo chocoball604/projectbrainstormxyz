@@ -3662,7 +3662,14 @@ def login():
 @app.route("/portal")
 def admin_portal():
     error = request.args.get("error")
-    return render_template("admin_portal.html", error=error)
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    return render_template(
+        "admin_portal.html",
+        error=error,
+        is_admin=is_admin,
+        token=token,
+    )
 
 
 @app.route("/admin-login", methods=["POST"])
@@ -5104,19 +5111,14 @@ def save_discovery(study_id):
     conn.commit()
 
     if mode == "checkpoint" and field in ("business_problem", "decision_to_support"):
-        action_tag = (
-            "ACTION:REWRITE_PROBLEM" if field == "business_problem"
-            else "ACTION:REWRITE_DECISION"
+        quick_prefix = (
+            "REWRITE_PROBLEM" if field == "business_problem"
+            else "REWRITE_DECISION"
         )
-        try:
-            rewrite_row = conn.execute(
-                "SELECT COUNT(*) AS n FROM chat_messages "
-                "WHERE study_id = ? AND sender = 'user' AND message_text LIKE ?",
-                (study_id, action_tag + "%"),
-            ).fetchone()
-            rewrite_count = int(rewrite_row["n"]) if rewrite_row else 0
-        except Exception:
-            rewrite_count = 0
+        from step1_telemetry import count_session_quick_actions
+        rewrite_count = count_session_quick_actions(
+            step1_session_id, quick_prefix, field=field
+        )
         record_step1_event(
             "rewrite_count_at_save",
             study_id=study_id,
@@ -8208,6 +8210,20 @@ def send_chat(study_id):
             "\"Proposed updates:\" or anything similar).\n"
             "- NEVER print \"(no change)\" or \"N/A\". If you cannot improve "
             "something, still produce a best-effort rewrite.\n\n"
+            "STEP 1 PATTERN LIBRARY (live -- treat as authoritative):\n"
+            "Business Problem templates (id : label):\n"
+            + "".join(
+                f"  - {tpl['id']} : {tpl['label']}\n"
+                for tpl in step1_library_for_prompt["business_problem"]["templates"]
+            )
+            + "Decision-to-Support templates (id : label):\n"
+            + "".join(
+                f"  - {tpl['id']} : {tpl['label']}\n"
+                for tpl in step1_library_for_prompt["decision_to_support"]["templates"]
+            )
+            + "Solution-bias triggers (treat presence as bias signal): "
+            + ", ".join(step1_library_for_prompt.get("solution_bias_triggers") or [])
+            + "\n\n"
             "QUALITY CONSTRAINTS -- BUSINESS PROBLEM REWRITE:\n"
             "Your rewrite must be ONE sentence and must be specific. It must "
             "include TWO parts:\n"
@@ -11385,6 +11401,8 @@ def admin_step1_library_save():
     if not is_admin:
         return jsonify({"ok": False, "error": "Admin access required."}), 403
     payload_raw = request.form.get("library_json") or ""
+    if len(payload_raw.encode("utf-8")) > 64 * 1024:
+        return jsonify({"ok": False, "error": "Payload too large (max 64KB)."}), 413
     try:
         new_data = json.loads(payload_raw)
     except json.JSONDecodeError as e:
@@ -11393,6 +11411,26 @@ def admin_step1_library_save():
     if not ok:
         return jsonify({"ok": False, "error": err}), 400
     return jsonify({"ok": True, "library": load_step1_library()})
+
+
+@app.route("/admin/step1-library/validate", methods=["POST"])
+def admin_step1_library_validate():
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return jsonify({"ok": False, "error": "Admin access required."}), 403
+    payload_raw = request.form.get("library_json") or ""
+    if len(payload_raw.encode("utf-8")) > 64 * 1024:
+        return jsonify({"ok": False, "error": "Payload too large (max 64KB)."}), 413
+    try:
+        candidate = json.loads(payload_raw)
+    except json.JSONDecodeError as e:
+        return jsonify({"ok": False, "error": f"Invalid JSON: {e}"}), 400
+    from step1_pattern_library import validate_library
+    ok, err = validate_library(candidate)
+    if not ok:
+        return jsonify({"ok": False, "error": err}), 400
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":

@@ -42,8 +42,11 @@
   </div>
 
   <div class="row">
-    <button class="btn" id="btn-save" type="button">Validate &amp; Save</button>
+    <button class="btn btn-secondary" id="btn-validate" type="button">Validate</button>
+    <button class="btn" id="btn-save" type="button">Save</button>
     <button class="btn btn-secondary" id="btn-reload" type="button">Reload from disk</button>
+    <a class="btn btn-secondary" href="/portal?token={{ token }}"
+       style="text-decoration: none; line-height: 1.6;">Back to portal</a>
     <span class="status" id="status"></span>
   </div>
 
@@ -59,6 +62,28 @@
     statusEl.textContent = msg || '';
     statusEl.className = 'status ' + (kind || '');
   }
+
+  document.getElementById('btn-validate').addEventListener('click', function() {
+    var raw = ta.value;
+    try { JSON.parse(raw); } catch (e) {
+      setStatus('Invalid JSON: ' + e.message, 'err'); return;
+    }
+    setStatus('Validating...', '');
+    var fd = new FormData();
+    fd.append('token', token);
+    fd.append('library_json', raw);
+    fetch('/admin/step1-library/validate', { method: 'POST', body: fd,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
+      .then(function(res) {
+        if (res.ok && res.body.ok) {
+          setStatus('Validation passed \u2713', 'ok');
+        } else {
+          setStatus('Validation failed: ' + (res.body.error || 'unknown'), 'err');
+        }
+      })
+      .catch(function(e) { setStatus('Network error: ' + e, 'err'); });
+  });
 
   document.getElementById('btn-save').addEventListener('click', function() {
     var raw = ta.value;

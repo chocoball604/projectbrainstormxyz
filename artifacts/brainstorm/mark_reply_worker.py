@@ -294,19 +294,21 @@ def _record_template_applied(reply, enforce):
         if low.startswith(_PREFIX_REWRITE_PROBLEM):
             body = line.split(":", 1)[1].strip() if ":" in line else ""
             tid = match_template_id(body, "business_problem")
-            record_step1_event(
-                "template_applied",
-                study_id=study_id, user_id=user_id, session_id=session_id,
-                field="business_problem", template_id=tid,
-            )
+            if tid:
+                record_step1_event(
+                    "template_applied",
+                    study_id=study_id, user_id=user_id, session_id=session_id,
+                    field="business_problem", template_id=tid,
+                )
         elif low.startswith(_PREFIX_REWRITE_DECISION):
             body = line.split(":", 1)[1].strip() if ":" in line else ""
             tid = match_template_id(body, "decision_to_support")
-            record_step1_event(
-                "template_applied",
-                study_id=study_id, user_id=user_id, session_id=session_id,
-                field="decision_to_support", template_id=tid,
-            )
+            if tid:
+                record_step1_event(
+                    "template_applied",
+                    study_id=study_id, user_id=user_id, session_id=session_id,
+                    field="decision_to_support", template_id=tid,
+                )
 
 
 def update_placeholder(placeholder_id, message_text):
