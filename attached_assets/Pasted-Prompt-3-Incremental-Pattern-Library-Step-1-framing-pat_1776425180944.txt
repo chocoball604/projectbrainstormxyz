@@ -1,0 +1,139 @@
+Prompt 3 - Incremental Pattern Library (Step‑1 framing patterns) + Stage‑2 Telemetry (counts‑only, non‑adaptive)
+Objective
+Create a lightweight, human‑curated Step‑1 Pattern Library that improves user guidance over time—powering:
+1.	the [See examples] expanders for Business Problem and Decision to Support, and
+2.	Step‑1 Mark framing mode (Prompt 2) as a reference source, not training.
+In addition, include Stage‑2 telemetry hooks (counts‑only) so we can measure which patterns are used and where users struggle, without embeddings, learning models, or adaptive behavior.
+This supports the platform principle: disciplined workflow over chat and explainability.
+Non negotiable constraints
+•	No fine tuning, no embeddings, no “learning” from user text
+•	No automatic modification of patterns/templates based on telemetry
+•	No behavioral changes based on telemetry at this stage (non adaptive)
+•	Must not override existing Mark orchestration outside Step 1
+•	Keep the library human-curated and small; do not auto-generate examples
+•	Do not require DB schema changes unless absolutely unavoidable; prefer file-based storage and minimal logging
+Scope (in)
+1) Pattern library storage format (human curated, file based, stable IDs)
+Implement a Step 1 Pattern Library stored in a server-side JSON file that can be edited at runtime (admin-only). The file must define stable IDs for both patterns and templates.
+Required top-level structure (minimum)
+•	version
+•	updated_at
+•	business_problem: 
+o	patterns[]
+o	templates[]
+•	decision_to_support: 
+o	patterns[]
+o	templates[]
+•	solution_bias_triggers[]
+•	notes (optional, short guidance lines that are not mixed into example lists)
+Pattern object requirements
+Each pattern must include:
+•	pattern_id (stable string ID, e.g., bp_unclear_whether, bp_symptom_not_uncertainty)
+•	label (short)
+•	good_examples[] (array of strings)
+•	avoid_examples[] (array of strings)
+•	description (one short sentence, optional; not shown by default)
+Template object requirements
+Each template must include:
+•	template_id (stable string ID)
+•	label (short)
+•	template_text (a fill in the blank string users can copy)
+•	Optional applies_to (business_problem vs decision_to_support)
+Content rules
+•	Examples must be short, concrete, copyable
+•	Templates must be highly structured (e.g., “It’s unclear whether [A] reflects [B] or [C].”)
+•	No long paragraphs inside examples; keep any general guidance in notes and/or helper text from Prompt 1
+Template IDs aligned to Step 1 system prompt
+To match the tighter Step 1 prompt (Prompt 2), the library must include canonical template IDs that Mark can reference deterministically.
+Business Problem templates must include (at minimum):
+•	BP_1_RATE_AND_DRIVER 
+“We don’t yet understand how fast/where/when [phenomenon] is changing or what is driving that change.”
+•	BP_2_TRIGGER_AND_CONDITIONS 
+“We don’t yet understand what triggers [phenomenon] and under what conditions it accelerates or slows.”
+•	BP_3_INTERPRETATION_A_VS_B 
+“It’s unclear whether [observed signal] reflects [cause A] or [cause B].”
+Decision to Support templates must include (at minimum):
+•	DS_1_INVEST_OR_PAUSE
+•	DS_2_CONTINUE_OR_REDIRECT
+•	DS_3_NARROW_BEFORE_COMMIT
+These IDs must remain stable so Prompt 2 can select templates now, and Prompt 4 can count usage later.
+2) UI integration: [See examples] pulls from the Pattern Library
+Update Step 1 UI so each field’s [See examples] expands content sourced from the pattern library (not hardcoded HTML).
+UI rendering rules
+•	Collapsed by default
+•	When expanded, show: 
+1.	Good examples (2–4)
+2.	Avoid (1–2)
+3.	Templates (1–2, optional)
+•	Keep it short; avoid scrolling
+•	If the library file is missing/invalid, fall back to a safe minimal default embedded in code
+Trigger rules
+•	Examples expand only: 
+o	when user clicks [See examples], OR
+o	when Prompt 1 weak-input heuristics fire (and only then; keep default collapsed otherwise)
+3) Mark integration (Step 1 only, reference only)
+In Step 1 framing mode (Prompt 2), allow Mark to consult the Pattern Library in a reference-only manner:
+•	choose a suitable template to rewrite into
+•	identify solution bias using solution_bias_triggers
+•	optionally cite the template label internally (not required to show to user)
+Constraints
+•	Mark must not dump lists of examples
+•	Mark must not invent new templates beyond the library
+•	This integration must not affect Mark behavior outside Step 1
+Explicit boundary between Prompt 2 and Prompt 3
+•	Prompt 2 enforces how Mark rewrites (intent bound, minimal output, template discipline)
+•	Prompt 3 defines what templates exist and their stable IDs
+•	Prompt 3 must not redefine Mark’s Step 1 output structure
+4) Admin editing mechanism (minimal, safe)
+Add an admin-only way to edit the Step 1 Pattern Library at runtime.
+Minimum acceptable:
+•	display current library version and updated_at
+•	allow admin to paste/edit JSON in a textarea
+•	provide “Validate JSON” and “Save” actions
+Validation requirements
+•	JSON parses correctly
+•	required keys exist
+•	pattern_id and template_id must be unique
+•	example lists are arrays of strings
+•	reject overly long inputs to prevent accidental dumping of huge content
+•	if validation fails, do not overwrite the existing file; show a clear error message
+•	create a simple backup of the previous library file on successful save
+
+5) Stage 2 Telemetry (counts only, non adaptive)
+Telemetry requirements (counts only, no learning)
+In addition to serving examples, the Step 1 Pattern Library must expose stable pattern IDs and template IDs so the system can record usage counts.
+The system should record the following counts per study, per Step 1 session:
+•	pattern_id triggered
+•	template_id applied (if any)
+•	rewrite_count before “Save checkpoint”
+•	quick_action used (Rewrite Problem / Rewrite Decision / Bias Check)
+Telemetry constraints
+•	No embeddings
+•	No automatic modification of patterns
+•	No behavioral changes based on telemetry at this stage
+•	Telemetry is strictly observational and must not alter UX or Mark responses
+•	Do not store raw field text repeatedly; prefer storing only IDs, counts, timestamps, and simple metadata (e.g., length bucket)
+Implementation guidance (safe)
+•	Define a “Step 1 session” boundary explicitly (e.g., first time user types into either field until they save both checkpoints or leave the page)
+•	If defining session boundaries is complex, log counts per study per page-load as a minimal first step
+Scope (out)
+•	No embeddings, vector search, or similarity matching
+•	No model training or automated pattern generation
+•	No adaptive UX behavior changes (that is Stage 3 and not part of this prompt)
+•	No dashboards or analytics views beyond minimal admin validation tooling
+•	No changes to personas, QA, or execution flow
+Definition of done
+•	Step 1 [See examples] renders from the Pattern Library file
+•	Pattern Library contains stable pattern_id and template_id values
+•	Admin can update the Pattern Library safely with validation + backup
+•	Step 1 Mark mode can reference templates and bias triggers without changing non Step 1 behavior
+•	Telemetry records counts only (pattern_id, template_id, rewrite_count, quick_action) without storing user text repeatedly
+•	Telemetry does not alter any UI behavior (non adaptive)
+How to test (must include)
+1.	Expand [See examples] under Business Problem → confirm content comes from Pattern Library
+2.	Update Pattern Library via admin UI → confirm UI examples update immediately
+3.	Enter invalid JSON → confirm save is rejected and prior library remains
+4.	Use quick actions in Step 1 → confirm telemetry records quick_action and (where applicable) template_id
+5.	Trigger weak-input heuristic → confirm pattern_id triggered count increments
+6.	Save checkpoint after several rewrites → confirm rewrite_count logged
+7.	Confirm no UX changes occur as a result of telemetry (still collapsed by default unless user clicks or weak-input triggers)
