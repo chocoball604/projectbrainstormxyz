@@ -1,0 +1,138 @@
+Prompt 1 — Study Setup + Discovery UI changes (including editable fields + autosave drafts)
+
+Objective
+Redesign the “Discovery” section of the Study Setup page so it that this space becomes a strong signpost and framing scaffold and teaches users how to frame Business Problem and Decision to Support using strong microcopy constraints, while making both fields editable and supporting autosaved drafts so Mark is aware of user input and can provide meaningful assistance. The output must resemble the wireframe layout and behaviour described below (do not improvise new layouts).
+
+Where
+This applies to the Study Setup / Draft Study detail page where the current UI shows “Mark Discovery” and “Market – Research Guide”.
+
+A) Top Status Bar
+The following UI must remain visible above the Discovery section:
+STUDY SET-UP / Mission Control
+Study: [title]		Status: Draft		Type: Not set
+
+Do not rename, reposition, or remove this bar
+Do not merge Discovery content into this bar
+Discovery begins below this bar only
+This bar exists to give users global orientation; treat it as fixed chrome.
+
+B) Where changes apply
+The changes apply below the Mission Control bar, replacing the current Discovery block that shows:
+-	“Mark Discovery”
+-	“Answer two quick questions so Mark can recommend the best study type”
+-	“Mark - Research Guide”
+These elements must be removed.
+
+C) Required layout (wireframe structure)
+- Two-column layout (must be implemented)
+- Left column: Mark helper panel with delayed chat + quick actions
+- Right column: Step 1 framing + two editable fields + mini-panel
+No extra panels, no duplicated text blocks, no “chimney” layouts.
+
+D) Replace the current “Mark Discovery” section with this exact copy
+Right column header
+Title:
+Step 1 — Define the Problem (Before choosing a method)
+
+Subtext (exact, 2 lines):
+“These two fields shape everything that follows.
+Start with the uncertainty, then state the decision it should inform.”
+
+Mini-panel (exact, 3 bullets, always visible):
+What good looks like
+-	Problem: an uncertainty you don’t yet understand
+-	Decision: a choice blocked by that uncertainty
+-	You can revise either field.
+
+Remove the old “Answer two quick questions so Mark can recommend the best study type.” copy entirely.
+
+E) Right Column -- Business Problem & Decision fields (critical behaviour change to right column)
+Required behavioral changes
+-	Fields must be always editable
+-	Remove the “Save → locked forever” behavior entirely
+-	Replace “Save” with Save checkpoint
+-	Support draft autosave (implicit) and explicit save checkpoints
+-	Show status text:
+	“Draft autosaved”
+	“Saved ✓ [timestamp]”
+
+Field microcopy (exact)
+Field 1: 1. Business Problem or Opportunity
+-	Helper: “Describe what is unclear or risky -- not what you plan to do.”
+-	Guardrail: “Avoid features, pricing, campaigns, or tactics here.”
+-	Examples hidden behind [see examples], collapsed by default
+	Good examples: 
+	“It’s unclear whether [observed behaviour or signal] reflects [meaning A] or [meaning B].”
+	“We’re seeing high trial rates but low repeat usage, but don’t know what users find missing or disappointing.”
+	“We don’t know how people think about personal finance tools outside of formal banking products.”
+
+Field 2: Decision This Study Will Support
+-	Helper: “What choice is currently blocked by uncertainty?”
+-	Guardrail: “Avoid feature/design/pricing decisions — describe the decision context.”
+-	Examples hidden behind [see examples], collapsed by default
+-	Examples must only appear when expanded or when triggered by a weak-input hint.
+	Good examples:
+	“Whether to invest in deeper exploration of this opportunity or pause further work until assumptions are clearer.” (ie, Go/No-Go problems)
+	“Whether our current direction is promising enough to pursue, or if we should redirect attention to alternative approaches.”
+	“How to narrow down the set of plausible directions before committing resources to one.”
+
+F) Autosave Drafts (must exist)
+-	Autosave each field after short idle (eg, 1-2 seconds) and/or on blur
+-	Autosave updates draft state only
+-	Save checkpoint persists the current value but does not lock the field
+-	Do not introduce schema migrations unless unavoidable (prefer existing patterns)
+
+G) Left Column – Mark helper (redesigned)
+Header (exact)
+Mark – Problem Framing Helper
+
+One-line instruction (always visible):
+“Write a first draft on the right. Use Mark to rewrite and refine it.”
+
+Quick actions (buttons)
+-	Rewrite Problem (paste user text)
+-	Rewrite Decision (past user text)
+-	Check for solution bias
+Buttons inject structured prompts into the chat input only (do not display prompt text on the page).
+
+H) Delayed chat visibility (explicit rules)
+Initial state
+-	Chat transcript hidden
+-	Chat input hidden
+-	Quick actions hidden or disabled
+-	Only show Mark header + one-line instruction
+Reveal chat tools when ANY of the following occur:
+1.	User types ≥ 20 characters into either field
+2.	Draft autosave fires at least once
+3.	User clicks Save checkpoint
+4.	User clicks a Quick Action button
+Chat transcript visibility
+-	Transcript appears only after first message is sent/received
+-	If study already contains Mark messages, transcript should be visible by default.
+
+I) Weak-input hinting (minimal)
+-	No large quality panels
+-	Show only a single quiet inline hint beneath a field when heuristics trigger
+-	Use heuristic detection only (length, solution keywords, missing uncertainty markers)
+-	Tooltip text itself handled in next prompt (prompt #2 - do not implement logic here)
+
+J) Out of scope (hard constraints)
+-	Do not modify Mark’s LLM prompts or worker logic
+-	No header/footer changes
+-	No refactoring unrelated pages or study execution logic
+
+Definition of Done
+-	Mission Control bar remains at top
+-	Discovery section uses the new Step 1 header and layout
+-	Users can edit Business Problem & Decision repeatedly after saving
+-	Draft autosave + Save checkpoint both work correctly
+-	Chat panel remains hidden until user engages
+-	Examples are collapsed by default
+-	No regressions to other Study Setup sections
+
+How to test (must include)
+-	Create a new draft study → verify new headings and microcopy
+-	Type into Business Problem → verify “Draft autosaved” appears and field remains editable
+-	Click Save checkpoint → verify saved timestamp updates, field still editable
+-	Confirm chat is hidden until you type or click a quick action
+-	Expand/collapse examples → verify they stay collapsed by default
