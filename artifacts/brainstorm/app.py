@@ -1810,6 +1810,40 @@ V1A_FIELD_MAP = {
     "product_concept": "known_vs_unknown",
 }
 
+STEP1_SOLUTION_KEYWORDS = [
+    "launch", "feature", "pricing", "campaign", "sell", "selling",
+    "roadmap", "rollout", "promote", "advertise", "go to market", "gtm",
+    "we will build", "we plan to build",
+]
+STEP1_UNCERTAINTY_MARKERS = [
+    "don't know", "do not know", "don't yet", "do not yet",
+    "unsure", "uncertain", "unclear",
+    "not sure", "haven't yet", "have not yet",
+    "don't understand", "do not understand", "don't yet understand",
+    "we are uncertain", "it is unclear", "it's unclear",
+]
+
+def compute_step1_weakness(value):
+    """Diagnostic-only weakness check for Step 1 fields.
+
+    Returns (is_weak: bool, reason: str). Used only to compute a boolean
+    flag passed to Mark and to drive Tip rotation. Never blocks rewrites,
+    saves, or editing.
+    """
+    text = (value or "").strip()
+    if not text:
+        return True, "empty"
+    if len(text) < 25:
+        return True, "too_short"
+    low = text.lower()
+    for kw in STEP1_SOLUTION_KEYWORDS:
+        if kw in low:
+            return True, "solution_bias"
+    for marker in STEP1_UNCERTAINTY_MARKERS:
+        if marker in low:
+            return False, "ok"
+    return True, "missing_uncertainty"
+
 def get_v1a_value(study_dict, key):
     db_key = V1A_FIELD_MAP.get(key, key)
     return (study_dict.get(db_key) or "").strip()
@@ -7861,32 +7895,130 @@ def send_chat(study_id):
     else:
         study_phase = "brief"
 
-    snapshot_lines = [f"Study Title: {study_dict.get('title', 'Untitled')}"]
-    snapshot_lines.append(f"Study Type: {study_type_val or 'Not yet selected'}")
-    snapshot_lines.append(f"Study Phase: {study_phase}")
-    snapshot_lines.append("Research Brief field status (read-only):")
-    for key, label in anchor_keys:
-        snapshot_lines.append(f"  {label}: [{field_statuses[key]}]")
-    if study_type_val == "synthetic_idi":
-        personas_required = 1
-    elif study_type_val == "synthetic_focus_group":
-        personas_required = 4
-    else:
-        personas_required = 0
-    snapshot_lines.append(f"Personas attached: {persona_count}")
-    if personas_required > 0:
-        snapshot_lines.append(f"Personas required: {personas_required} (Lisa fills gaps automatically)")
-    oc_block, oc_keys = _extract_optional_context(study_dict)
-    if oc_block:
-        snapshot_lines.append("")
-        snapshot_lines.append(oc_block)
-    study_snapshot = "\n".join(snapshot_lines)
-    status_summary = ",".join(f"{k}={v}" for k, v in field_statuses.items())
-    print(f"MARK_FIELD_STATUS study={study_id} phase={study_phase} {status_summary}", flush=True)
-    print(f"OPTIONAL_CONTEXT_INJECT_MARK study={study_id} included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
+    is_step1 = not study_type_val
 
-    system_prompt = (
-        "You are Mark, the Market Intelligence Copilot for Project Brainstorm.\n\n"
+    if is_step1:
+        bp_value = (study_dict.get("business_problem") or "").strip()
+        ds_value = (study_dict.get("decision_to_support") or "").strip()
+        bp_weak, bp_reason = compute_step1_weakness(bp_value)
+        ds_weak, ds_reason = compute_step1_weakness(ds_value)
+
+        recent_mark = conn.execute(
+            "SELECT message_text FROM chat_messages "
+            "WHERE study_id = ? AND sender = 'mark' "
+            "AND message_text NOT LIKE '%thinking...%' "
+            "ORDER BY id DESC LIMIT 5",
+            (study_id,),
+        ).fetchall()
+        prior_tip_count = 0
+        for row in recent_mark:
+            if "Tip:" in (row["message_text"] or ""):
+                prior_tip_count += 1
+            else:
+                break
+
+        TIP_DEFAULT = (
+            "Rewrite in one sentence: 'We don\u2019t yet understand ___, "
+            "so we can\u2019t confidently decide ___.'"
+        )
+        TIP_ALT_A = (
+            "Good inputs name the unknowns: who, where, and what trade-offs "
+            "-- avoid features, pricing, or 'how to sell' language for now."
+        )
+        TIP_ALT_B = (
+            "Try restating your Business Problem as an uncertainty (what you "
+            "don\u2019t yet understand), not a solution or task."
+        )
+        if prior_tip_count <= 0:
+            chosen_tip = TIP_DEFAULT
+        elif prior_tip_count == 1:
+            chosen_tip = TIP_ALT_A
+        else:
+            chosen_tip = TIP_ALT_B
+
+        print(
+            f"MARK_STEP1 study={study_id} bp_weak={bp_weak}({bp_reason}) "
+            f"ds_weak={ds_weak}({ds_reason}) prior_tips={prior_tip_count}",
+            flush=True,
+        )
+
+        bp_display = bp_value if bp_value else "(empty)"
+        ds_display = ds_value if ds_value else "(empty)"
+
+        system_prompt = (
+            "You are Mark, the Market Intelligence Copilot for Project Brainstorm, "
+            "operating in STEP 1 framing mode (no study type chosen yet).\n\n"
+            "Your only job here is to help the user tighten their Business Problem and Decision "
+            "so they describe an UNCERTAINTY blocking a real DECISION -- not a plan, feature, "
+            "tactic, or solution.\n\n"
+            "CURRENT STEP 1 FIELD STATE (verbatim):\n"
+            f"Business Problem (current draft): \"{bp_display}\"\n"
+            f"Decision to Support (current draft): \"{ds_display}\"\n"
+            f"Weakness flags: business_problem_weak={'true' if bp_weak else 'false'} "
+            f"({bp_reason}); decision_weak={'true' if ds_weak else 'false'} ({ds_reason})\n\n"
+            "RESPONSE FORMAT (MANDATORY -- exactly these four lines, in this order, "
+            "nothing before or after):\n"
+            "Rewrite (Problem): <one sentence rewrite of the Business Problem framed as an uncertainty>\n"
+            "Rewrite (Decision): <one sentence rewrite of the Decision framed as the decision blocked by that uncertainty>\n"
+            "Bias check: <one line: does the current draft sneak in a feature/tactic/pricing/launch decision? if so, name it>\n"
+            "Next step: <either \"save checkpoint\" if both fields are now adequate, or \"revise again\" if not>\n\n"
+            "QUICK ACTION TAGS:\n"
+            "The user may send a message that begins with one of these tags on its own first line. "
+            "If so, focus your response on that intent and still emit the four-line format "
+            "(use \"(no change)\" for lines that don't apply):\n"
+            "- ACTION:REWRITE_PROBLEM -> only rewrite the Business Problem; "
+            "Rewrite (Decision) line should say \"(no change)\".\n"
+            "- ACTION:REWRITE_DECISION -> only rewrite the Decision; "
+            "Rewrite (Problem) line should say \"(no change)\".\n"
+            "- ACTION:BIAS_CHECK -> Rewrite (Problem) and Rewrite (Decision) say \"(no change)\"; "
+            "Bias check + Next step are the real content.\n\n"
+            "OPTIONAL TIP LINE:\n"
+            "If business_problem_weak OR decision_weak is true, append exactly one extra line "
+            "at the end (and only one), prefixed \"Tip:\". The Tip text for THIS turn is:\n"
+            f"Tip: {chosen_tip}\n"
+            "Use that exact wording verbatim. Do not invent your own tip text. "
+            "If neither field is weak, omit the Tip line entirely.\n\n"
+            "HARD GUARDRAILS (Step 1 only):\n"
+            "- Do NOT suggest pricing, launch plans, feature roadmaps, campaign tactics, "
+            "go-to-market plans, or any execution solution.\n"
+            "- Do NOT recommend or name a study type while either field is weak. "
+            "If asked, your Bias check line should say: "
+            "\"We're not ready to choose a method yet -- please tighten the framing.\"\n"
+            "- Once both fields are not weak, you MAY say in the Bias check line "
+            "\"Now we can choose a study type\" -- but do NOT prescribe one unless the user explicitly asks.\n"
+            "- Do NOT ask multiple questions. Do NOT ask the user to click any button.\n"
+            "- Do NOT output any \"Proposed updates:\" block, anchor update block, or schema-style "
+            "structured update. Step 1 has no anchor parsing.\n"
+            "- Do NOT add paragraphs, preamble, or commentary outside the four-line format "
+            "(and the optional Tip line)."
+        )
+    else:
+        snapshot_lines = [f"Study Title: {study_dict.get('title', 'Untitled')}"]
+        snapshot_lines.append(f"Study Type: {study_type_val or 'Not yet selected'}")
+        snapshot_lines.append(f"Study Phase: {study_phase}")
+        snapshot_lines.append("Research Brief field status (read-only):")
+        for key, label in anchor_keys:
+            snapshot_lines.append(f"  {label}: [{field_statuses[key]}]")
+        if study_type_val == "synthetic_idi":
+            personas_required = 1
+        elif study_type_val == "synthetic_focus_group":
+            personas_required = 4
+        else:
+            personas_required = 0
+        snapshot_lines.append(f"Personas attached: {persona_count}")
+        if personas_required > 0:
+            snapshot_lines.append(f"Personas required: {personas_required} (Lisa fills gaps automatically)")
+        oc_block, oc_keys = _extract_optional_context(study_dict)
+        if oc_block:
+            snapshot_lines.append("")
+            snapshot_lines.append(oc_block)
+        study_snapshot = "\n".join(snapshot_lines)
+        status_summary = ",".join(f"{k}={v}" for k, v in field_statuses.items())
+        print(f"MARK_FIELD_STATUS study={study_id} phase={study_phase} {status_summary}", flush=True)
+        print(f"OPTIONAL_CONTEXT_INJECT_MARK study={study_id} included={'true' if oc_keys else 'false'} keys={','.join(oc_keys)}", flush=True)
+
+        system_prompt = (
+            "You are Mark, the Market Intelligence Copilot for Project Brainstorm.\n\n"
         "Project Brainstorm is an AI-native market research platform that helps users frame business problems "
         "and run disciplined, governed market research simulations (Synthetic Survey, Synthetic IDI, Synthetic Focus Group) "
         "to support real business decisions.\n\n"

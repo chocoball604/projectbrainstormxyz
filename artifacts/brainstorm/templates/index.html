@@ -714,15 +714,20 @@
                     }
                     window.markRevealChat = revealChat;
 
+                    var actionTags = {
+                        rewrite_problem: 'ACTION:REWRITE_PROBLEM',
+                        rewrite_decision: 'ACTION:REWRITE_DECISION',
+                        check_bias: 'ACTION:BIAS_CHECK'
+                    };
                     var actionPrompts = {
                         rewrite_problem: function(bp, ds) {
-                            return "Please rewrite my Business Problem so it describes an uncertainty (not a plan or solution). Keep it concise.\n\nMy current draft:\n\"" + (bp || "(empty)") + "\"";
+                            return "ACTION:REWRITE_PROBLEM\nPlease rewrite my Business Problem so it describes an uncertainty (not a plan or solution). Keep it concise.\n\nMy current draft:\n\"" + (bp || "(empty)") + "\"";
                         },
                         rewrite_decision: function(bp, ds) {
-                            return "Please rewrite my Decision This Study Will Support so it describes the decision context that is blocked by uncertainty (not a feature, design, or pricing call).\n\nMy current draft:\n\"" + (ds || "(empty)") + "\"";
+                            return "ACTION:REWRITE_DECISION\nPlease rewrite my Decision This Study Will Support so it describes the decision context that is blocked by uncertainty (not a feature, design, or pricing call).\n\nMy current draft:\n\"" + (ds || "(empty)") + "\"";
                         },
                         check_bias: function(bp, ds) {
-                            return "Please check my Business Problem and Decision for solution bias -- am I sneaking in a product, feature, or tactic instead of describing the uncertainty and the decision it should inform?\n\nBusiness Problem:\n\"" + (bp || "(empty)") + "\"\n\nDecision:\n\"" + (ds || "(empty)") + "\"";
+                            return "ACTION:BIAS_CHECK\nPlease check my Business Problem and Decision for solution bias -- am I sneaking in a product, feature, or tactic instead of describing the uncertainty and the decision it should inform?\n\nBusiness Problem:\n\"" + (bp || "(empty)") + "\"\n\nDecision:\n\"" + (ds || "(empty)") + "\"";
                         }
                     };
 

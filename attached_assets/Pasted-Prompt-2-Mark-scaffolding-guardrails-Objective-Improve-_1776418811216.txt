@@ -1,0 +1,83 @@
+Prompt 2 — Mark scaffolding + guardrails
+
+Objective
+Improve Mark’s usefulness during Step 1 (Business Problem + Decision) by adding a Step 1 only framing mode (scaffolding + structured replies + guardrails), without changing the existing Mark orchestration scaffolding used elsewhere in the app and without broad refactors.
+This prompt must not weaken or override the existing Mark guardrails / parsing / “Proposed updates” structure used for other anchors
+This prompt assumes Prompt 1 has been implemented: Step 1 fields are editable, support draft autosave + save checkpoint, and Mark chat is delayed until the user engages.
+
+Where
+Applies only to the Study Setup/Draft Study page during Step 2 framing (Business Problem _ Decision). This is the area that previously showed “Mark Discovery” and “Mark – Research Guide”.
+Important: Mark’s behaviour should be different in Step 1 than in later parts of the study flow. Requirement: This routing must not affect Mark behavior in later steps or other pages.
+
+Scope (in)
+1.	Context awareness: (Step 1 state must be passed to Mark)
+•	When Mark responds during Step 1, he must receive the current field drafts and saved checkpoints for:
+-	Business Problem (draft + saved)
+-	Decision to Support (draft + saved)
+•	Rules:
+-	Prefer draft text if present
+-	If draft differs from saved, Mark may briefly reference both (one line max), but rewrite should be based on draft
+-	Mark must also receive a small boolean flag indicating whether each field is currently “weak” according to the heuristics implemented in Prompt 1 (e.g., short length, solution keywords, missing uncertainty markers)
+•	Implementation constraint:
+-	Use existing prompt-file mechanism rather than global refactors (the Mark worker supports a prompt_file input)
+2.	Constrained response format for Step 1: When Mark is used in this Step, his reply must be short and structured:
+•	“Rewrite (Problem): …” (one sentence)
+•	“Rewrite (Decision): …” (one sentence)
+•	“Bias check: …” (one line)
+•	“Next step: …” (one line, either “save checkpoint” or “revise again”)
+No additional paragraphs.
+Optional coaching line (only when weak inputs are detected):
+•	Add one extra line at the end prefixed “Tip:” (see Tooltip Integration below)
+3.	Quick Action behavior (no drift): 
+Prompt 1 adds Quick Actions: Rewrite Problem / Rewrite Decision / Check for solution bias.
+When a quick action is used:
+-	Mark must respond only to that action
+-	Mark must not introduce new topics, study types, or additional anchors
+-	Mark must not ask multiple questions
+Required: Quick Action messages must carry a deterministic “action tag” so Mark can identify intent (e.g., a prefix like ACTION:REWRITE_PROBLEM, ACTION:REWRITE_DECISION, ACTION:BIAS_CHECK).
+The agent should implement this using whatever lightweight convention already fits your chat plumbing; do not introduce complex routing.
+4.	Tooltip integration (your exact preferred wording + rotation rules): 
+If Mark detects weak inputs (either via heuristics flag passed in, or by simple self-check, he should surface a one-sentence “Tip:” line:
+•	Default Tip (must be first shown):
+ “Rewrite in one sentence: ‘We don’t yet understand ___, so we can’t confidently decide ___.’”
+•	Alternates (rotate only if weakness repeats):
+-	Alternate A (your approved #3):
+	Tip: “Good inputs name the unknowns: who, where, and what trade‑offs --avoid features, pricing, or ‘how to sell’ language for now.”
+-	Alternate B (your approved #1):
+	Tip: “Try restating your Business Problem as an uncertainty (what you don’t yet understand), not a solution or task.”
+Rotation rule:
+-	Use Default first
+-	Only switch to Alternate A then Alternate B if the user repeats the same weakness (e.g., saves another weak version or triggers heuristics twice in a row)
+5.	Guardrails (hard constraints for Step 1):
+During Step 1, Mark must not:
+-	suggest pricing, launch plans, feature roadmaps, campaign tactics, or other execution solutions
+-	recommend a study type until Step 1 quality is adequate
+Study type recommendation constraint:
+-	Mark may say “We’re not ready to choose a method yet -- please tighten the framing” if Step 1 fields are weak
+-	Once both fields pass the minimum heuristic threshold, Mark may say: “Now we can choose a study type” but should not prescribe one unless asked
+Important additional guardrail:
+Mark must not output any “Proposed updates:” blocks or schema-style anchor update blocks during Step 1. This avoids triggering downstream parsing logic intended for later anchors and keeps Step 1 clean. (You already have robust parsing/fallback logic for structured anchor updates in other parts of the system -- Step 1 shouldn’t use it.)
+
+Scope (out)
+•  Do not modify persona generation logic 
+•  Do not modify Lisa or Ben logic 
+•  Do not change QA logic 
+•  Do not refactor unrelated chat features outside Step 1 
+•  Do not change database schema unless absolutely required
+Definition of done
+•  Mark’s Step 1 replies are consistently short, structured, and on-topic 
+•  Quick Actions produce deterministic, minimal drift responses 
+•  Weak inputs trigger the default “Tip:” line, with correct rotation logic on repetition 
+•  Mark does not recommend study type until Step 1 framing is sufficient 
+•  Mark does not emit “Proposed updates” blocks during Step 1
+
+How to test
+1.	Enter solution-biased Business Problem: “We need to launch feature X.”
+-	Mark returns the 4-line structured reply + Default Tip
+2.	Click Rewrite Problem quick action
+-	Mark returns only the rewrite for the problem (still in the structured format)
+3.	Click Check for solution bias quick action
+-	Mark returns bias check + next step only (no drift)
+4.	Enter vague input: “Need to understand customers.”
+-	Mark triggers Default Tip; if repeated again, rotates to Alternate A then Alternate B
+5.	Confirm Mark does not output “Proposed updates:” during Step 1 even when asked random questions
