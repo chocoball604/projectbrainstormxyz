@@ -7946,7 +7946,8 @@ def send_chat(study_id):
         bp_display = bp_value if bp_value else "(empty)"
         ds_display = ds_value if ds_value else "(empty)"
 
-        first_line = (message_text or "").lstrip().split("\n", 1)[0].strip().upper()
+        raw_message = message_text or ""
+        first_line = raw_message.lstrip().split("\n", 1)[0].strip().upper()
         if first_line.startswith("ACTION:REWRITE_PROBLEM"):
             step1_action = "rewrite_problem"
         elif first_line.startswith("ACTION:REWRITE_DECISION"):
@@ -7965,6 +7966,16 @@ def send_chat(study_id):
             tip_when_weak = ds_weak
         else:
             tip_when_weak = any_weak
+
+        rewrite_requested = False
+        if step1_action == "bias_check":
+            body_after_tag = raw_message.split("\n", 1)[1] if "\n" in raw_message else ""
+            if _re_mod.search(
+                r"\b(rewrite|revise|fix|improve|tighten|sharpen|reword|reframe)\b",
+                body_after_tag,
+                _re_mod.IGNORECASE,
+            ):
+                rewrite_requested = True
 
         if step1_action == "rewrite_problem":
             format_block = (
@@ -8017,23 +8028,37 @@ def send_chat(study_id):
                 "RESPONSE FORMAT (MANDATORY -- intent: BIAS_CHECK only):\n"
                 "Output EXACTLY these lines, nothing before or after:\n"
                 "Bias check: <one line per the bias-check rule above>\n"
-                f"Next step: {next_step_value}\n"
+                "Next step: <Save checkpoint OR Revise again -- per the "
+                "BIAS_CHECK PRECEDENCE rule below>\n"
+                "Tip: <optional, only when allowed under the precedence rule>\n"
+                "\nBIAS_CHECK PRECEDENCE RULE (HARD -- this overrides the "
+                "weakness flags for this action only):\n"
+                "- BIAS_CHECK is an EVALUATIVE audit, not a generative rewrite. "
+                "The Bias check VERDICT drives Next step and Tip. Weakness "
+                "flags do NOT override the verdict.\n"
+                "- If you conclude there is NO major solution bias (a 'pass'), "
+                "then: Next step MUST be \"Save checkpoint\" AND you MUST OMIT "
+                "the Tip line, even if bp_weak or ds_weak is true.\n"
+                "- Only if you explicitly identify a concrete solution / "
+                "execution bias (you name a feature, tactic, pricing, launch, "
+                "campaign, roadmap, or other intervention in the user's draft), "
+                "then: Next step MUST be \"Revise again\" AND you MAY include "
+                "the Tip line VERBATIM as given above.\n"
+                "- Do NOT suggest revision unless you actually identify a "
+                "concrete bias issue. Do NOT recommend a revision based on "
+                "weakness alone in this mode.\n"
                 + (
-                    f"Tip: {chosen_tip}\n"
-                    if tip_when_weak
+                    f"- The user explicitly asked for a rewrite in their "
+                    f"message body, so the Tip line is also permitted on a "
+                    f"pass verdict for this turn. Tip text (if used): "
+                    f"\"{chosen_tip}\"\n"
+                    if rewrite_requested
                     else ""
                 )
                 + "\nFORBIDDEN in this mode: any 'Rewrite (Problem)' or "
                 "'Rewrite (Decision)' line, any extra paragraphs, questions, "
                 "or commentary. Do NOT emit '(no change)', 'N/A', or any "
                 "placeholder line.\n"
-                f"The 'Next step:' line MUST read exactly \"{next_step_value}\" "
-                "for this turn -- do not change it.\n"
-                + (
-                    "Because neither field is weak, OMIT the Tip line entirely.\n"
-                    if not tip_when_weak
-                    else "Use the Tip line text VERBATIM as given above.\n"
-                )
             )
         else:
             format_block = (
@@ -8287,6 +8312,7 @@ def send_chat(study_id):
                 "action": step1_action,
                 "any_weak": bool(any_weak),
                 "tip_when_weak": bool(tip_when_weak),
+                "rewrite_requested": bool(rewrite_requested),
                 "next_step": next_step_value,
                 "tip": chosen_tip,
             }

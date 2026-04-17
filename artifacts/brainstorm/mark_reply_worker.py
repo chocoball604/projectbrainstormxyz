@@ -128,6 +128,69 @@ def _line_kind(line):
     return None
 
 
+_BIAS_PASS_PHRASES = (
+    "no major solution bias",
+    "no solution bias",
+    "no major bias",
+    "no significant bias",
+    "no notable bias",
+    "no obvious bias",
+    "no apparent bias",
+    "not solution-leaning",
+    "not solution leaning",
+    "already framed as an uncertainty",
+    "already framed as uncertainty",
+    "framed as an uncertainty",
+    "passes",
+    "no bias detected",
+    "no major issues",
+)
+
+_BIAS_FAIL_KEYWORDS = (
+    "feature",
+    "tactic",
+    "tactical",
+    "pricing",
+    "launch",
+    "campaign",
+    "roadmap",
+    "intervention",
+    "go-to-market",
+    "go to market",
+    "implies an intervention",
+    "implies a solution",
+    "sneaks in",
+    "sneaks-in",
+    "solution-leaning",
+    "solution leaning",
+    "biased toward",
+    "biased towards",
+    "prescribes",
+    "names a solution",
+)
+
+
+def classify_bias_verdict(bias_line, any_weak):
+    """Classify Mark's `Bias check:` line as 'pass' or 'fail'.
+
+    Default to 'pass' to avoid false alarms; only fall back to 'fail' on a
+    genuinely ambiguous line when at least one weakness flag is set.
+    """
+    if not bias_line:
+        return "fail" if any_weak else "pass"
+    body = bias_line.split(":", 1)[1].lower() if ":" in bias_line else bias_line.lower()
+    body = body.strip()
+    if not body:
+        return "fail" if any_weak else "pass"
+    for phrase in _BIAS_PASS_PHRASES:
+        if phrase in body:
+            return "pass"
+    for kw in _BIAS_FAIL_KEYWORDS:
+        if kw in body:
+            return "fail"
+    return "fail" if any_weak else "pass"
+
+
 def enforce_step1_format(reply, enforce):
     if not reply or not enforce:
         return reply
@@ -139,6 +202,7 @@ def enforce_step1_format(reply, enforce):
         tip_when_weak = any_weak
     next_step_value = enforce.get("next_step") or "Revise again"
     tip_value = enforce.get("tip") or ""
+    rewrite_requested = bool(enforce.get("rewrite_requested"))
 
     raw_lines = [ln.rstrip() for ln in reply.replace("\r\n", "\n").split("\n")]
     parsed = {}
@@ -151,6 +215,7 @@ def enforce_step1_format(reply, enforce):
         if kind not in parsed:
             parsed[kind] = ln.strip()
 
+    bias_verdict = None
     out = []
     if action == "rewrite_problem":
         if "rewrite_problem" in parsed:
@@ -161,6 +226,11 @@ def enforce_step1_format(reply, enforce):
     elif action == "bias_check":
         if "bias_check" in parsed:
             out.append(parsed["bias_check"])
+        bias_verdict = classify_bias_verdict(parsed.get("bias_check"), any_weak)
+        if bias_verdict == "pass":
+            next_step_value = "Save checkpoint"
+        else:
+            next_step_value = "Revise again"
         out.append(f"Next step: {next_step_value}")
     else:
         if "rewrite_problem" in parsed:
@@ -171,8 +241,20 @@ def enforce_step1_format(reply, enforce):
             out.append(parsed["bias_check"])
         out.append(f"Next step: {next_step_value}")
 
-    if tip_when_weak and tip_value:
-        out.append(f"Tip: {tip_value}")
+    if action == "bias_check":
+        allow_tip = (bias_verdict == "fail") or rewrite_requested
+        if allow_tip and tip_value:
+            out.append(f"Tip: {tip_value}")
+        print(
+            f"WORKER_BIAS_VERDICT verdict={bias_verdict} "
+            f"rewrite_requested={rewrite_requested} "
+            f"tip_emitted={'true' if (allow_tip and tip_value) else 'false'} "
+            f"next_step={next_step_value!r}",
+            flush=True,
+        )
+    else:
+        if tip_when_weak and tip_value:
+            out.append(f"Tip: {tip_value}")
 
     return "\n".join(out).strip()
 
