@@ -5022,19 +5022,22 @@ def save_discovery(study_id):
 
     field = request.form.get("field", "").strip()
     value = (request.form.get("value") or "").strip()
+    mode = (request.form.get("mode") or "checkpoint").strip().lower()
+    if mode not in ("autosave", "checkpoint"):
+        mode = "checkpoint"
 
     if field not in ("business_problem", "decision_to_support"):
         if _is_ajax(request):
             return jsonify({"ok": False, "error": "Invalid discovery field."}), 400
         return render_error("Invalid discovery field.")
-    if not value:
+    if mode == "checkpoint" and not value:
         if _is_ajax(request):
             return jsonify({"ok": False, "error": "Value cannot be empty."}), 400
         return render_error("Value cannot be empty.")
-    if len(value) > 300:
+    if len(value) > 2000:
         if _is_ajax(request):
-            return jsonify({"ok": False, "error": "Value must be 300 characters or fewer."}), 400
-        return render_error("Value must be 300 characters or fewer.")
+            return jsonify({"ok": False, "error": "Value must be 2000 characters or fewer."}), 400
+        return render_error("Value must be 2000 characters or fewer.")
 
     conn = get_db()
     study = conn.execute(
@@ -5063,8 +5066,10 @@ def save_discovery(study_id):
                 qa_failures = json.loads(study_dict["qa_notes"])
             except (json.JSONDecodeError, TypeError):
                 qa_failures = []
+        saved_at = datetime.now(timezone.utc).strftime("%H:%M")
         resp = {
-            "ok": True, "field": field, "value": value,
+            "ok": True, "field": field, "value": value, "mode": mode,
+            "saved_at": saved_at,
             "precheck": precheck,
             "qa_status": qa_status, "qa_failures": qa_failures,
         }

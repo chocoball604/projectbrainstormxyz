@@ -623,12 +623,25 @@
 
         <div style="display: flex; gap: 20px; align-items: flex-start;">
 
-        <div id="mark-chat-tile" style="width: 340px; flex-shrink: 0; position: sticky; top: 80px;">
+        {% set is_discovery_stage = not configure_study.study_type %}
+        {% set has_existing_chat = chat_messages|selectattr('sender', 'equalto', 'mark')|list|length > 0 %}
+        <div id="mark-chat-tile" style="width: 340px; flex-shrink: 0; position: sticky; top: 80px;" data-discovery="{{ '1' if is_discovery_stage else '0' }}" data-has-chat="{{ '1' if has_existing_chat else '0' }}">
             <div class="card" style="padding: 16px;">
+                {% if is_discovery_stage %}
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px; border-bottom: 2px solid #5C7E8F; padding-bottom: 8px;">Mark &ndash; Problem Framing Helper</h3>
+                <p style="font-size: 12px; color: #555; margin: 0 0 12px;">Write a first draft on the right. Use Mark to rewrite and refine it.</p>
+
+                <div id="mark-quick-actions" style="display: {{ 'flex' if has_existing_chat else 'none' }}; flex-direction: column; gap: 6px; margin-bottom: 12px;">
+                    <button type="button" class="mark-quick-action" data-action="rewrite_problem" style="padding: 8px 10px; font-size: 12px; border: 1px solid #5C7E8F; background: #fff; color: #5C7E8F; border-radius: 6px; cursor: pointer; text-align: left;">Rewrite Problem</button>
+                    <button type="button" class="mark-quick-action" data-action="rewrite_decision" style="padding: 8px 10px; font-size: 12px; border: 1px solid #5C7E8F; background: #fff; color: #5C7E8F; border-radius: 6px; cursor: pointer; text-align: left;">Rewrite Decision</button>
+                    <button type="button" class="mark-quick-action" data-action="check_bias" style="padding: 8px 10px; font-size: 12px; border: 1px solid #5C7E8F; background: #fff; color: #5C7E8F; border-radius: 6px; cursor: pointer; text-align: left;">Check for solution bias</button>
+                </div>
+                {% else %}
                 <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px; border-bottom: 2px solid #5C7E8F; padding-bottom: 8px;">Mark &mdash; Research Guide</h3>
                 <p style="font-size: 12px; color: #888; margin: 0 0 12px;">Mark can help you decide what to fill in next.</p>
+                {% endif %}
 
-                <div id="chat-thread" style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; max-height: 800px; overflow-y: auto; margin-bottom: 12px;">
+                <div id="chat-thread" style="display: {{ 'block' if has_existing_chat or not is_discovery_stage else 'none' }}; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; max-height: 800px; overflow-y: auto; margin-bottom: 12px;">
                     {% if chat_messages %}
                         {% for msg in chat_messages %}
                         <div style="margin-bottom: 12px; display: flex; flex-direction: column; align-items: {{ 'flex-end' if msg.sender == 'user' else 'flex-start' }};">
@@ -676,7 +689,7 @@
                     {% endif %}
                 </div>
 
-                <form id="chat-form" style="display: flex; gap: 8px;">
+                <form id="chat-form" style="display: {{ 'flex' if has_existing_chat or not is_discovery_stage else 'none' }}; gap: 8px;">
                     <textarea id="chat-input" name="message_text" required placeholder="Type your message to Mark..." rows="1" style="flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; resize: none; max-height: 66px; overflow-y: auto; line-height: 1.4; font-family: inherit;"></textarea>
                     <button type="submit" class="btn btn-primary" id="chat-send-btn" style="white-space: nowrap;">Send</button>
                 </form>
@@ -689,7 +702,47 @@
                     var chatForm = document.getElementById('chat-form');
                     var chatInput = document.getElementById('chat-input');
                     var sendBtn = document.getElementById('chat-send-btn');
+                    var quickActions = document.getElementById('mark-quick-actions');
+                    var markTile = document.getElementById('mark-chat-tile');
+                    var isDiscovery = markTile && markTile.getAttribute('data-discovery') === '1';
                     var polling = false;
+
+                    function revealChat() {
+                        if (chatThread && chatThread.style.display === 'none') chatThread.style.display = 'block';
+                        if (chatForm && chatForm.style.display === 'none') chatForm.style.display = 'flex';
+                        if (quickActions && quickActions.style.display === 'none') quickActions.style.display = 'flex';
+                    }
+                    window.markRevealChat = revealChat;
+
+                    var actionPrompts = {
+                        rewrite_problem: function(bp, ds) {
+                            return "Please rewrite my Business Problem so it describes an uncertainty (not a plan or solution). Keep it concise.\n\nMy current draft:\n\"" + (bp || "(empty)") + "\"";
+                        },
+                        rewrite_decision: function(bp, ds) {
+                            return "Please rewrite my Decision This Study Will Support so it describes the decision context that is blocked by uncertainty (not a feature, design, or pricing call).\n\nMy current draft:\n\"" + (ds || "(empty)") + "\"";
+                        },
+                        check_bias: function(bp, ds) {
+                            return "Please check my Business Problem and Decision for solution bias -- am I sneaking in a product, feature, or tactic instead of describing the uncertainty and the decision it should inform?\n\nBusiness Problem:\n\"" + (bp || "(empty)") + "\"\n\nDecision:\n\"" + (ds || "(empty)") + "\"";
+                        }
+                    };
+
+                    if (quickActions) {
+                        quickActions.querySelectorAll('.mark-quick-action').forEach(function(btn) {
+                            btn.addEventListener('click', function() {
+                                revealChat();
+                                var bpEl = document.getElementById('discovery-input-business_problem');
+                                var dsEl = document.getElementById('discovery-input-decision_to_support');
+                                var bp = bpEl ? bpEl.value.trim() : '';
+                                var ds = dsEl ? dsEl.value.trim() : '';
+                                var fn = actionPrompts[btn.getAttribute('data-action')];
+                                if (!fn) return;
+                                chatInput.value = fn(bp, ds);
+                                chatInput.style.height = 'auto';
+                                chatInput.style.height = Math.min(chatInput.scrollHeight, 66) + 'px';
+                                chatInput.focus();
+                            });
+                        });
+                    }
 
                     function makeBubble(sender, text) {
                         var wrap = document.createElement('div');
@@ -815,50 +868,216 @@
             {% set bp_saved = configure_study.business_problem and configure_study.business_problem|trim|length > 0 %}
             {% set ds_saved = configure_study.decision_to_support and configure_study.decision_to_support|trim|length > 0 %}
 
-            <div style="background: #f0f4ff; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #d0d9f5;">
-                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px;">Mark Discovery</h3>
-                <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
-                    Answer two quick questions so Mark can recommend the best study type.
+            <div id="discovery-step1" style="background: #f0f4ff; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #d0d9f5;">
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 6px;">Step 1 &mdash; Define the Problem (Before choosing a method)</h3>
+                <p style="font-size: 13px; color: #555; margin: 0 0 14px; line-height: 1.5;">
+                    These two fields shape everything that follows.<br>
+                    Start with the uncertainty, then state the decision it should inform.
                 </p>
 
-                <div id="discovery-slot-business_problem" style="margin-bottom: 16px;">
-                    <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">
-                        1. Business Problem
-                        {% if bp_saved %}<span style="color: #27ae60; font-size: 12px; margin-left: 6px;">Saved</span>{% endif %}
-                    </label>
-                    {% if bp_saved %}
-                    <div style="background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #333;">
-                        {{ configure_study.business_problem }}
-                    </div>
-                    {% else %}
-                    <form class="discovery-form" action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;" data-field="business_problem">
-                        <input type="hidden" name="token" value="{{ token }}">
-                        <input type="hidden" name="field" value="business_problem">
-                        <input type="text" name="value" required maxlength="300" placeholder="Describe the business problem in one sentence" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
-                        <button type="submit" class="btn btn-primary btn-small">Save</button>
-                    </form>
-                    {% endif %}
+                <div style="background: #fff; border: 1px solid #d8e0f0; border-radius: 6px; padding: 12px 14px; margin-bottom: 18px;">
+                    <div style="font-weight: 600; font-size: 13px; color: #1a1a2e; margin-bottom: 6px;">What good looks like</div>
+                    <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #444; line-height: 1.6;">
+                        <li><strong>Problem:</strong> an uncertainty you don&rsquo;t yet understand</li>
+                        <li><strong>Decision:</strong> a choice blocked by that uncertainty</li>
+                        <li>You can revise either field.</li>
+                    </ul>
                 </div>
 
-                <div id="discovery-slot-decision_to_support" style="margin-bottom: 4px;">
-                    <label style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">
-                        2. Decision to Support
-                        {% if ds_saved %}<span style="color: #27ae60; font-size: 12px; margin-left: 6px;">Saved</span>{% endif %}
+                <div id="discovery-slot-business_problem" class="discovery-field" data-field="business_problem" style="margin-bottom: 18px;">
+                    <label for="discovery-input-business_problem" style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">
+                        1. Business Problem or Opportunity
                     </label>
-                    {% if ds_saved %}
-                    <div style="background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #333;">
-                        {{ configure_study.decision_to_support }}
+                    <div style="font-size: 12px; color: #555; margin-bottom: 2px;">Describe what is unclear or risky &mdash; not what you plan to do.</div>
+                    <div style="font-size: 12px; color: #888; font-style: italic; margin-bottom: 8px;">Avoid features, pricing, campaigns, or tactics here.</div>
+                    <textarea id="discovery-input-business_problem" data-field="business_problem" rows="3" maxlength="2000" placeholder="Describe the uncertainty&hellip;" style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; font-family: inherit; line-height: 1.5; resize: vertical;">{{ configure_study.business_problem or '' }}</textarea>
+                    <div class="discovery-hint-slot" data-field="business_problem" style="font-size: 12px; color: #c87b00; margin-top: 4px; min-height: 0;"></div>
+                    <div style="display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-primary btn-small discovery-checkpoint-btn" data-field="business_problem">Save checkpoint</button>
+                        <button type="button" class="discovery-examples-toggle" data-target="discovery-examples-business_problem" style="background: none; border: none; color: #5C7E8F; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline;">[see examples]</button>
+                        <span class="discovery-status" data-field="business_problem" style="font-size: 12px; color: #777; margin-left: auto;"></span>
                     </div>
-                    {% else %}
-                    <form class="discovery-form" action="/save-discovery/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px;" data-field="decision_to_support">
-                        <input type="hidden" name="token" value="{{ token }}">
-                        <input type="hidden" name="field" value="decision_to_support">
-                        <input type="text" name="value" required maxlength="300" placeholder="What decision will this research support?" style="flex: 1; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
-                        <button type="submit" class="btn btn-primary btn-small">Save</button>
-                    </form>
-                    {% endif %}
+                    <div id="discovery-examples-business_problem" class="discovery-examples" style="display: none; margin-top: 8px; padding: 10px 12px; background: #f7f9ff; border: 1px dashed #c8d3ee; border-radius: 6px; font-size: 12px; color: #444; line-height: 1.6;">
+                        <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Good examples</div>
+                        <ul style="margin: 0; padding-left: 18px;">
+                            <li>&ldquo;It&rsquo;s unclear whether [observed behaviour or signal] reflects [meaning A] or [meaning B].&rdquo;</li>
+                            <li>&ldquo;We&rsquo;re seeing high trial rates but low repeat usage, but don&rsquo;t know what users find missing or disappointing.&rdquo;</li>
+                            <li>&ldquo;We don&rsquo;t know how people think about personal finance tools outside of formal banking products.&rdquo;</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="discovery-slot-decision_to_support" class="discovery-field" data-field="decision_to_support" style="margin-bottom: 4px;">
+                    <label for="discovery-input-decision_to_support" style="font-weight: 600; font-size: 14px; display: block; margin-bottom: 4px;">
+                        2. Decision This Study Will Support
+                    </label>
+                    <div style="font-size: 12px; color: #555; margin-bottom: 2px;">What choice is currently blocked by uncertainty?</div>
+                    <div style="font-size: 12px; color: #888; font-style: italic; margin-bottom: 8px;">Avoid feature/design/pricing decisions &mdash; describe the decision context.</div>
+                    <textarea id="discovery-input-decision_to_support" data-field="decision_to_support" rows="3" maxlength="2000" placeholder="Describe the decision context&hellip;" style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; font-family: inherit; line-height: 1.5; resize: vertical;">{{ configure_study.decision_to_support or '' }}</textarea>
+                    <div class="discovery-hint-slot" data-field="decision_to_support" style="font-size: 12px; color: #c87b00; margin-top: 4px; min-height: 0;"></div>
+                    <div style="display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-primary btn-small discovery-checkpoint-btn" data-field="decision_to_support">Save checkpoint</button>
+                        <button type="button" class="discovery-examples-toggle" data-target="discovery-examples-decision_to_support" style="background: none; border: none; color: #5C7E8F; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline;">[see examples]</button>
+                        <span class="discovery-status" data-field="decision_to_support" style="font-size: 12px; color: #777; margin-left: auto;"></span>
+                    </div>
+                    <div id="discovery-examples-decision_to_support" class="discovery-examples" style="display: none; margin-top: 8px; padding: 10px 12px; background: #f7f9ff; border: 1px dashed #c8d3ee; border-radius: 6px; font-size: 12px; color: #444; line-height: 1.6;">
+                        <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Good examples</div>
+                        <ul style="margin: 0; padding-left: 18px;">
+                            <li>&ldquo;Whether to invest in deeper exploration of this opportunity or pause further work until assumptions are clearer.&rdquo; (ie, Go/No-Go problems)</li>
+                            <li>&ldquo;Whether our current direction is promising enough to pursue, or if we should redirect attention to alternative approaches.&rdquo;</li>
+                            <li>&ldquo;How to narrow down the set of plausible directions before committing resources to one.&rdquo;</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
+
+            <script>
+            (function() {
+                var studyId = {{ configure_study.id }};
+                var token = '{{ token }}';
+                var fields = ['business_problem', 'decision_to_support'];
+                var debounceTimers = {};
+                var lastSentValue = {};
+                var initialValue = {};
+                fields.forEach(function(f) {
+                    var el = document.getElementById('discovery-input-' + f);
+                    initialValue[f] = el ? el.value : '';
+                    lastSentValue[f] = initialValue[f];
+                    if (initialValue[f] && initialValue[f].length > 0) {
+                        var s = document.querySelector('.discovery-status[data-field="' + f + '"]');
+                        if (s) { s.textContent = 'Saved \u2713'; s.style.color = '#27ae60'; }
+                    }
+                });
+
+                document.querySelectorAll('.discovery-examples-toggle').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var target = document.getElementById(btn.getAttribute('data-target'));
+                        if (!target) return;
+                        var open = target.style.display !== 'none';
+                        target.style.display = open ? 'none' : 'block';
+                        btn.textContent = open ? '[see examples]' : '[hide examples]';
+                    });
+                });
+
+                function setStatus(field, text, color) {
+                    var el = document.querySelector('.discovery-status[data-field="' + field + '"]');
+                    if (!el) return;
+                    el.textContent = text;
+                    el.style.color = color || '#777';
+                }
+
+                function updateRecommendation(rec) {
+                    var slot = document.getElementById('mark-recommendation-slot');
+                    if (!slot || !rec) return;
+                    var sid = rec.study_id;
+                    var html = '<div style="background:#e8f5e9;border-radius:8px;padding:20px;margin-bottom:20px;border:1px solid #c8e6c9;">' +
+                        '<h3 style="font-size:16px;color:#1a1a2e;margin:0 0 8px;">Mark\'s Recommendation</h3>' +
+                        '<p style="font-size:13px;color:#555;margin:0 0 16px;">Based on your inputs, Mark recommends: <strong>' + escapeHtml(rec.label) + '</strong></p>' +
+                        '<p style="font-size:12px;color:#777;margin:0 0 16px;">' + escapeHtml(rec.reason) + '</p>' +
+                        '<p style="font-size:13px;color:#555;margin:0 0 12px;font-weight:600;">Confirm the study type:</p>' +
+                        '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
+                            recBtn(sid, 'synthetic_survey', 'Use Survey', rec.type) +
+                            recBtn(sid, 'synthetic_idi', 'Use IDI', rec.type) +
+                            recBtn(sid, 'synthetic_focus_group', 'Use Focus Group', rec.type) +
+                        '</div></div>';
+                    slot.innerHTML = html;
+                }
+
+                function recBtn(sid, type, label, recType) {
+                    var cls = (type === recType) ? 'btn-success' : 'btn-secondary';
+                    var suffix = (type === recType) ? ' (recommended)' : '';
+                    return '<form action="/set-mark-recommendation/' + sid + '" method="POST" style="display:inline;">' +
+                        '<input type="hidden" name="token" value="' + escapeHtml(token) + '">' +
+                        '<input type="hidden" name="study_type" value="' + type + '">' +
+                        '<button type="submit" class="btn ' + cls + '">' + label + suffix + '</button>' +
+                        '</form>';
+                }
+
+                function escapeHtml(s) {
+                    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+                        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+                    });
+                }
+
+                function send(field, value, mode) {
+                    var fd = new FormData();
+                    fd.append('token', token);
+                    fd.append('field', field);
+                    fd.append('value', value);
+                    fd.append('mode', mode);
+                    setStatus(field, mode === 'autosave' ? 'Saving draft\u2026' : 'Saving\u2026', '#777');
+                    return fetch('/save-discovery/' + studyId, {
+                        method: 'POST',
+                        body: fd,
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    }).then(function(r) { return r.json(); }).then(function(data) {
+                        if (!data || !data.ok) {
+                            setStatus(field, 'Save failed: ' + ((data && data.error) || 'unknown'), '#c0392b');
+                            return;
+                        }
+                        lastSentValue[field] = value;
+                        if (data.mode === 'autosave') {
+                            setStatus(field, 'Draft autosaved', '#777');
+                        } else {
+                            setStatus(field, 'Saved \u2713 ' + (data.saved_at || ''), '#27ae60');
+                        }
+                        if (data.mark_recommendation) {
+                            updateRecommendation(data.mark_recommendation);
+                        } else {
+                            var slot = document.getElementById('mark-recommendation-slot');
+                            if (slot) slot.innerHTML = '';
+                        }
+                    }).catch(function() {
+                        setStatus(field, 'Save failed (network)', '#c0392b');
+                    });
+                }
+
+                function scheduleAutosave(field) {
+                    if (debounceTimers[field]) clearTimeout(debounceTimers[field]);
+                    debounceTimers[field] = setTimeout(function() {
+                        var el = document.getElementById('discovery-input-' + field);
+                        if (!el) return;
+                        var v = el.value;
+                        if (v === lastSentValue[field]) return;
+                        send(field, v, 'autosave');
+                        if (window.markRevealChat) window.markRevealChat();
+                    }, 1500);
+                }
+
+                fields.forEach(function(field) {
+                    var el = document.getElementById('discovery-input-' + field);
+                    if (!el) return;
+                    el.addEventListener('input', function() {
+                        scheduleAutosave(field);
+                        // Reveal chat once user has typed >=20 chars in either field
+                        var totalLen = 0;
+                        fields.forEach(function(f) {
+                            var x = document.getElementById('discovery-input-' + f);
+                            if (x) totalLen = Math.max(totalLen, x.value.length);
+                        });
+                        if (totalLen >= 20 && window.markRevealChat) window.markRevealChat();
+                    });
+                    el.addEventListener('blur', function() {
+                        if (debounceTimers[field]) clearTimeout(debounceTimers[field]);
+                        var v = el.value;
+                        if (v === lastSentValue[field]) return;
+                        send(field, v, 'autosave');
+                        if (window.markRevealChat) window.markRevealChat();
+                    });
+                });
+
+                document.querySelectorAll('.discovery-checkpoint-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var field = btn.getAttribute('data-field');
+                        var el = document.getElementById('discovery-input-' + field);
+                        if (!el) return;
+                        if (debounceTimers[field]) clearTimeout(debounceTimers[field]);
+                        send(field, el.value, 'checkpoint');
+                        if (window.markRevealChat) window.markRevealChat();
+                    });
+                });
+            })();
+            </script>
 
             <div id="mark-recommendation-slot">
             {% if bp_saved and ds_saved %}
