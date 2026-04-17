@@ -1,16 +1,87 @@
-"""Step 1 telemetry table init + writer (Prompt 3).
+"""Step 1 telemetry table init + writer (Prompts 3 & 4).
 
-Telemetry events are append-only. The writer opens its own short-lived
-sqlite connection so it never holds the DB open across LLM / HTTP calls.
+Prompt 3 defines the *semantics* (event types, ``pattern_id`` /
+``template_id`` values, what counts as a rewrite). Prompt 4 is mechanics
+only: this module is the storage + writer layer that records those
+signals in a counts-only, append-only, non-adaptive manner.
 
-Schema column ``created_at`` is the canonical timestamp. Older databases
-with ``occurred_at`` are migrated in-place by ``init_step1_telemetry``.
+Non-blocking contract (Prompt 4 §4)
+-----------------------------------
+- Each call to ``record_step1_event`` opens a short-lived sqlite
+  connection, executes a single INSERT, commits, and closes. No LLM,
+  HTTP, or email call is ever made while the connection is open.
+- The writer never raises out into the caller. All exceptions are
+  caught and logged with a ``STEP1_TEL_*`` prefix to stderr.
+- A soft latency log (``STEP1_TEL_SLOW_WRITE``) is emitted when a
+  single write exceeds ``STEP1_TELEMETRY_SLOW_MS`` (default 250 ms).
+  This is observational only — there are no retries, fallbacks, or
+  control-flow effects.
+- Callers must ``conn.commit()`` on their own request connection
+  *before* calling ``record_step1_event``; otherwise this writer's
+  second connection waits on the busy_timeout. (Regression test:
+  ``test_step1_library.TelemetryLockOrderingTests``.)
+
+Kill switch (Prompt 4 §3)
+-------------------------
+- ``STEP1_TELEMETRY_ENABLED`` env var (default ``"1"``). When set to
+  ``"0"``, ``"false"``, ``"no"``, or ``"off"`` (case-insensitive),
+  ``record_step1_event`` returns immediately without opening the DB
+  and ``summarize_recent`` returns its zero-state dict. The schema is
+  still created on startup so flipping the switch back on is seamless.
+- ``count_session_quick_actions`` continues to read regardless: a
+  disabled-then-re-enabled run must not double-count rewrites that
+  were already persisted in earlier sessions.
+
+Session scope (Prompt 4 §2 — fallback in use)
+---------------------------------------------
+- We use the **per-study, per-page-load** fallback that Prompt 4 §2
+  explicitly permits: ``step1_session_id`` is generated as ``uuid4().hex``
+  at study creation in ``app.py`` and threaded through every form
+  POST. A future upgrade to a true "first-edit-of-BP-or-DS to
+  Save-checkpoint OR navigate-away" lifecycle would require a
+  ``/step1-session/start|end`` endpoint pair plus client timing; that
+  upgrade is captured as a follow-up and is out of scope for Prompt 4.
+
+Schema
+------
+``created_at`` is the canonical timestamp. Older databases with
+``occurred_at`` are migrated in-place by ``init_step1_telemetry``.
+The table is **append-only**; no code path may issue ``UPDATE`` or
+``DELETE`` against it (regression-tested by
+``test_step1_telemetry_infra.SchemaDisciplineTests``).
 """
 
 import os
 import sqlite3
+import time
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brainstorm.db")
+
+_DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
+
+
+def telemetry_enabled():
+    """Return True when the kill switch is **not** engaged.
+
+    Read the env var on every call (cheap, and lets tests flip it via
+    ``mock.patch.dict(os.environ, ...)`` without re-importing).
+    """
+    raw = (os.environ.get("STEP1_TELEMETRY_ENABLED") or "1").strip().lower()
+    return raw not in _DISABLED_VALUES
+
+
+def _slow_ms_threshold():
+    """Soft latency budget in ms. ``0`` is allowed (always emit the
+    marker — useful for tests). Negative or non-numeric → default 250.
+    """
+    raw = os.environ.get("STEP1_TELEMETRY_SLOW_MS")
+    if raw is None or raw == "":
+        return 250
+    try:
+        v = int(raw)
+        return v if v >= 0 else 250
+    except (TypeError, ValueError):
+        return 250
 
 EVENT_TYPES = (
     "pattern_triggered",
@@ -104,11 +175,20 @@ def record_step1_event(
     count_value=None,
     extra_json=None,
 ):
-    """Open -> insert -> close. Never raises out."""
+    """Open -> insert -> close. Never raises out.
+
+    Honors the ``STEP1_TELEMETRY_ENABLED`` kill switch and emits a soft
+    ``STEP1_TEL_SLOW_WRITE`` log when the bounded INSERT exceeds the
+    ``STEP1_TELEMETRY_SLOW_MS`` budget. See module docstring for the
+    full non-blocking contract.
+    """
+    if not telemetry_enabled():
+        return
     if event_type not in EVENT_TYPES:
         print(f"STEP1_TEL_BAD_EVENT_TYPE: {event_type}", flush=True)
         return
     conn = None
+    started = time.monotonic()
     try:
         conn = _open()
         conn.execute(
@@ -132,6 +212,14 @@ def record_step1_event(
                 conn.close()
             except Exception:
                 pass
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        slow_ms = _slow_ms_threshold()
+        if elapsed_ms >= slow_ms:
+            print(
+                f"STEP1_TEL_SLOW_WRITE event={event_type} study={study_id} "
+                f"elapsed_ms={elapsed_ms} budget_ms={slow_ms}",
+                flush=True,
+            )
 
 
 def summarize_recent(days=7, top_n=10, qa_page=1, tpl_page=1, page_size=20):
@@ -168,6 +256,7 @@ def summarize_recent(days=7, top_n=10, qa_page=1, tpl_page=1, page_size=20):
         tpl_page_int = 1
 
     cutoff_sql = f"datetime('now', '-{days_int} days')"
+    enabled = telemetry_enabled()
     out = {
         "days": days_int,
         "top_n": top_int,
@@ -182,7 +271,11 @@ def summarize_recent(days=7, top_n=10, qa_page=1, tpl_page=1, page_size=20):
         "top_templates": {"rows": [], "page": tpl_page_int,
                           "page_size": page_size_int, "total": 0,
                           "total_pages": 1, "has_prev": False, "has_next": False},
+        "telemetry_enabled": enabled,
     }
+
+    if not enabled:
+        return out
 
     conn = None
     try:
