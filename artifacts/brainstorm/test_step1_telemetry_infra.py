@@ -34,7 +34,7 @@ import sys
 import tempfile
 import time
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, redirect_stderr
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -253,7 +253,7 @@ class NeverRaisesTests(unittest.TestCase):
                 buf = io.StringIO()
                 with mock.patch.object(tel, "DB_PATH", db), \
                         mock.patch.object(tel, "_open", _short_open), \
-                        redirect_stdout(buf):
+                        redirect_stderr(buf):
                     # Should not raise even though the DB is locked.
                     tel.record_step1_event(
                         "pattern_triggered", study_id=1, user_id=1,
@@ -427,7 +427,7 @@ class SoftLatencyLogTests(unittest.TestCase):
             with mock.patch.object(tel, "DB_PATH", db), \
                     mock.patch.dict(os.environ,
                                     {"STEP1_TELEMETRY_SLOW_MS": "0"}), \
-                    redirect_stdout(buf):
+                    redirect_stderr(buf):
                 tel.record_step1_event(
                     "pattern_triggered", study_id=1, user_id=1,
                     session_id="s", field="business_problem",
@@ -448,7 +448,7 @@ class SoftLatencyLogTests(unittest.TestCase):
                    if k != "STEP1_TELEMETRY_SLOW_MS"}
             with mock.patch.object(tel, "DB_PATH", db), \
                     mock.patch.dict(os.environ, env, clear=True), \
-                    redirect_stdout(buf):
+                    redirect_stderr(buf):
                 tel.record_step1_event(
                     "pattern_triggered", study_id=1, user_id=1,
                     session_id="s", field="business_problem",

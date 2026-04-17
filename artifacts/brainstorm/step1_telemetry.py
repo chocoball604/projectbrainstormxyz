@@ -52,6 +52,7 @@ The table is **append-only**; no code path may issue ``UPDATE`` or
 """
 
 import os
+import sys
 import sqlite3
 import time
 
@@ -126,7 +127,7 @@ def init_step1_telemetry(conn):
                 "RENAME COLUMN occurred_at TO created_at"
             )
         except sqlite3.OperationalError as e:
-            print(f"STEP1_TEL_MIGRATE_ERROR: {e}", flush=True)
+            print(f"STEP1_TEL_MIGRATE_ERROR: {e}", file=sys.stderr, flush=True)
     try:
         conn.execute("DROP INDEX IF EXISTS idx_step1_tel_study")
         conn.execute("DROP INDEX IF EXISTS idx_step1_tel_event")
@@ -185,7 +186,7 @@ def record_step1_event(
     if not telemetry_enabled():
         return
     if event_type not in EVENT_TYPES:
-        print(f"STEP1_TEL_BAD_EVENT_TYPE: {event_type}", flush=True)
+        print(f"STEP1_TEL_BAD_EVENT_TYPE: {event_type}", file=sys.stderr, flush=True)
         return
     conn = None
     started = time.monotonic()
@@ -205,7 +206,7 @@ def record_step1_event(
         conn.commit()
     except Exception as e:
         print(f"STEP1_TEL_WRITE_ERROR event={event_type} study={study_id} err={e}",
-              flush=True)
+              file=sys.stderr, flush=True)
     finally:
         if conn is not None:
             try:
@@ -218,7 +219,7 @@ def record_step1_event(
             print(
                 f"STEP1_TEL_SLOW_WRITE event={event_type} study={study_id} "
                 f"elapsed_ms={elapsed_ms} budget_ms={slow_ms}",
-                flush=True,
+                file=sys.stderr, flush=True,
             )
 
 
@@ -387,7 +388,7 @@ def summarize_recent(days=7, top_n=10, qa_page=1, tpl_page=1, page_size=20):
             "has_next": tpl_page_clamped < tpl_total_pages,
         }
     except Exception as e:
-        print(f"STEP1_TEL_SUMMARY_ERROR err={e}", flush=True)
+        print(f"STEP1_TEL_SUMMARY_ERROR err={e}", file=sys.stderr, flush=True)
     finally:
         if conn is not None:
             try:
@@ -420,7 +421,7 @@ def count_session_quick_actions(session_id, quick_action_prefix, field=None):
         row = conn.execute(sql, tuple(params)).fetchone()
         return int(row[0]) if row else 0
     except Exception as e:
-        print(f"STEP1_TEL_COUNT_ERROR err={e}", flush=True)
+        print(f"STEP1_TEL_COUNT_ERROR err={e}", file=sys.stderr, flush=True)
         return 0
     finally:
         if conn is not None:
