@@ -1,0 +1,99 @@
+Prompt 4 — Step 1 Telemetry Infrastructure (mechanics only)
+Objective
+Implement the storage and plumbing required to persist Step 1 telemetry signals already defined in Prompt 3, in a counts only, append only, non adaptive manner.
+This prompt must not redefine telemetry semantics.
+It exists solely to record and store the signals emitted by Prompts 1–3.
+Source of truth (must follow)
+All telemetry semantics—specifically:
+•	which events matter,
+•	which pattern_id / template_id values exist,
+•	what constitutes a rewrite,
+•	and what must not happen with telemetry,
+are defined in Prompt 3.
+Prompt 4 must reference Prompt 3, not restate or reinterpret it.
+Non negotiable constraints
+•	❌ Do not redefine telemetry events, IDs, or conditions
+•	❌ Do not add logic that alters UX or Mark behavior
+•	❌ Do not introduce embeddings, learning, ranking, inference, or adaptation
+•	❌ Do not store raw user field text repeatedly
+•	✅ Counts only
+•	✅ IDs only
+•	✅ Observational only
+Telemetry recorded here must remain non adaptive at runtime.
+
+Scope (in)
+1) Telemetry persistence (mechanics only)
+-	Implement persistence for the telemetry signals defined in Prompt 3, Section 5.
+-	The system must reliably record telemetry events generated during Step‑1 framing, without blocking or modifying the user flow.
+-	This prompt does not decide what to log—it only determines how logging is performed.
+2) Step 1 session handling (mechanical)
+Implement a clear mechanical notion of a Step 1 session, suitable for counting and aggregation.
+Preferred definition (if feasible):
+•	Session starts when the user first edits either: 
+o	Business Problem, or
+o	Decision to Support
+•	Session ends when: 
+o	both fields are saved via Save checkpoint, OR
+o	the user navigates away from the Study Setup page
+If session scoping proves complex:
+•	fall back to per study, per page load logging
+•	document this explicitly in “Follow ups” (do not expand scope)
+3) Storage model (minimal, durable, schema safe)
+Telemetry must be stored in a minimal, append only format.
+Acceptable implementations:
+•	a lightweight SQLite table,
+•	a structured per study log file,
+•	or a compact event table keyed by study_id.
+Required characteristics
+•	Append only (no in place mutation of historical events)
+•	Tolerant of partial failure
+•	Easy to disable without breaking Step 1 flow
+Required fields (mechanical minimum)
+•	study_id
+•	session_id (or equivalent grouping)
+•	event_type
+•	pattern_id (nullable)
+•	template_id (nullable)
+•	quick_action (nullable)
+•	timestamp
+No additional interpretation fields are allowed.
+4) Integration points (passive hooks only)
+Telemetry hooks must be attached only to existing execution points defined elsewhere:
+•	when Prompt 1 weak input heuristics trigger
+•	when Mark (Prompt 2) applies a template
+•	when a Step 1 Quick Action is clicked
+•	when Save checkpoint occurs
+Hooks must be:
+•	synchronous but non blocking, OR
+•	asynchronous but guaranteed to not affect UX latency
+Hooks must not:
+•	introduce branching logic,
+•	retry user actions,
+•	modify return values,
+•	or alter control flow.
+Scope (out)
+•	No dashboards or analytics UI
+•	No admin reporting views
+•	No thresholds, alerts, or summaries
+•	No adaptive behavior of any kind
+•	No changes to Mark, Lisa, Ben, personas, QA, or execution logic
+•	No duplication of definitions from Prompt 3
+Definition of done
+•	Telemetry signals defined in Prompt 3 are persistently recorded
+•	Storage is append only and schema minimal
+•	Step 1 flow behaves identically with telemetry on or off
+•	No UX or Mark behavior changes occur as a result of telemetry
+•	Telemetry storage can be disabled cleanly without regressions
+How to test (must include)
+1.	Trigger a Step 1 pattern condition → verify an event is persisted
+2.	Use a Step 1 Quick Action → verify an event is persisted
+3.	Rewrite multiple times, then Save checkpoint → verify counts reflect events
+4.	Confirm that UI and Mark behavior are unchanged with telemetry enabled
+5.	Disable telemetry → confirm Step 1 continues to function normally
+Explicit boundary (do not cross)
+Telemetry implemented in this prompt must never be used to:
+•	auto expand examples
+•	reorder templates
+•	change default Quick Actions
+•	alter Mark’s language or structure
+Those behaviors belong to Stage 3 Adaptive UX, which requires a separate, future prompt and human approval.
