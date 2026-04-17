@@ -982,8 +982,8 @@
                         '<p style="font-size:13px;color:#555;margin:0 0 12px;font-weight:600;">Confirm the study type:</p>' +
                         '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
                             recBtn(sid, 'synthetic_survey', 'Use Survey', rec.type) +
-                            recBtn(sid, 'synthetic_idi', 'Use IDI', rec.type) +
                             recBtn(sid, 'synthetic_focus_group', 'Use Focus Group', rec.type) +
+                            recBtn(sid, 'synthetic_idi', 'Use IDI', rec.type) +
                         '</div></div>';
                     slot.innerHTML = html;
                 }
@@ -1107,16 +1107,16 @@
                     </form>
                     <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">
                         <input type="hidden" name="token" value="{{ token }}">
-                        <input type="hidden" name="study_type" value="synthetic_idi">
-                        <button type="submit" class="btn {% if mark_recommendation == 'synthetic_idi' %}btn-success{% else %}btn-secondary{% endif %}">
-                            Use IDI{% if mark_recommendation == 'synthetic_idi' %} (recommended){% endif %}
+                        <input type="hidden" name="study_type" value="synthetic_focus_group">
+                        <button type="submit" class="btn {% if mark_recommendation == 'synthetic_focus_group' %}btn-success{% else %}btn-secondary{% endif %}">
+                            Use Focus Group{% if mark_recommendation == 'synthetic_focus_group' %} (recommended){% endif %}
                         </button>
                     </form>
                     <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">
                         <input type="hidden" name="token" value="{{ token }}">
-                        <input type="hidden" name="study_type" value="synthetic_focus_group">
-                        <button type="submit" class="btn {% if mark_recommendation == 'synthetic_focus_group' %}btn-success{% else %}btn-secondary{% endif %}">
-                            Use Focus Group{% if mark_recommendation == 'synthetic_focus_group' %} (recommended){% endif %}
+                        <input type="hidden" name="study_type" value="synthetic_idi">
+                        <button type="submit" class="btn {% if mark_recommendation == 'synthetic_idi' %}btn-success{% else %}btn-secondary{% endif %}">
+                            Use IDI{% if mark_recommendation == 'synthetic_idi' %} (recommended){% endif %}
                         </button>
                     </form>
                 </div>
@@ -2454,8 +2454,8 @@
                                 if (recSlot) {
                                     var types = [
                                         {key: 'synthetic_survey', label: 'Use Survey'},
-                                        {key: 'synthetic_idi', label: 'Use IDI'},
-                                        {key: 'synthetic_focus_group', label: 'Use Focus Group'}
+                                        {key: 'synthetic_focus_group', label: 'Use Focus Group'},
+                                        {key: 'synthetic_idi', label: 'Use IDI'}
                                     ];
                                     var btnsHtml = '';
                                     types.forEach(function(t) {
