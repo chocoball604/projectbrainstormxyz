@@ -39,6 +39,7 @@ from step1_pattern_library import (
 from step1_telemetry import (
     init_step1_telemetry,
     record_step1_event,
+    summarize_recent as summarize_step1_telemetry,
     length_bucket as step1_length_bucket,
 )
 
@@ -11411,6 +11412,33 @@ def admin_step1_library_page():
         "admin_step1_library.html",
         token=token,
         library=load_step1_library(),
+    )
+
+
+@app.route("/admin/step1-telemetry", methods=["GET"])
+def admin_step1_telemetry_page():
+    token = get_token()
+    _user, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    def _arg_int(name, default):
+        try:
+            return int(request.args.get(name, str(default)))
+        except (TypeError, ValueError):
+            return default
+    days = _arg_int("days", 7)
+    top_n = _arg_int("top_n", 10)
+    page_size = _arg_int("page_size", 20)
+    qa_page = _arg_int("qa_page", 1)
+    tpl_page = _arg_int("tpl_page", 1)
+    summary = summarize_step1_telemetry(
+        days=days, top_n=top_n,
+        qa_page=qa_page, tpl_page=tpl_page, page_size=page_size,
+    )
+    return render_template(
+        "admin_step1_telemetry.html",
+        token=token,
+        summary=summary,
     )
 
 

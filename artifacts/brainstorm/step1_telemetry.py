@@ -134,6 +134,176 @@ def record_step1_event(
                 pass
 
 
+def summarize_recent(days=7, top_n=10, qa_page=1, tpl_page=1, page_size=20):
+    """Aggregate Step 1 telemetry over the last ``days`` days.
+
+    Opens a short-lived connection, executes a handful of grouped SELECTs,
+    and closes immediately so we never hold the DB open during render.
+    Returns a dict of plain Python primitives suitable for templating.
+
+    The two potentially-large tabular sections (quick_actions and
+    top_templates) are paginated with ``qa_page`` / ``tpl_page`` and a
+    shared ``page_size``. Total row counts are returned alongside each
+    paged slice so the template can render Prev/Next controls.
+    """
+    try:
+        days_int = max(1, min(int(days), 365))
+    except (TypeError, ValueError):
+        days_int = 7
+    try:
+        top_int = max(1, min(int(top_n), 50))
+    except (TypeError, ValueError):
+        top_int = 10
+    try:
+        page_size_int = max(5, min(int(page_size), 100))
+    except (TypeError, ValueError):
+        page_size_int = 20
+    try:
+        qa_page_int = max(1, int(qa_page))
+    except (TypeError, ValueError):
+        qa_page_int = 1
+    try:
+        tpl_page_int = max(1, int(tpl_page))
+    except (TypeError, ValueError):
+        tpl_page_int = 1
+
+    cutoff_sql = f"datetime('now', '-{days_int} days')"
+    out = {
+        "days": days_int,
+        "top_n": top_int,
+        "page_size": page_size_int,
+        "total_events": 0,
+        "events_by_type": [],
+        "patterns_by_field": {},
+        "quick_actions": {"rows": [], "page": qa_page_int,
+                          "page_size": page_size_int, "total": 0,
+                          "total_pages": 1, "has_prev": False, "has_next": False},
+        "rewrite_distribution": [],
+        "top_templates": {"rows": [], "page": tpl_page_int,
+                          "page_size": page_size_int, "total": 0,
+                          "total_pages": 1, "has_prev": False, "has_next": False},
+    }
+
+    conn = None
+    try:
+        conn = _open()
+        out["total_events"] = int(conn.execute(
+            f"SELECT COUNT(*) FROM step1_telemetry_events "
+            f"WHERE created_at >= {cutoff_sql}"
+        ).fetchone()[0])
+
+        out["events_by_type"] = [
+            {"event_type": r[0], "count": int(r[1])}
+            for r in conn.execute(
+                f"SELECT event_type, COUNT(*) FROM step1_telemetry_events "
+                f"WHERE created_at >= {cutoff_sql} "
+                f"GROUP BY event_type ORDER BY 2 DESC"
+            ).fetchall()
+        ]
+
+        rows = conn.execute(
+            f"SELECT field, pattern_id, COUNT(*) AS c FROM step1_telemetry_events "
+            f"WHERE event_type = 'pattern_triggered' "
+            f"  AND created_at >= {cutoff_sql} "
+            f"  AND pattern_id IS NOT NULL "
+            f"GROUP BY field, pattern_id ORDER BY field, c DESC"
+        ).fetchall()
+        patterns_by_field = {}
+        for field, pattern_id, c in rows:
+            key = field or "(unknown)"
+            bucket = patterns_by_field.setdefault(key, [])
+            if len(bucket) < top_int:
+                bucket.append({"pattern_id": pattern_id, "count": int(c)})
+        out["patterns_by_field"] = patterns_by_field
+
+        qa_total = int(conn.execute(
+            f"SELECT COUNT(*) FROM (SELECT 1 FROM step1_telemetry_events "
+            f" WHERE event_type = 'quick_action_used' "
+            f"   AND created_at >= {cutoff_sql} "
+            f"   AND quick_action IS NOT NULL "
+            f" GROUP BY quick_action, field)"
+        ).fetchone()[0])
+        qa_total_pages = max(1, (qa_total + page_size_int - 1) // page_size_int)
+        qa_page_clamped = min(qa_page_int, qa_total_pages)
+        qa_offset = (qa_page_clamped - 1) * page_size_int
+        qa_rows = [
+            {"quick_action": r[0], "field": r[1] or "(any)", "count": int(r[2])}
+            for r in conn.execute(
+                f"SELECT quick_action, field, COUNT(*) FROM step1_telemetry_events "
+                f"WHERE event_type = 'quick_action_used' "
+                f"  AND created_at >= {cutoff_sql} "
+                f"  AND quick_action IS NOT NULL "
+                f"GROUP BY quick_action, field "
+                f"ORDER BY 3 DESC, quick_action, field LIMIT ? OFFSET ?",
+                (page_size_int, qa_offset),
+            ).fetchall()
+        ]
+        out["quick_actions"] = {
+            "rows": qa_rows,
+            "page": qa_page_clamped,
+            "page_size": page_size_int,
+            "total": qa_total,
+            "total_pages": qa_total_pages,
+            "has_prev": qa_page_clamped > 1,
+            "has_next": qa_page_clamped < qa_total_pages,
+        }
+
+        out["rewrite_distribution"] = [
+            {"length_bucket": r[0] or "(none)",
+             "rewrites": int(r[1]) if r[1] is not None else 0,
+             "count": int(r[2])}
+            for r in conn.execute(
+                f"SELECT length_bucket, count_value, COUNT(*) "
+                f"FROM step1_telemetry_events "
+                f"WHERE event_type = 'rewrite_count_at_save' "
+                f"  AND created_at >= {cutoff_sql} "
+                f"GROUP BY length_bucket, count_value "
+                f"ORDER BY length_bucket, count_value"
+            ).fetchall()
+        ]
+
+        tpl_total = int(conn.execute(
+            f"SELECT COUNT(*) FROM (SELECT 1 FROM step1_telemetry_events "
+            f" WHERE event_type = 'template_applied' "
+            f"   AND created_at >= {cutoff_sql} "
+            f"   AND template_id IS NOT NULL "
+            f" GROUP BY template_id, field)"
+        ).fetchone()[0])
+        tpl_total_pages = max(1, (tpl_total + page_size_int - 1) // page_size_int)
+        tpl_page_clamped = min(tpl_page_int, tpl_total_pages)
+        tpl_offset = (tpl_page_clamped - 1) * page_size_int
+        tpl_rows = [
+            {"template_id": r[0], "field": r[1] or "(any)", "count": int(r[2])}
+            for r in conn.execute(
+                f"SELECT template_id, field, COUNT(*) FROM step1_telemetry_events "
+                f"WHERE event_type = 'template_applied' "
+                f"  AND created_at >= {cutoff_sql} "
+                f"  AND template_id IS NOT NULL "
+                f"GROUP BY template_id, field "
+                f"ORDER BY 3 DESC, template_id, field LIMIT ? OFFSET ?",
+                (page_size_int, tpl_offset),
+            ).fetchall()
+        ]
+        out["top_templates"] = {
+            "rows": tpl_rows,
+            "page": tpl_page_clamped,
+            "page_size": page_size_int,
+            "total": tpl_total,
+            "total_pages": tpl_total_pages,
+            "has_prev": tpl_page_clamped > 1,
+            "has_next": tpl_page_clamped < tpl_total_pages,
+        }
+    except Exception as e:
+        print(f"STEP1_TEL_SUMMARY_ERROR err={e}", flush=True)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return out
+
+
 def count_session_quick_actions(session_id, quick_action_prefix, field=None):
     """Count ``quick_action_used`` rows for a session, scoped to Step 1.
 

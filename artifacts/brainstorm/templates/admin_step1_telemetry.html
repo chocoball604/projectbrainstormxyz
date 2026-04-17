@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Step 1 Telemetry — Admin Dashboard</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+         max-width: 1080px; margin: 32px auto; padding: 0 18px; color: #222; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  h2 { font-size: 15px; margin: 22px 0 8px; color: #1a1a2e;
+       border-bottom: 1px solid #e3e6ef; padding-bottom: 4px; }
+  .meta { color: #666; font-size: 13px; margin-bottom: 14px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .btn { padding: 7px 12px; border-radius: 6px; border: 1px solid #5C7E8F;
+         background: #fff; color: #5C7E8F; cursor: pointer; font-size: 13px;
+         text-decoration: none; }
+  .btn.primary { background: #5C7E8F; color: #fff; }
+  form.inline { display: inline-flex; gap: 6px; align-items: center; }
+  input[type="number"] { width: 70px; padding: 5px 7px; border: 1px solid #ccc;
+                         border-radius: 4px; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin-bottom: 8px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #eee; }
+  th { background: #f7f9ff; color: #444; font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .empty { color: #888; font-style: italic; font-size: 13px; padding: 6px 0; }
+  .field-group { margin-bottom: 16px; }
+  .field-group h3 { font-size: 13px; color: #5C7E8F; margin: 8px 0 4px;
+                    text-transform: uppercase; letter-spacing: 0.04em; }
+  .totals { display: flex; gap: 18px; flex-wrap: wrap; margin: 8px 0 12px; }
+  .totals .card { background: #f5f7fb; border: 1px solid #e3e6ef;
+                  border-radius: 6px; padding: 10px 14px; min-width: 110px; }
+  .totals .card .lbl { font-size: 11px; color: #666; text-transform: uppercase;
+                       letter-spacing: 0.04em; }
+  .totals .card .val { font-size: 20px; font-weight: 600; color: #1a1a2e; }
+  .pager { display: flex; gap: 10px; align-items: center; margin: 4px 0 14px; font-size: 12px; }
+  .pager .pager-meta { color: #666; }
+  .btn.disabled { color: #aaa; border-color: #ddd; cursor: default; pointer-events: none; }
+</style>
+</head>
+<body>
+  <h1>Step 1 Telemetry</h1>
+  <div class="meta">
+    Showing the last <strong>{{ summary.days }}</strong> day(s),
+    top <strong>{{ summary.top_n }}</strong> per breakdown.
+  </div>
+
+  <div class="row">
+    <form class="inline" method="get" action="/admin/step1-telemetry">
+      <input type="hidden" name="token" value="{{ token }}">
+      <label for="days" style="font-size: 13px; color: #444;">Days:</label>
+      <input type="number" id="days" name="days" min="1" max="365"
+             value="{{ summary.days }}">
+      <label for="top_n" style="font-size: 13px; color: #444;">Top N:</label>
+      <input type="number" id="top_n" name="top_n" min="1" max="50"
+             value="{{ summary.top_n }}">
+      <label for="page_size" style="font-size: 13px; color: #444;">Page size:</label>
+      <input type="number" id="page_size" name="page_size" min="5" max="100"
+             value="{{ summary.page_size }}">
+      <button class="btn primary" type="submit">Refresh</button>
+    </form>
+    <a class="btn" href="/portal?token={{ token }}">Back to portal</a>
+    <a class="btn" href="/admin/step1-library?token={{ token }}">Pattern Library</a>
+  </div>
+
+  {% set base_qs = '?token=' ~ token ~ '&days=' ~ summary.days ~ '&top_n=' ~ summary.top_n ~ '&page_size=' ~ summary.page_size ~ '&qa_page=' ~ summary.quick_actions.page ~ '&tpl_page=' ~ summary.top_templates.page %}
+  {% macro pager(section, page_param) -%}
+    {% if section.total > 0 %}
+    <div class="pager">
+      <span class="pager-meta">
+        Page {{ section.page }} of {{ section.total_pages }}
+        ({{ section.total }} row{{ '' if section.total == 1 else 's' }})
+      </span>
+      {% if section.has_prev %}
+        <a class="btn" href="{{ base_qs }}&{{ page_param }}={{ section.page - 1 }}">&laquo; Prev</a>
+      {% else %}
+        <span class="btn disabled">&laquo; Prev</span>
+      {% endif %}
+      {% if section.has_next %}
+        <a class="btn" href="{{ base_qs }}&{{ page_param }}={{ section.page + 1 }}">Next &raquo;</a>
+      {% else %}
+        <span class="btn disabled">Next &raquo;</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  {%- endmacro %}
+
+  <div class="totals">
+    <div class="card">
+      <div class="lbl">Total events</div>
+      <div class="val">{{ summary.total_events }}</div>
+    </div>
+    {% for ev in summary.events_by_type %}
+    <div class="card">
+      <div class="lbl">{{ ev.event_type }}</div>
+      <div class="val">{{ ev.count }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="grid">
+    <div>
+      <h2>Top patterns triggered (per field)</h2>
+      {% if summary.patterns_by_field %}
+        {% for field, items in summary.patterns_by_field.items() %}
+        <div class="field-group">
+          <h3>{{ field }}</h3>
+          <table>
+            <thead><tr><th>Pattern</th><th class="num">Count</th></tr></thead>
+            <tbody>
+              {% for it in items %}
+              <tr><td>{{ it.pattern_id }}</td><td class="num">{{ it.count }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No pattern_triggered events in this window.</div>
+      {% endif %}
+    </div>
+
+    <div>
+      <h2>Quick-action usage</h2>
+      {% if summary.quick_actions.rows %}
+      <table>
+        <thead><tr><th>Quick action</th><th>Field</th><th class="num">Count</th></tr></thead>
+        <tbody>
+          {% for q in summary.quick_actions.rows %}
+          <tr><td>{{ q.quick_action }}</td><td>{{ q.field }}</td>
+              <td class="num">{{ q.count }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {{ pager(summary.quick_actions, 'qa_page', 'page_size') }}
+      {% else %}
+        <div class="empty">No quick_action_used events in this window.</div>
+      {% endif %}
+
+      <h2>Top templates applied</h2>
+      {% if summary.top_templates.rows %}
+      <table>
+        <thead><tr><th>Template</th><th>Field</th><th class="num">Count</th></tr></thead>
+        <tbody>
+          {% for t in summary.top_templates.rows %}
+          <tr><td>{{ t.template_id }}</td><td>{{ t.field }}</td>
+              <td class="num">{{ t.count }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {{ pager(summary.top_templates, 'tpl_page', 'page_size') }}
+      {% else %}
+        <div class="empty">No template_applied events in this window.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <h2>Rewrites at save (by length bucket)</h2>
+  {% if summary.rewrite_distribution %}
+  <table>
+    <thead>
+      <tr>
+        <th>Length bucket</th>
+        <th class="num">Rewrites before save</th>
+        <th class="num">Saves</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in summary.rewrite_distribution %}
+      <tr>
+        <td>{{ r.length_bucket }}</td>
+        <td class="num">{{ r.rewrites }}</td>
+        <td class="num">{{ r.count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="meta" style="margin-top: 6px;">
+    Length buckets: <code>s</code> &lt; 60 chars, <code>m</code> 60–300, <code>l</code> &gt; 300.
+  </div>
+  {% else %}
+    <div class="empty">No rewrite_count_at_save events in this window.</div>
+  {% endif %}
+</body>
+</html>
