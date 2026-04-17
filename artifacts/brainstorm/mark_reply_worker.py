@@ -184,7 +184,24 @@ def classify_bias_verdict(bias_line, any_weak):
     body = body.strip()
     if not body:
         return "fail" if any_weak else "pass"
-    has_fail = any(kw in body for kw in _BIAS_FAIL_KEYWORDS)
+    negation_window = ("no ", "not ", "without", "doesn't", "does not",
+                       "didn't", "did not", "never ", "n't ", "lacks ",
+                       "lacking ", "free of ", "absent ", "no concrete",
+                       "no explicit", "no specific", "no named")
+    has_fail = False
+    for kw in _BIAS_FAIL_KEYWORDS:
+        start = 0
+        while True:
+            idx = body.find(kw, start)
+            if idx < 0:
+                break
+            window = body[max(0, idx - 30):idx]
+            if not any(neg in window for neg in negation_window):
+                has_fail = True
+                break
+            start = idx + len(kw)
+        if has_fail:
+            break
     if has_fail:
         return "fail"
     has_pass = any(phrase in body for phrase in _BIAS_PASS_PHRASES)
