@@ -7969,10 +7969,14 @@ def send_chat(study_id):
 
         rewrite_requested = False
         if step1_action == "bias_check":
-            body_after_tag = raw_message.split("\n", 1)[1] if "\n" in raw_message else ""
+            scan_text = _re_mod.sub(
+                r"(?i)action\s*:\s*bias[_\s-]*check",
+                " ",
+                raw_message,
+            )
             if _re_mod.search(
                 r"\b(rewrite|revise|fix|improve|tighten|sharpen|reword|reframe)\b",
-                body_after_tag,
+                scan_text,
                 _re_mod.IGNORECASE,
             ):
                 rewrite_requested = True

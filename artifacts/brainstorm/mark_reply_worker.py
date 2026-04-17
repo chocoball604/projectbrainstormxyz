@@ -173,8 +173,10 @@ _BIAS_FAIL_KEYWORDS = (
 def classify_bias_verdict(bias_line, any_weak):
     """Classify Mark's `Bias check:` line as 'pass' or 'fail'.
 
-    Default to 'pass' to avoid false alarms; only fall back to 'fail' on a
-    genuinely ambiguous line when at least one weakness flag is set.
+    Concrete-bias indicators (fail keywords) take precedence over pass
+    phrases when both appear, since naming a feature/tactic/pricing/launch/
+    etc. is a stronger signal than the LLM's hedge wording. When neither
+    side matches, default to 'pass' unless any weakness flag is set.
     """
     if not bias_line:
         return "fail" if any_weak else "pass"
@@ -182,12 +184,12 @@ def classify_bias_verdict(bias_line, any_weak):
     body = body.strip()
     if not body:
         return "fail" if any_weak else "pass"
-    for phrase in _BIAS_PASS_PHRASES:
-        if phrase in body:
-            return "pass"
-    for kw in _BIAS_FAIL_KEYWORDS:
-        if kw in body:
-            return "fail"
+    has_fail = any(kw in body for kw in _BIAS_FAIL_KEYWORDS)
+    if has_fail:
+        return "fail"
+    has_pass = any(phrase in body for phrase in _BIAS_PASS_PHRASES)
+    if has_pass:
+        return "pass"
     return "fail" if any_weak else "pass"
 
 
