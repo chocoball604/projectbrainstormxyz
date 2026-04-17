@@ -228,6 +228,128 @@ class NeverRaisesTests(unittest.TestCase):
                     0,
                 )
 
+    def test_locked_db_never_raises(self):
+        """Deterministic regression: hold an EXCLUSIVE write lock on the
+        DB from connection A and invoke ``record_step1_event`` on a
+        separate connection (the writer's own short-lived one) with a
+        tight busy_timeout. The INSERT must fail with
+        ``OperationalError: database is locked``, and that error must
+        be swallowed — no exception bubbles to the caller, no row is
+        written, and a STEP1_TEL_WRITE_ERROR marker is logged.
+        """
+        db = _fresh_db()
+        try:
+            holder = sqlite3.connect(db, timeout=0.1)
+            holder.isolation_level = None  # explicit BEGIN/COMMIT
+            holder.execute("BEGIN EXCLUSIVE")
+            try:
+                # Patch _open to use a short busy_timeout so the test
+                # finishes in ~100 ms instead of 30 s.
+                def _short_open():
+                    c = sqlite3.connect(db, timeout=0.1)
+                    c.execute("PRAGMA busy_timeout = 100")
+                    return c
+
+                buf = io.StringIO()
+                with mock.patch.object(tel, "DB_PATH", db), \
+                        mock.patch.object(tel, "_open", _short_open), \
+                        redirect_stdout(buf):
+                    # Should not raise even though the DB is locked.
+                    tel.record_step1_event(
+                        "pattern_triggered", study_id=1, user_id=1,
+                        session_id="locked", field="business_problem",
+                        pattern_id="BP_VAGUE_INTENT",
+                    )
+                output = buf.getvalue()
+                # Lock error must have been logged but not raised.
+                self.assertIn("STEP1_TEL_WRITE_ERROR", output)
+                self.assertIn("locked", output.lower())
+            finally:
+                holder.execute("ROLLBACK")
+                holder.close()
+            # And no row landed because the lock blocked the INSERT.
+            self.assertEqual(_row_count(db), 0)
+        finally:
+            os.unlink(db)
+
+
+class HooksUnderKillSwitchTests(unittest.TestCase):
+    """Prompt 4 §3 acceptance: with STEP1_TELEMETRY_ENABLED=0, the four
+    telemetry hook code paths execute and write zero rows. Each test
+    here mirrors the *exact* argument shape used at the corresponding
+    call site in app.py / mark_reply_worker.py so that any future drift
+    in the hook signatures is caught.
+    """
+
+    def setUp(self):
+        self.db = _fresh_db()
+        self._db_patch = mock.patch.object(tel, "DB_PATH", self.db)
+        self._env_patch = mock.patch.dict(
+            os.environ, {"STEP1_TELEMETRY_ENABLED": "0"}
+        )
+        self._db_patch.start()
+        self._env_patch.start()
+
+    def tearDown(self):
+        self._env_patch.stop()
+        self._db_patch.stop()
+        os.unlink(self.db)
+
+    def test_pattern_triggered_hook_writes_nothing(self):
+        # Mirrors app.py /save-discovery emission.
+        tel.record_step1_event(
+            "pattern_triggered",
+            study_id=42, user_id=7, session_id="hook-pt",
+            field="business_problem",
+            pattern_id="BP_VAGUE_INTENT",
+            length_bucket_value="s",
+        )
+        self.assertEqual(_row_count(self.db), 0)
+
+    def test_quick_action_used_hook_writes_nothing(self):
+        # Mirrors app.py send_chat emission for each quick action.
+        for qa, fld in (
+            ("REWRITE_PROBLEM", "business_problem"),
+            ("REWRITE_DECISION", "decision_to_support"),
+            ("BIAS_CHECK", None),
+        ):
+            tel.record_step1_event(
+                "quick_action_used",
+                study_id=42, user_id=7, session_id="hook-qa",
+                field=fld, quick_action=qa,
+            )
+        self.assertEqual(_row_count(self.db), 0)
+
+    def test_template_applied_hook_writes_nothing(self):
+        # Mirrors mark_reply_worker._record_template_applied emission.
+        for fld, tid in (
+            ("business_problem", "BP_GAP_HYPOTHESIS"),
+            ("decision_to_support", "DS_INVESTIGATE_OR_PAUSE"),
+        ):
+            tel.record_step1_event(
+                "template_applied",
+                study_id=42, user_id=7, session_id="hook-tpl",
+                field=fld, template_id=tid,
+            )
+        self.assertEqual(_row_count(self.db), 0)
+
+    def test_rewrite_count_at_save_hook_writes_nothing(self):
+        # Mirrors app.py /save-discovery checkpoint branch emission.
+        for fld in ("business_problem", "decision_to_support"):
+            tel.record_step1_event(
+                "rewrite_count_at_save",
+                study_id=42, user_id=7, session_id="hook-rcs",
+                field=fld, length_bucket_value="m", count_value=2,
+            )
+        self.assertEqual(_row_count(self.db), 0)
+
+    def test_summarize_recent_hook_returns_zero_state(self):
+        # Mirrors /admin/step1-telemetry rendering path.
+        s = tel.summarize_recent(days=7)
+        self.assertFalse(s["telemetry_enabled"])
+        self.assertEqual(s["total_events"], 0)
+        self.assertEqual(s["events_by_type"], [])
+
 
 class SchemaDisciplineTests(unittest.TestCase):
     """Prompt 4 §3 — append-only storage. No UPDATE / DELETE allowed."""
