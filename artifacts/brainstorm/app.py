@@ -5110,6 +5110,19 @@ def save_discovery(study_id):
     conn.execute(f"UPDATE studies SET {field} = ? WHERE id = ?", (value, study_id))
     conn.commit()
 
+    if field in ("business_problem", "decision_to_support"):
+        _weak, _reason = compute_step1_weakness(value)
+        if _weak:
+            record_step1_event(
+                "pattern_triggered",
+                study_id=study_id,
+                user_id=user["id"],
+                session_id=step1_session_id,
+                field=field,
+                pattern_id=step1_pattern_id_for_reason(field, _reason),
+                length_bucket_value=step1_length_bucket(value),
+            )
+
     if mode == "checkpoint" and field in ("business_problem", "decision_to_support"):
         quick_prefix = (
             "REWRITE_PROBLEM" if field == "business_problem"
@@ -8032,26 +8045,9 @@ def send_chat(study_id):
                 field=qa_field,
                 quick_action=qa_name,
             )
-        if bp_weak:
-            record_step1_event(
-                "pattern_triggered",
-                study_id=study_id,
-                user_id=user["id"],
-                session_id=step1_session_id,
-                field="business_problem",
-                pattern_id=step1_pattern_id_for_reason("business_problem", bp_reason),
-                length_bucket_value=step1_length_bucket(bp_value),
-            )
-        if ds_weak:
-            record_step1_event(
-                "pattern_triggered",
-                study_id=study_id,
-                user_id=user["id"],
-                session_id=step1_session_id,
-                field="decision_to_support",
-                pattern_id=step1_pattern_id_for_reason("decision_to_support", ds_reason),
-                length_bucket_value=step1_length_bucket(ds_value),
-            )
+        # NOTE: pattern_triggered is emitted from /save-discovery, the single
+        # authoritative weak-input evaluation point. Re-emitting here would
+        # double-count the same heuristic firing.
 
         any_weak = bp_weak or ds_weak
         next_step_value = "Revise again" if any_weak else "Save checkpoint"
