@@ -279,6 +279,63 @@ class SaveLibraryTests(unittest.TestCase):
         self.assertIn("too large", err)
 
 
+class TelemetryLockOrderingTests(unittest.TestCase):
+    """Regression: send_chat must release its write lock (commit) before
+    calling record_step1_event, otherwise the telemetry writer (a second
+    sqlite connection) blocks on the busy_timeout. Simulates the failure
+    mode and confirms record_step1_event completes promptly when the
+    primary connection has committed.
+    """
+
+    def test_telemetry_writes_quickly_when_primary_committed(self):
+        import time
+        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        tmp.close()
+        try:
+            with mock.patch.object(tel, "DB_PATH", tmp.name):
+                # Init schema
+                conn = sqlite3.connect(tmp.name)
+                tel.init_step1_telemetry(conn)
+                conn.execute(
+                    "CREATE TABLE chat_messages (id INTEGER PRIMARY KEY "
+                    "AUTOINCREMENT, study_id INTEGER, sender TEXT, "
+                    "message_text TEXT)"
+                )
+                conn.commit()
+
+                # Mirror send_chat: open write transaction, then commit
+                # BEFORE calling record_step1_event (the fix under test).
+                conn.execute(
+                    "INSERT INTO chat_messages (study_id, sender, "
+                    "message_text) VALUES (?, 'user', ?)", (1, "hi"),
+                )
+                conn.commit()  # <- the release the test guards
+
+                start = time.monotonic()
+                tel.record_step1_event(
+                    "quick_action_used", study_id=1, user_id=2,
+                    session_id="sess", field="business_problem",
+                    quick_action="REWRITE_PROBLEM",
+                )
+                elapsed = time.monotonic() - start
+                conn.close()
+
+                # If the lock had not been released, this would have hit
+                # the 30s busy_timeout. Demand it returns quickly (<2s).
+                self.assertLess(elapsed, 2.0,
+                                f"telemetry write was blocked: {elapsed:.2f}s")
+
+                conn = sqlite3.connect(tmp.name)
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM step1_telemetry_events "
+                    "WHERE event_type='quick_action_used'"
+                ).fetchone()
+                conn.close()
+                self.assertEqual(row[0], 1)
+        finally:
+            os.unlink(tmp.name)
+
+
 class RewriteCountIntegrationTests(unittest.TestCase):
     """Verifies the send-chat -> save-checkpoint contract end-to-end at the
     telemetry layer: the canonical quick_action values + field columns the

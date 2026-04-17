@@ -8008,6 +8008,10 @@ def send_chat(study_id):
             "rewrite_decision": ("REWRITE_DECISION", "decision_to_support"),
             "bias_check": ("BIAS_CHECK", None),
         }
+        try:
+            conn.commit()
+        except Exception:
+            pass
         if step1_action != "full":
             qa_name, qa_field = _STEP1_QA_CANONICAL[step1_action]
             record_step1_event(
