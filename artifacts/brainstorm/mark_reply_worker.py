@@ -106,6 +106,73 @@ def record_timeout_incident(model_id, study_id):
             except Exception:
                 pass
 
+_PREFIX_REWRITE_PROBLEM = "rewrite (problem):"
+_PREFIX_REWRITE_DECISION = "rewrite (decision):"
+_PREFIX_BIAS_CHECK = "bias check:"
+_PREFIX_NEXT_STEP = "next step:"
+_PREFIX_TIP = "tip:"
+
+
+def _line_kind(line):
+    low = line.strip().lower()
+    if low.startswith(_PREFIX_REWRITE_PROBLEM):
+        return "rewrite_problem"
+    if low.startswith(_PREFIX_REWRITE_DECISION):
+        return "rewrite_decision"
+    if low.startswith(_PREFIX_BIAS_CHECK):
+        return "bias_check"
+    if low.startswith(_PREFIX_NEXT_STEP):
+        return "next_step"
+    if low.startswith(_PREFIX_TIP):
+        return "tip"
+    return None
+
+
+def enforce_step1_format(reply, enforce):
+    if not reply or not enforce:
+        return reply
+    action = enforce.get("action") or "full"
+    any_weak = bool(enforce.get("any_weak"))
+    next_step_value = enforce.get("next_step") or "Revise again"
+    tip_value = enforce.get("tip") or ""
+
+    raw_lines = [ln.rstrip() for ln in reply.replace("\r\n", "\n").split("\n")]
+    parsed = {}
+    for ln in raw_lines:
+        kind = _line_kind(ln)
+        if kind is None:
+            continue
+        if "(no change)" in ln.lower() or "(n/a)" in ln.lower():
+            continue
+        if kind not in parsed:
+            parsed[kind] = ln.strip()
+
+    out = []
+    if action == "rewrite_problem":
+        if "rewrite_problem" in parsed:
+            out.append(parsed["rewrite_problem"])
+    elif action == "rewrite_decision":
+        if "rewrite_decision" in parsed:
+            out.append(parsed["rewrite_decision"])
+    elif action == "bias_check":
+        if "bias_check" in parsed:
+            out.append(parsed["bias_check"])
+        out.append(f"Next step: {next_step_value}")
+    else:
+        if "rewrite_problem" in parsed:
+            out.append(parsed["rewrite_problem"])
+        if "rewrite_decision" in parsed:
+            out.append(parsed["rewrite_decision"])
+        if "bias_check" in parsed:
+            out.append(parsed["bias_check"])
+        out.append(f"Next step: {next_step_value}")
+
+    if any_weak and tip_value:
+        out.append(f"Tip: {tip_value}")
+
+    return "\n".join(out).strip()
+
+
 def update_placeholder(placeholder_id, message_text):
     retries = 3
     for attempt in range(retries):
@@ -145,12 +212,14 @@ def main():
     print(f"WORKER_START study={study_id} placeholder={placeholder_id} model={model_id}", flush=True)
 
     messages = []
+    step1_enforce = None
     if prompt_file and os.path.exists(prompt_file):
         try:
             with open(prompt_file, "r") as f:
                 prompt_data = json.load(f)
             system_prompt = prompt_data.get("system_prompt", "")
             chat_history = prompt_data.get("chat_history", [])
+            step1_enforce = prompt_data.get("step1_enforce")
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             for msg in chat_history[-10:]:
@@ -178,6 +247,17 @@ def main():
         if not mark_reply:
             mark_reply = fallback_text
             print(f"WORKER: using fallback", flush=True)
+        if step1_enforce and mark_reply and mark_reply != fallback_text:
+            try:
+                cleaned = enforce_step1_format(mark_reply, step1_enforce)
+                if cleaned:
+                    print(f"WORKER_STEP1_ENFORCED action={step1_enforce.get('action')} "
+                          f"any_weak={step1_enforce.get('any_weak')} "
+                          f"before_chars={len(mark_reply)} after_chars={len(cleaned)}",
+                          flush=True)
+                    mark_reply = cleaned
+            except Exception as e:
+                print(f"WORKER_STEP1_ENFORCE_ERROR: {e}", flush=True)
         if update_placeholder(placeholder_id, mark_reply):
             print(f"WORKER_DONE study={study_id} placeholder={placeholder_id}", flush=True)
         else:

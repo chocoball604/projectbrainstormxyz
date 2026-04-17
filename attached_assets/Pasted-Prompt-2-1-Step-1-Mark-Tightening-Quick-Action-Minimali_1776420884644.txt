@@ -1,0 +1,103 @@
+Prompt 2.1 — Step‑1 Mark Tightening (Quick Action Minimalism + Tip Formatting + Next‑Step Logic)
+Objective
+Tighten Mark’s Step‑1 framing mode so that Quick Actions produce minimal, intent‑only outputs, eliminate placeholder lines like “(no change)”, fix the Tip template so it never prints blank underscores, and make “Next step” choose Save checkpoint when the rewrite is already usable.
+This is an incremental patch on top of Prompt #30 (Prompt 2). It must not alter Mark behavior outside Step‑1 and must not override existing post‑Step‑1 scaffolding.
+
+Why (bug observed)
+After Prompt 2, clicking ACTION:REWRITE_PROBLEM produced extra sections (Rewrite Decision, Bias check, Next step, Tip) and included a placeholder “Rewrite (Decision): (no change)”, plus a Tip line with empty blanks. 
+This makes Quick Actions feel noisy and undermines the intent-bound design. [Screenshot...6.04.59 PM | PDF]
+
+Scope (in)
+1) Action-specific output formats (hard rule)
+When an action tag is present, Mark must short‑circuit and output only what that action requires, using the formats below.
+ACTION:REWRITE_PROBLEM
+Allowed output lines:
+
+Rewrite (Problem): … (one sentence)
+Optional: Tip: … (only if weak)
+
+Forbidden in this mode:
+Rewrite (Decision), Bias check, Next step, additional questions, any extra paragraphs.
+ACTION:REWRITE_DECISION
+Allowed output lines:
+
+Rewrite (Decision): … (one sentence)
+Optional: Tip: … (only if weak)
+
+Forbidden: everything else.
+ACTION:BIAS_CHECK
+Allowed output lines:
+
+Bias check: … (one line)
+Next step: … (one line)
+Optional: Tip: … (only if weak)
+
+Forbidden: any rewrite sections unless explicitly asked.
+
+Important: If a section is not required for the current intent, it must be omitted entirely. Never emit placeholders such as “(no change)”. [Screenshot...6.04.59 PM | PDF]
+
+
+2) Remove placeholder sections
+Explicitly forbid outputs like:
+
+Rewrite (Decision): (no change)
+Rewrite (Problem): (no change)
+any “N/A” filler lines
+
+If Mark has nothing to rewrite for the chosen action, he must still produce a best-effort rewrite using the user’s draft and the Step‑1 patterns.
+
+3) Fix Tip template formatting (no empty blanks)
+Update the Default Tip text to use bracketed placeholders (never empty underscores):
+Default Tip (verbatim):
+
+Tip: Rewrite in one sentence: “We don’t yet understand [the uncertainty], so we can’t confidently decide [the decision].”
+
+Keep Alternate A and Alternate B unchanged, but ensure they are also always valid standalone sentences (no blank slots).
+Rotation logic stays the same as Prompt 2 (Default → Alternate A → Alternate B only on repeated weakness).
+
+4) Next step logic (more helpful, less punitive)
+For any response mode that includes Next step::
+
+
+If the rewritten output meets minimum Step‑1 quality thresholds →
+Next step: Save checkpoint
+
+
+Otherwise →
+Next step: Revise again
+
+
+Do not default to “revise again” automatically. The goal is to reward good rewrites with forward progress.
+
+Scope (out)
+
+Do not modify Mark outside Step‑1
+Do not change persona generation, Lisa, Ben, QA, or execution flows
+No database schema changes (continue deriving rotation state from existing chat history / message content)
+No UI redesign (Prompt 1 owns UI)
+
+
+Definition of done
+
+Clicking Rewrite Problem returns only Rewrite (Problem) (+ Tip only if weak) [Screenshot...6.04.59 PM | PDF]
+Clicking Rewrite Decision returns only Rewrite (Decision) (+ Tip only if weak)
+Clicking Bias Check returns only Bias check + Next step (+ Tip only if weak)
+No “(no change)” lines ever appear [Screenshot...6.04.59 PM | PDF]
+Tip never prints empty placeholders [Screenshot...6.04.59 PM | PDF]
+Next step uses “Save checkpoint” when rewrite is usable
+
+
+How to test (must include)
+
+Trigger ACTION:REWRITE_PROBLEM with a saved Business Problem → verify only Rewrite (Problem) is returned (no Decision/Bias/Next step) [Screenshot...6.04.59 PM | PDF]
+Trigger ACTION:REWRITE_DECISION → verify only Rewrite (Decision) is returned
+Trigger ACTION:BIAS_CHECK → verify only Bias check + Next step returned
+Confirm no outputs include “(no change)”
+Trigger weak input repeatedly → verify Tip rotation works and Tip text has bracketed placeholders
+
+
+Deliverables required in agent response
+
+Files changed
+What changed
+How to test (step‑by‑step)

@@ -7918,8 +7918,9 @@ def send_chat(study_id):
                 break
 
         TIP_DEFAULT = (
-            "Rewrite in one sentence: 'We don\u2019t yet understand ___, "
-            "so we can\u2019t confidently decide ___.'"
+            "Rewrite in one sentence: \u201cWe don\u2019t yet understand "
+            "[the uncertainty], so we can\u2019t confidently decide "
+            "[the decision].\u201d"
         )
         TIP_ALT_A = (
             "Good inputs name the unknowns: who, where, and what trade-offs "
@@ -7945,6 +7946,126 @@ def send_chat(study_id):
         bp_display = bp_value if bp_value else "(empty)"
         ds_display = ds_value if ds_value else "(empty)"
 
+        first_line = (message_text or "").lstrip().split("\n", 1)[0].strip().upper()
+        if first_line.startswith("ACTION:REWRITE_PROBLEM"):
+            step1_action = "rewrite_problem"
+        elif first_line.startswith("ACTION:REWRITE_DECISION"):
+            step1_action = "rewrite_decision"
+        elif first_line.startswith("ACTION:BIAS_CHECK"):
+            step1_action = "bias_check"
+        else:
+            step1_action = "full"
+
+        any_weak = bp_weak or ds_weak
+        next_step_value = "Revise again" if any_weak else "Save checkpoint"
+
+        if step1_action == "rewrite_problem":
+            format_block = (
+                "RESPONSE FORMAT (MANDATORY -- intent: REWRITE_PROBLEM only):\n"
+                "Output EXACTLY these lines, nothing before or after:\n"
+                "Rewrite (Problem): <one sentence rewrite of the Business Problem, "
+                "framed as an uncertainty>\n"
+                + (
+                    f"Tip: {chosen_tip}\n"
+                    if any_weak
+                    else ""
+                )
+                + "\nFORBIDDEN in this mode: any 'Rewrite (Decision)' line, any "
+                "'Bias check' line, any 'Next step' line, any extra paragraphs, "
+                "questions, or commentary. Do NOT emit '(no change)', 'N/A', "
+                "or any placeholder line. If you would have nothing to say for "
+                "the rewrite, produce a best-effort rewrite from the user's "
+                "current draft anyway.\n"
+                + (
+                    "If neither field is weak, omit the Tip line entirely.\n"
+                    if not any_weak
+                    else "Use the Tip line text VERBATIM as given above.\n"
+                )
+            )
+        elif step1_action == "rewrite_decision":
+            format_block = (
+                "RESPONSE FORMAT (MANDATORY -- intent: REWRITE_DECISION only):\n"
+                "Output EXACTLY these lines, nothing before or after:\n"
+                "Rewrite (Decision): <one sentence rewrite of the Decision, "
+                "framed as the decision blocked by the uncertainty>\n"
+                + (
+                    f"Tip: {chosen_tip}\n"
+                    if any_weak
+                    else ""
+                )
+                + "\nFORBIDDEN in this mode: any 'Rewrite (Problem)' line, any "
+                "'Bias check' line, any 'Next step' line, any extra paragraphs, "
+                "questions, or commentary. Do NOT emit '(no change)', 'N/A', "
+                "or any placeholder line. If you would have nothing to say for "
+                "the rewrite, produce a best-effort rewrite from the user's "
+                "current draft anyway.\n"
+                + (
+                    "If neither field is weak, omit the Tip line entirely.\n"
+                    if not any_weak
+                    else "Use the Tip line text VERBATIM as given above.\n"
+                )
+            )
+        elif step1_action == "bias_check":
+            format_block = (
+                "RESPONSE FORMAT (MANDATORY -- intent: BIAS_CHECK only):\n"
+                "Output EXACTLY these lines, nothing before or after:\n"
+                "Bias check: <one line: does the current draft sneak in a "
+                "feature/tactic/pricing/launch decision? If so, name it. If "
+                "not, say so plainly.>\n"
+                f"Next step: {next_step_value}\n"
+                + (
+                    f"Tip: {chosen_tip}\n"
+                    if any_weak
+                    else ""
+                )
+                + "\nFORBIDDEN in this mode: any 'Rewrite (Problem)' or "
+                "'Rewrite (Decision)' line, any extra paragraphs, questions, "
+                "or commentary. Do NOT emit '(no change)', 'N/A', or any "
+                "placeholder line.\n"
+                f"The 'Next step:' line MUST read exactly \"{next_step_value}\" "
+                "for this turn -- do not change it.\n"
+                + (
+                    "If neither field is weak, omit the Tip line entirely.\n"
+                    if not any_weak
+                    else "Use the Tip line text VERBATIM as given above.\n"
+                )
+            )
+        else:
+            format_block = (
+                "RESPONSE FORMAT (MANDATORY -- free-form Step 1 reply):\n"
+                "Output EXACTLY these four lines, in this order, nothing "
+                "before or after:\n"
+                "Rewrite (Problem): <one sentence rewrite of the Business "
+                "Problem framed as an uncertainty>\n"
+                "Rewrite (Decision): <one sentence rewrite of the Decision "
+                "framed as the decision blocked by that uncertainty>\n"
+                "Bias check: <one line: does the current draft sneak in a "
+                "feature/tactic/pricing/launch decision? If so, name it. If "
+                "not, say so plainly.>\n"
+                f"Next step: {next_step_value}\n"
+                + (
+                    f"Tip: {chosen_tip}\n"
+                    if any_weak
+                    else ""
+                )
+                + "\nFORBIDDEN: '(no change)', 'N/A', or any placeholder line. "
+                "If a rewrite would otherwise be unchanged, still produce a "
+                "best-effort sharper rewrite from the user's current draft.\n"
+                f"The 'Next step:' line MUST read exactly \"{next_step_value}\" "
+                "for this turn -- do not change it.\n"
+                + (
+                    "If neither field is weak, omit the Tip line entirely.\n"
+                    if not any_weak
+                    else "Use the Tip line text VERBATIM as given above.\n"
+                )
+            )
+
+        print(
+            f"MARK_STEP1_ACTION study={study_id} action={step1_action} "
+            f"any_weak={any_weak} next_step={next_step_value!r}",
+            flush=True,
+        )
+
         system_prompt = (
             "You are Mark, the Market Intelligence Copilot for Project Brainstorm, "
             "operating in STEP 1 framing mode (no study type chosen yet).\n\n"
@@ -7956,29 +8077,8 @@ def send_chat(study_id):
             f"Decision to Support (current draft): \"{ds_display}\"\n"
             f"Weakness flags: business_problem_weak={'true' if bp_weak else 'false'} "
             f"({bp_reason}); decision_weak={'true' if ds_weak else 'false'} ({ds_reason})\n\n"
-            "RESPONSE FORMAT (MANDATORY -- exactly these four lines, in this order, "
-            "nothing before or after):\n"
-            "Rewrite (Problem): <one sentence rewrite of the Business Problem framed as an uncertainty>\n"
-            "Rewrite (Decision): <one sentence rewrite of the Decision framed as the decision blocked by that uncertainty>\n"
-            "Bias check: <one line: does the current draft sneak in a feature/tactic/pricing/launch decision? if so, name it>\n"
-            "Next step: <either \"save checkpoint\" if both fields are now adequate, or \"revise again\" if not>\n\n"
-            "QUICK ACTION TAGS:\n"
-            "The user may send a message that begins with one of these tags on its own first line. "
-            "If so, focus your response on that intent and still emit the four-line format "
-            "(use \"(no change)\" for lines that don't apply):\n"
-            "- ACTION:REWRITE_PROBLEM -> only rewrite the Business Problem; "
-            "Rewrite (Decision) line should say \"(no change)\".\n"
-            "- ACTION:REWRITE_DECISION -> only rewrite the Decision; "
-            "Rewrite (Problem) line should say \"(no change)\".\n"
-            "- ACTION:BIAS_CHECK -> Rewrite (Problem) and Rewrite (Decision) say \"(no change)\"; "
-            "Bias check + Next step are the real content.\n\n"
-            "OPTIONAL TIP LINE:\n"
-            "If business_problem_weak OR decision_weak is true, append exactly one extra line "
-            "at the end (and only one), prefixed \"Tip:\". The Tip text for THIS turn is:\n"
-            f"Tip: {chosen_tip}\n"
-            "Use that exact wording verbatim. Do not invent your own tip text. "
-            "If neither field is weak, omit the Tip line entirely.\n\n"
-            "HARD GUARDRAILS (Step 1 only):\n"
+            + format_block
+            + "\nHARD GUARDRAILS (Step 1 only):\n"
             "- Do NOT suggest pricing, launch plans, feature roadmaps, campaign tactics, "
             "go-to-market plans, or any execution solution.\n"
             "- Do NOT recommend or name a study type while either field is weak. "
@@ -7989,8 +8089,7 @@ def send_chat(study_id):
             "- Do NOT ask multiple questions. Do NOT ask the user to click any button.\n"
             "- Do NOT output any \"Proposed updates:\" block, anchor update block, or schema-style "
             "structured update. Step 1 has no anchor parsing.\n"
-            "- Do NOT add paragraphs, preamble, or commentary outside the four-line format "
-            "(and the optional Tip line)."
+            "- Do NOT add paragraphs, preamble, or commentary outside the format above."
         )
     else:
         snapshot_lines = [f"Study Title: {study_dict.get('title', 'Untitled')}"]
@@ -8110,6 +8209,13 @@ def send_chat(study_id):
                 if m["message_text"] != placeholder_text
             ],
         }
+        if is_step1:
+            prompt_data["step1_enforce"] = {
+                "action": step1_action,
+                "any_weak": bool(any_weak),
+                "next_step": next_step_value,
+                "tip": chosen_tip,
+            }
         prompt_file = tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, dir="/tmp"
         )
