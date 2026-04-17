@@ -5143,11 +5143,21 @@ def save_discovery(study_id):
             except (json.JSONDecodeError, TypeError):
                 qa_failures = []
         saved_at = datetime.now(timezone.utc).strftime("%H:%M")
+        weak_flag, weak_reason = (False, "ok")
+        if field in ("business_problem", "decision_to_support"):
+            weak_flag, weak_reason = compute_step1_weakness(value)
         resp = {
             "ok": True, "field": field, "value": value, "mode": mode,
             "saved_at": saved_at,
             "precheck": precheck,
             "qa_status": qa_status, "qa_failures": qa_failures,
+            "weak": weak_flag,
+            "weak_reason": weak_reason,
+            "pattern_id": (
+                step1_pattern_id_for_reason(field, weak_reason)
+                if weak_flag and field in ("business_problem", "decision_to_support")
+                else None
+            ),
         }
         bp_val = (study_dict.get("business_problem") or "").strip()
         ds_val = (study_dict.get("decision_to_support") or "").strip()

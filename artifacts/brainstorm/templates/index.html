@@ -1000,6 +1000,59 @@
                     });
                 });
 
+                function setExamplesOpen(field, open) {
+                    var panel = document.getElementById('discovery-examples-' + field);
+                    var btn = document.querySelector(
+                        '.discovery-examples-toggle[data-target="discovery-examples-' + field + '"]'
+                    );
+                    if (!panel || !btn) return;
+                    panel.style.display = open ? 'block' : 'none';
+                    btn.textContent = open ? '[hide examples]' : '[see examples]';
+                }
+
+                window.refreshStep1Examples = function() {
+                    return fetch('/api/step1-pattern-library', {
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    }).then(function(r) { return r.json(); }).then(function(lib) {
+                        if (!lib) return;
+                        ['business_problem', 'decision_to_support'].forEach(function(field) {
+                            var block = lib[field];
+                            var panel = document.getElementById('discovery-examples-' + field);
+                            if (!block || !panel) return;
+                            var html = '';
+                            (block.patterns || []).forEach(function(pat) {
+                                html += '<div style="margin-bottom:10px;">'
+                                    + '<div style="font-weight:600;color:#1a1a2e;">' + escapeHtml(pat.label || '') + '</div>';
+                                if (pat.description) {
+                                    html += '<div style="font-size:11px;color:#666;margin:2px 0 4px;">'
+                                        + escapeHtml(pat.description) + '</div>';
+                                }
+                                html += '<div style="font-weight:600;margin-top:4px;color:#1a1a2e;">Good</div>'
+                                    + '<ul style="margin:0 0 4px;padding-left:18px;">';
+                                (pat.good_examples || []).forEach(function(ex) {
+                                    html += '<li>' + escapeHtml(ex) + '</li>';
+                                });
+                                html += '</ul><div style="font-weight:600;color:#b00020;">Avoid</div>'
+                                    + '<ul style="margin:0;padding-left:18px;">';
+                                (pat.avoid_examples || []).forEach(function(ex) {
+                                    html += '<li>' + escapeHtml(ex) + '</li>';
+                                });
+                                html += '</ul></div>';
+                            });
+                            if (block.templates && block.templates.length) {
+                                html += '<div style="font-weight:600;margin-top:8px;color:#1a1a2e;">Templates</div>'
+                                    + '<ul style="margin:0;padding-left:18px;">';
+                                block.templates.forEach(function(tpl) {
+                                    html += '<li><strong>' + escapeHtml(tpl.id) + '</strong> ('
+                                        + escapeHtml(tpl.label) + '): ' + escapeHtml(tpl.text) + '</li>';
+                                });
+                                html += '</ul>';
+                            }
+                            panel.innerHTML = html;
+                        });
+                    }).catch(function() {});
+                };
+
                 function setStatus(field, text, color) {
                     var el = document.querySelector('.discovery-status[data-field="' + field + '"]');
                     if (!el) return;
@@ -1068,6 +1121,9 @@
                         } else {
                             var slot = document.getElementById('mark-recommendation-slot');
                             if (slot) slot.innerHTML = '';
+                        }
+                        if (data.weak === true && (field === 'business_problem' || field === 'decision_to_support')) {
+                            setExamplesOpen(field, true);
                         }
                     }).catch(function() {
                         setStatus(field, 'Save failed (network)', '#c0392b');
