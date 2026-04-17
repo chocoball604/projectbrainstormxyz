@@ -278,6 +278,37 @@ def enforce_step1_format(reply, enforce):
     return "\n".join(out).strip()
 
 
+def _record_template_applied(reply, enforce):
+    """Detect rewrite lines and record `template_applied` telemetry events."""
+    try:
+        from step1_pattern_library import match_template_id
+        from step1_telemetry import record_step1_event
+    except Exception as e:
+        print(f"WORKER_STEP1_TEL_IMPORT_ERROR: {e}", flush=True)
+        return
+    study_id = enforce.get("study_id")
+    user_id = enforce.get("user_id")
+    session_id = enforce.get("session_id")
+    for line in (reply or "").split("\n"):
+        low = line.strip().lower()
+        if low.startswith(_PREFIX_REWRITE_PROBLEM):
+            body = line.split(":", 1)[1].strip() if ":" in line else ""
+            tid = match_template_id(body, "business_problem")
+            record_step1_event(
+                "template_applied",
+                study_id=study_id, user_id=user_id, session_id=session_id,
+                field="business_problem", template_id=tid,
+            )
+        elif low.startswith(_PREFIX_REWRITE_DECISION):
+            body = line.split(":", 1)[1].strip() if ":" in line else ""
+            tid = match_template_id(body, "decision_to_support")
+            record_step1_event(
+                "template_applied",
+                study_id=study_id, user_id=user_id, session_id=session_id,
+                field="decision_to_support", template_id=tid,
+            )
+
+
 def update_placeholder(placeholder_id, message_text):
     retries = 3
     for attempt in range(retries):
@@ -361,6 +392,7 @@ def main():
                           f"before_chars={len(mark_reply)} after_chars={len(cleaned)}",
                           flush=True)
                     mark_reply = cleaned
+                _record_template_applied(mark_reply, step1_enforce)
             except Exception as e:
                 print(f"WORKER_STEP1_ENFORCE_ERROR: {e}", flush=True)
         if update_placeholder(placeholder_id, mark_reply):

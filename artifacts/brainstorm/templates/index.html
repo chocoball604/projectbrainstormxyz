@@ -819,6 +819,7 @@
                         var formData = new FormData();
                         formData.append('token', token);
                         formData.append('message_text', msg);
+                        if (window.__step1SessionId) formData.append('step1_session_id', window.__step1SessionId);
 
                         fetch('/send-chat/' + studyId, { method: 'POST', body: formData, redirect: 'manual' })
                             .then(function() {
@@ -902,13 +903,28 @@
                         <button type="button" class="discovery-examples-toggle" data-target="discovery-examples-business_problem" style="background: none; border: none; color: #5C7E8F; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline;">[see examples]</button>
                         <span class="discovery-status" data-field="business_problem" style="font-size: 12px; color: #777; margin-left: auto;"></span>
                     </div>
-                    <div id="discovery-examples-business_problem" class="discovery-examples" style="display: none; margin-top: 8px; padding: 10px 12px; background: #f7f9ff; border: 1px dashed #c8d3ee; border-radius: 6px; font-size: 12px; color: #444; line-height: 1.6;">
-                        <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Good examples</div>
-                        <ul style="margin: 0; padding-left: 18px;">
-                            <li>&ldquo;It&rsquo;s unclear whether [observed behaviour or signal] reflects [meaning A] or [meaning B].&rdquo;</li>
-                            <li>&ldquo;We&rsquo;re seeing high trial rates but low repeat usage, but don&rsquo;t know what users find missing or disappointing.&rdquo;</li>
-                            <li>&ldquo;We don&rsquo;t know how people think about personal finance tools outside of formal banking products.&rdquo;</li>
-                        </ul>
+                    <div id="discovery-examples-business_problem" class="discovery-examples" data-field="business_problem" style="display: none; margin-top: 8px; padding: 10px 12px; background: #f7f9ff; border: 1px dashed #c8d3ee; border-radius: 6px; font-size: 12px; color: #444; line-height: 1.6;">
+                        {% if step1_library and step1_library.business_problem %}
+                          {% set bp = step1_library.business_problem %}
+                          {% if bp.good_examples %}
+                            <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Good examples</div>
+                            <ul style="margin: 0 0 8px; padding-left: 18px;">
+                              {% for ex in bp.good_examples %}<li>{{ ex }}</li>{% endfor %}
+                            </ul>
+                          {% endif %}
+                          {% if bp.avoid_examples %}
+                            <div style="font-weight: 600; margin-bottom: 4px; color: #b00020;">Avoid</div>
+                            <ul style="margin: 0 0 8px; padding-left: 18px;">
+                              {% for ex in bp.avoid_examples %}<li>{{ ex }}</li>{% endfor %}
+                            </ul>
+                          {% endif %}
+                          {% if bp.templates %}
+                            <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Templates</div>
+                            <ul style="margin: 0; padding-left: 18px;">
+                              {% for tpl in bp.templates %}<li><strong>{{ tpl.id }}</strong> ({{ tpl.label }}): {{ tpl.text }}</li>{% endfor %}
+                            </ul>
+                          {% endif %}
+                        {% endif %}
                     </div>
                 </div>
 
@@ -925,13 +941,28 @@
                         <button type="button" class="discovery-examples-toggle" data-target="discovery-examples-decision_to_support" style="background: none; border: none; color: #5C7E8F; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline;">[see examples]</button>
                         <span class="discovery-status" data-field="decision_to_support" style="font-size: 12px; color: #777; margin-left: auto;"></span>
                     </div>
-                    <div id="discovery-examples-decision_to_support" class="discovery-examples" style="display: none; margin-top: 8px; padding: 10px 12px; background: #f7f9ff; border: 1px dashed #c8d3ee; border-radius: 6px; font-size: 12px; color: #444; line-height: 1.6;">
-                        <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Good examples</div>
-                        <ul style="margin: 0; padding-left: 18px;">
-                            <li>&ldquo;Whether to invest in deeper exploration of this opportunity or pause further work until assumptions are clearer.&rdquo; (ie, Go/No-Go problems)</li>
-                            <li>&ldquo;Whether our current direction is promising enough to pursue, or if we should redirect attention to alternative approaches.&rdquo;</li>
-                            <li>&ldquo;How to narrow down the set of plausible directions before committing resources to one.&rdquo;</li>
-                        </ul>
+                    <div id="discovery-examples-decision_to_support" class="discovery-examples" data-field="decision_to_support" style="display: none; margin-top: 8px; padding: 10px 12px; background: #f7f9ff; border: 1px dashed #c8d3ee; border-radius: 6px; font-size: 12px; color: #444; line-height: 1.6;">
+                        {% if step1_library and step1_library.decision_to_support %}
+                          {% set ds = step1_library.decision_to_support %}
+                          {% if ds.good_examples %}
+                            <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Good examples</div>
+                            <ul style="margin: 0 0 8px; padding-left: 18px;">
+                              {% for ex in ds.good_examples %}<li>{{ ex }}</li>{% endfor %}
+                            </ul>
+                          {% endif %}
+                          {% if ds.avoid_examples %}
+                            <div style="font-weight: 600; margin-bottom: 4px; color: #b00020;">Avoid</div>
+                            <ul style="margin: 0 0 8px; padding-left: 18px;">
+                              {% for ex in ds.avoid_examples %}<li>{{ ex }}</li>{% endfor %}
+                            </ul>
+                          {% endif %}
+                          {% if ds.templates %}
+                            <div style="font-weight: 600; margin-bottom: 4px; color: #1a1a2e;">Templates</div>
+                            <ul style="margin: 0; padding-left: 18px;">
+                              {% for tpl in ds.templates %}<li><strong>{{ tpl.id }}</strong> ({{ tpl.label }}): {{ tpl.text }}</li>{% endfor %}
+                            </ul>
+                          {% endif %}
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -940,6 +971,7 @@
             (function() {
                 var studyId = {{ configure_study.id }};
                 var token = '{{ token }}';
+                window.__step1SessionId = {{ step1_session_id | tojson }};
                 var fields = ['business_problem', 'decision_to_support'];
                 var debounceTimers = {};
                 var lastSentValue = {};
@@ -1010,6 +1042,7 @@
                     fd.append('field', field);
                     fd.append('value', value);
                     fd.append('mode', mode);
+                    if (window.__step1SessionId) fd.append('step1_session_id', window.__step1SessionId);
                     setStatus(field, mode === 'autosave' ? 'Saving draft\u2026' : 'Saving\u2026', '#777');
                     return fetch('/save-discovery/' + studyId, {
                         method: 'POST',

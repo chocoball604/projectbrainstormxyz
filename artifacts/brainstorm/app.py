@@ -26,7 +26,20 @@ import sys
 import secrets
 import sqlite3
 import time
+import uuid
 from datetime import datetime, timezone
+
+from step1_pattern_library import (
+    load_library as load_step1_library,
+    save_library as save_step1_library,
+    validate_library as validate_step1_library,
+    pattern_id_for_reason as step1_pattern_id_for_reason,
+)
+from step1_telemetry import (
+    init_step1_telemetry,
+    record_step1_event,
+    length_bucket as step1_length_bucket,
+)
 
 from flask import (
     Flask,
@@ -2439,6 +2452,8 @@ def migrate_db(conn):
             (str(FREE_TIER_MONTHLY_LIMIT),),
         )
 
+    init_step1_telemetry(conn)
+
 
 def create_session(user_id=None, is_admin=False):
     token = secrets.token_urlsafe(32)
@@ -3402,6 +3417,8 @@ def index():
         configure_study=configure_study,
         configure_study_personas=configure_study_personas,
         available_personas=available_personas,
+        step1_library=load_step1_library(),
+        step1_session_id=uuid.uuid4().hex,
         study_type_limits=STUDY_TYPE_LIMITS,
         personas_list=personas_list,
         show_new_persona=request.args.get("new_persona") == "1",
@@ -5057,6 +5074,7 @@ def save_discovery(study_id):
     field = request.form.get("field", "").strip()
     value = (request.form.get("value") or "").strip()
     mode = (request.form.get("mode") or "checkpoint").strip().lower()
+    step1_session_id = (request.form.get("step1_session_id") or "").strip() or None
     if mode not in ("autosave", "checkpoint"):
         mode = "checkpoint"
 
@@ -5084,6 +5102,30 @@ def save_discovery(study_id):
 
     conn.execute(f"UPDATE studies SET {field} = ? WHERE id = ?", (value, study_id))
     conn.commit()
+
+    if mode == "checkpoint" and field in ("business_problem", "decision_to_support"):
+        action_tag = (
+            "ACTION:REWRITE_PROBLEM" if field == "business_problem"
+            else "ACTION:REWRITE_DECISION"
+        )
+        try:
+            rewrite_row = conn.execute(
+                "SELECT COUNT(*) AS n FROM chat_messages "
+                "WHERE study_id = ? AND sender = 'user' AND message_text LIKE ?",
+                (study_id, action_tag + "%"),
+            ).fetchone()
+            rewrite_count = int(rewrite_row["n"]) if rewrite_row else 0
+        except Exception:
+            rewrite_count = 0
+        record_step1_event(
+            "rewrite_count_at_save",
+            study_id=study_id,
+            user_id=user["id"],
+            session_id=step1_session_id,
+            field=field,
+            length_bucket_value=step1_length_bucket(value),
+            count_value=rewrite_count,
+        )
 
     if _is_ajax(request):
         study = conn.execute("SELECT * FROM studies WHERE id = ?", (study_id,)).fetchone()
@@ -7836,6 +7878,7 @@ def send_chat(study_id):
         return render_error("Study not found.")
 
     message_text = (request.form.get("message_text") or "").strip()
+    step1_session_id = (request.form.get("step1_session_id") or "").strip() or None
     if not message_text:
         conn.close()
         return redirect(f"/?token={token}&configure={study_id}")
@@ -7902,6 +7945,7 @@ def send_chat(study_id):
         ds_value = (study_dict.get("decision_to_support") or "").strip()
         bp_weak, bp_reason = compute_step1_weakness(bp_value)
         ds_weak, ds_reason = compute_step1_weakness(ds_value)
+        step1_library_for_prompt = load_step1_library()
 
         recent_mark = conn.execute(
             "SELECT message_text FROM chat_messages "
@@ -7956,6 +8000,35 @@ def send_chat(study_id):
             step1_action = "bias_check"
         else:
             step1_action = "full"
+
+        if step1_action != "full":
+            record_step1_event(
+                "quick_action_used",
+                study_id=study_id,
+                user_id=user["id"],
+                session_id=step1_session_id,
+                quick_action=step1_action,
+            )
+        if bp_weak:
+            record_step1_event(
+                "pattern_triggered",
+                study_id=study_id,
+                user_id=user["id"],
+                session_id=step1_session_id,
+                field="business_problem",
+                pattern_id=step1_pattern_id_for_reason("business_problem", bp_reason),
+                length_bucket_value=step1_length_bucket(bp_value),
+            )
+        if ds_weak:
+            record_step1_event(
+                "pattern_triggered",
+                study_id=study_id,
+                user_id=user["id"],
+                session_id=step1_session_id,
+                field="decision_to_support",
+                pattern_id=step1_pattern_id_for_reason("decision_to_support", ds_reason),
+                length_bucket_value=step1_length_bucket(ds_value),
+            )
 
         any_weak = bp_weak or ds_weak
         next_step_value = "Revise again" if any_weak else "Save checkpoint"
@@ -8146,28 +8219,20 @@ def send_chat(study_id):
             "least one category (e.g., seasonality, environment, constraints, "
             "trust, workflow, privacy, cost).\n"
             "Prefer one of these templates (choose the best fit):\n"
-            "- BP-1 (rate + driver): \"We don't yet understand how "
-            "fast/where/when [phenomenon] is changing or what is driving that "
-            "change.\"\n"
-            "- BP-2 (trigger + conditions): \"We don't yet understand what "
-            "triggers [phenomenon] and under what conditions it accelerates "
-            "or slows.\"\n"
-            "- BP-3 (A vs B interpretation): \"It's unclear whether [observed "
-            "signal] reflects [meaning/cause A] or [meaning/cause B].\"\n"
-            "When the user asks \"what can we do,\" convert it into an "
+            + "".join(
+                f"- {tpl['id']} ({tpl['label']}): \"{tpl['text']}\"\n"
+                for tpl in step1_library_for_prompt["business_problem"]["templates"]
+            )
+            + "When the user asks \"what can we do,\" convert it into an "
             "uncertainty about the mechanism or drivers, not an intervention.\n\n"
             "QUALITY CONSTRAINTS -- DECISION REWRITE:\n"
             "Your rewrite must be ONE sentence and must be a discovery-stage "
             "decision frame. Use one of these templates:\n"
-            "- DS-1 (invest vs pause): \"Whether to invest in deeper "
-            "exploration of this opportunity or pause until the key "
-            "assumptions are clearer.\"\n"
-            "- DS-2 (continue vs redirect): \"Whether our current direction is "
-            "promising enough to pursue, or whether we should redirect to "
-            "alternatives.\"\n"
-            "- DS-3 (narrow directions): \"How to narrow the plausible "
-            "directions before committing resources to one.\"\n"
-            "Never suggest execution decisions (pricing/features/launch).\n\n"
+            + "".join(
+                f"- {tpl['id']} ({tpl['label']}): \"{tpl['text']}\"\n"
+                for tpl in step1_library_for_prompt["decision_to_support"]["templates"]
+            )
+            + "Never suggest execution decisions (pricing/features/launch).\n\n"
             "BIAS CHECK RULE (one line):\n"
             "State whether the original text was solution-leaning and why, in "
             "ONE line. Examples:\n"
@@ -8319,6 +8384,9 @@ def send_chat(study_id):
                 "rewrite_requested": bool(rewrite_requested),
                 "next_step": next_step_value,
                 "tip": chosen_tip,
+                "session_id": step1_session_id,
+                "user_id": user["id"],
+                "study_id": study_id,
             }
         prompt_file = tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, dir="/tmp"
@@ -10715,6 +10783,8 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         configure_study=configure_study,
         configure_study_personas=[],
         available_personas=[],
+        step1_library=load_step1_library(),
+        step1_session_id=uuid.uuid4().hex,
         study_type_limits=STUDY_TYPE_LIMITS,
         personas_list=personas_list,
         show_new_persona=show_new_persona,
@@ -11288,6 +11358,41 @@ def admin_llm_smoke():
         return jsonify({"model_id": model_id, "status": "ok", "response": result[:500]})
     except Exception as e:
         return jsonify({"model_id": model_id, "status": "error", "error": str(e)[:500]})
+
+
+@app.route("/api/step1-pattern-library", methods=["GET"])
+def api_step1_pattern_library():
+    return jsonify(load_step1_library())
+
+
+@app.route("/admin/step1-library", methods=["GET"])
+def admin_step1_library_page():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+    return render_template(
+        "admin_step1_library.html",
+        token=token,
+        library=load_step1_library(),
+    )
+
+
+@app.route("/admin/step1-library/save", methods=["POST"])
+def admin_step1_library_save():
+    token = get_token()
+    user, is_admin = get_session_data(token)
+    if not is_admin:
+        return jsonify({"ok": False, "error": "Admin access required."}), 403
+    payload_raw = request.form.get("library_json") or ""
+    try:
+        new_data = json.loads(payload_raw)
+    except json.JSONDecodeError as e:
+        return jsonify({"ok": False, "error": f"Invalid JSON: {e}"}), 400
+    ok, err = save_step1_library(new_data, updated_by=f"admin:{user['id'] if user else 'root'}")
+    if not ok:
+        return jsonify({"ok": False, "error": err}), 400
+    return jsonify({"ok": True, "library": load_step1_library()})
 
 
 if __name__ == "__main__":

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Step 1 Pattern Library — Admin Editor</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+         max-width: 980px; margin: 32px auto; padding: 0 18px; color: #222; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .meta { color: #666; font-size: 13px; margin-bottom: 18px; }
+  textarea { width: 100%; box-sizing: border-box; height: 560px;
+             font-family: ui-monospace, "SF Mono", Consolas, monospace;
+             font-size: 12px; line-height: 1.45; padding: 12px;
+             border: 1px solid #ccc; border-radius: 6px; }
+  .row { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn { padding: 8px 14px; border-radius: 6px; border: 1px solid #5C7E8F;
+         background: #5C7E8F; color: #fff; cursor: pointer; font-size: 13px; }
+  .btn-secondary { background: #fff; color: #5C7E8F; }
+  .status { font-size: 13px; }
+  .status.ok { color: #1e8d3e; }
+  .status.err { color: #b00020; }
+  .help { background: #f7f9ff; border: 1px dashed #c8d3ee; padding: 10px 14px;
+          border-radius: 6px; font-size: 12px; color: #444; line-height: 1.55; }
+  code { background: #f1f1f4; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+  <h1>Step 1 Pattern Library</h1>
+  <div class="meta">
+    Version: <strong id="lib-version">{{ library.version }}</strong>
+    &middot; Updated: <span id="lib-updated">{{ library.updated_at }}</span>
+    &middot; By: <span>{{ library.updated_by }}</span>
+  </div>
+
+  <div class="help">
+    Edit the JSON below and click <strong>Validate &amp; Save</strong>. Each save
+    creates a backup in <code>data/step1_pattern_library_backups/</code>.
+    Required: <code>business_problem</code> and <code>decision_to_support</code>
+    blocks each with non-empty <code>templates</code> and <code>patterns</code>
+    covering all four reasons (<code>empty</code>, <code>too_short</code>,
+    <code>solution_bias</code>, <code>missing_uncertainty</code>).
+  </div>
+
+  <div class="row">
+    <button class="btn" id="btn-save" type="button">Validate &amp; Save</button>
+    <button class="btn btn-secondary" id="btn-reload" type="button">Reload from disk</button>
+    <span class="status" id="status"></span>
+  </div>
+
+  <textarea id="library-json" spellcheck="false">{{ library | tojson(indent=2) }}</textarea>
+
+<script>
+(function() {
+  var token = {{ token | tojson }};
+  var ta = document.getElementById('library-json');
+  var statusEl = document.getElementById('status');
+
+  function setStatus(msg, kind) {
+    statusEl.textContent = msg || '';
+    statusEl.className = 'status ' + (kind || '');
+  }
+
+  document.getElementById('btn-save').addEventListener('click', function() {
+    var raw = ta.value;
+    try { JSON.parse(raw); } catch (e) {
+      setStatus('Invalid JSON: ' + e.message, 'err'); return;
+    }
+    setStatus('Saving...', '');
+    var fd = new FormData();
+    fd.append('token', token);
+    fd.append('library_json', raw);
+    fetch('/admin/step1-library/save', { method: 'POST', body: fd,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
+      .then(function(res) {
+        if (res.ok && res.body.ok) {
+          setStatus('Saved \u2713 (version ' + res.body.library.version + ')', 'ok');
+          ta.value = JSON.stringify(res.body.library, null, 2);
+          document.getElementById('lib-version').textContent = res.body.library.version;
+          document.getElementById('lib-updated').textContent = res.body.library.updated_at;
+        } else {
+          setStatus('Save failed: ' + (res.body.error || 'unknown'), 'err');
+        }
+      })
+      .catch(function(e) { setStatus('Network error: ' + e, 'err'); });
+  });
+
+  document.getElementById('btn-reload').addEventListener('click', function() {
+    setStatus('Reloading...', '');
+    fetch('/api/step1-pattern-library')
+      .then(function(r) { return r.json(); })
+      .then(function(lib) {
+        ta.value = JSON.stringify(lib, null, 2);
+        document.getElementById('lib-version').textContent = lib.version;
+        document.getElementById('lib-updated').textContent = lib.updated_at;
+        setStatus('Reloaded.', 'ok');
+      })
+      .catch(function(e) { setStatus('Reload failed: ' + e, 'err'); });
+  });
+})();
+</script>
+</body>
+</html>
