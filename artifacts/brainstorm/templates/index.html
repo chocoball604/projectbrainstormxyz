@@ -5184,6 +5184,31 @@
                 </div>
             </div>
         </div>
+
+        <div class="card" id="acc-step1tel">
+            <div class="admin-acc-header" onclick="toggleAdminAcc('acc-step1tel-body')">
+                <h2>Step 1 Coaching Telemetry</h2>
+                <span class="admin-acc-arrow" id="acc-step1tel-body-arrow">&#9654;</span>
+            </div>
+            <div class="admin-acc-body" id="acc-step1tel-body">
+                <p style="font-size:13px;color:#555;margin:0 0 14px;">
+                    Inspect how Mark's Step&nbsp;1 coaching is being used: weak-input pattern firings,
+                    quick-action usage (Rewrite Problem / Rewrite Decision / Bias Check), template
+                    matches in Mark's rewrites, and rewrite counts at checkpoint. Also edit the
+                    pattern library that drives Mark's coaching.
+                </p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <a href="/admin/step1-telemetry?token={{ token }}" class="btn btn-primary btn-small"
+                       style="text-decoration:none;">
+                        Open Telemetry Dashboard
+                    </a>
+                    <a href="/admin/step1-library?token={{ token }}" class="btn btn-secondary btn-small"
+                       style="text-decoration:none;">
+                        Edit Pattern Library
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
     {% endif %}
 
