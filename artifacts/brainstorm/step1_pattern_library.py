@@ -167,12 +167,24 @@ def validate_library(data):
     return True, ""
 
 
+_missing_warned = False
+
+
 def load_library():
     """Return the current library dict. Falls back if missing/invalid."""
+    global _missing_warned
     try:
         st = os.stat(LIBRARY_PATH)
         mtime = st.st_mtime
     except OSError:
+        if not _missing_warned:
+            print(
+                f"STEP1_LIBRARY_MISSING: file not found at {LIBRARY_PATH}; "
+                f"using in-code fallback. Restore the seed JSON to enable "
+                f"library-driven coaching.",
+                flush=True,
+            )
+            _missing_warned = True
         return _FALLBACK_LIBRARY
     with _cache_lock:
         if _cache["data"] is not None and _cache["mtime"] == mtime:

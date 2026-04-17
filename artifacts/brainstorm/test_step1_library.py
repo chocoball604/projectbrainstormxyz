@@ -256,5 +256,75 @@ class SaveLibraryTests(unittest.TestCase):
         self.assertIn("too large", err)
 
 
+class RewriteCountIntegrationTests(unittest.TestCase):
+    """Verifies the send-chat -> save-checkpoint contract end-to-end at the
+    telemetry layer: the canonical quick_action values + field columns the
+    web layer writes are exactly what the rewrite-count helper expects.
+    """
+
+    def test_send_chat_to_save_checkpoint_count_alignment(self):
+        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        tmp.close()
+        try:
+            with mock.patch.object(tel, "DB_PATH", tmp.name):
+                conn = sqlite3.connect(tmp.name)
+                tel.init_step1_telemetry(conn)
+                conn.commit()
+                conn.close()
+
+                session = "sess-1"
+                # Mirror exactly what app.py send_chat writes for each
+                # action (canonical uppercase, field set):
+                tel.record_step1_event(
+                    "quick_action_used", study_id=10, user_id=2,
+                    session_id=session, field="business_problem",
+                    quick_action="REWRITE_PROBLEM",
+                )
+                tel.record_step1_event(
+                    "quick_action_used", study_id=10, user_id=2,
+                    session_id=session, field="business_problem",
+                    quick_action="REWRITE_PROBLEM",
+                )
+                tel.record_step1_event(
+                    "quick_action_used", study_id=10, user_id=2,
+                    session_id=session, field="decision_to_support",
+                    quick_action="REWRITE_DECISION",
+                )
+                # Other session must not be counted:
+                tel.record_step1_event(
+                    "quick_action_used", study_id=10, user_id=2,
+                    session_id="other", field="business_problem",
+                    quick_action="REWRITE_PROBLEM",
+                )
+
+                # save_discovery uses these exact arguments:
+                bp_count = tel.count_session_quick_actions(
+                    session, "REWRITE_PROBLEM", field="business_problem"
+                )
+                ds_count = tel.count_session_quick_actions(
+                    session, "REWRITE_DECISION", field="decision_to_support"
+                )
+                self.assertEqual(bp_count, 2)
+                self.assertEqual(ds_count, 1)
+
+                tel.record_step1_event(
+                    "rewrite_count_at_save", study_id=10, user_id=2,
+                    session_id=session, field="business_problem",
+                    length_bucket_value="m", count_value=bp_count,
+                )
+
+                conn = sqlite3.connect(tmp.name)
+                row = conn.execute(
+                    "SELECT count_value FROM step1_telemetry_events "
+                    "WHERE event_type='rewrite_count_at_save' "
+                    "AND session_id=? AND field='business_problem'",
+                    (session,),
+                ).fetchone()
+                conn.close()
+                self.assertEqual(row[0], 2)
+        finally:
+            os.unlink(tmp.name)
+
+
 if __name__ == "__main__":
     unittest.main()
