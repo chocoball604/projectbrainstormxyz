@@ -7946,6 +7946,15 @@ def mark_alignment_check(study_id):
     if intent not in _MARK_ALIGNMENT_INTENTS:
         return jsonify({"ok": False, "error": "Invalid intent."}), 400
 
+    # Optional: client may send the live (possibly unsaved) anchor draft
+    # from the DOM so the alignment check sees what the user is currently
+    # editing, not only the last persisted value. BP/DS still come from the
+    # DB (single source of truth for the "saved brief"); only MG/PC/TA may
+    # be overridden by live drafts. Caps mirror the anchor field maxlength.
+    live_mg = (request.form.get("live_market_geography") or "").strip()[:500]
+    live_pc = (request.form.get("live_product_concept") or "").strip()[:500]
+    live_ta = (request.form.get("live_target_audience") or "").strip()[:500]
+
     conn = get_db()
     try:
         row = conn.execute(
@@ -7974,9 +7983,10 @@ def mark_alignment_check(study_id):
     bp = (study_dict.get("business_problem") or "").strip() or "(empty)"
     ds = (study_dict.get("decision_to_support") or "").strip() or "(empty)"
     st_type = (study_dict.get("study_type") or "").strip() or "(none)"
-    mg = (study_dict.get("study_fit") or "").strip() or "(empty)"
-    pc = (study_dict.get("known_vs_unknown") or "").strip() or "(empty)"
-    ta = (study_dict.get("target_audience") or "").strip() or "(empty)"
+    # MG/PC/TA: prefer live DOM draft when supplied, else last persisted.
+    mg = live_mg or (study_dict.get("study_fit") or "").strip() or "(empty)"
+    pc = live_pc or (study_dict.get("known_vs_unknown") or "").strip() or "(empty)"
+    ta = live_ta or (study_dict.get("target_audience") or "").strip() or "(empty)"
 
     user_block = (
         f"Saved Business Problem:\n\"{bp}\"\n\n"

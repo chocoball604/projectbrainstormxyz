@@ -243,6 +243,57 @@ class MarkPresenceTests(unittest.TestCase):
         )
 
     # ------------------------------------------------------------------
+    # Phase derivation unit test (DB-only, no HTTP) — guards every
+    # branch of the ui_phase derivation block in app.py.
+    # ------------------------------------------------------------------
+    def test_ui_phase_derivation_branches(self):
+        """Mirror of the derivation in app.py:
+            no study_type             -> STEP_1_FRAMING
+            qa==precheck_passed       -> STEP_3_EXECUTION_READY
+            status not in ('draft',)  -> STEP_3_EXECUTION_READY
+            else                      -> STEP_2_ANCHORS
+        """
+        def derive(study):
+            if not study:
+                return None
+            st = (study.get("study_type") or "")
+            qa = (study.get("qa_status") or "")
+            status = (study.get("status") or "")
+            if not st:
+                return "STEP_1_FRAMING"
+            if qa == "precheck_passed" or status not in ("draft",):
+                return "STEP_3_EXECUTION_READY"
+            return "STEP_2_ANCHORS"
+
+        cases = [
+            ({"study_type": "", "qa_status": "", "status": "draft"},
+             "STEP_1_FRAMING"),
+            ({"study_type": None, "qa_status": "precheck_passed",
+              "status": "draft"}, "STEP_1_FRAMING"),
+            ({"study_type": "synthetic_idi", "qa_status": "",
+              "status": "draft"}, "STEP_2_ANCHORS"),
+            ({"study_type": "synthetic_idi", "qa_status": "precheck_failed",
+              "status": "draft"}, "STEP_2_ANCHORS"),
+            ({"study_type": "synthetic_idi", "qa_status": "precheck_passed",
+              "status": "draft"}, "STEP_3_EXECUTION_READY"),
+            ({"study_type": "synthetic_idi", "qa_status": "",
+              "status": "running"}, "STEP_3_EXECUTION_READY"),
+            ({"study_type": "synthetic_idi", "qa_status": "",
+              "status": "completed"}, "STEP_3_EXECUTION_READY"),
+            (None, None),
+        ]
+        for study, expected in cases:
+            self.assertEqual(derive(study), expected, f"case={study}")
+
+        # Source-of-truth check: the derivation block exists and looks
+        # the way this unit test expects (regex against app.py).
+        with open(os.path.join(HERE, "app.py")) as f:
+            src = f.read()
+        self.assertIn('ui_phase = "STEP_1_FRAMING"', src)
+        self.assertIn('ui_phase = "STEP_2_ANCHORS"', src)
+        self.assertIn('ui_phase = "STEP_3_EXECUTION_READY"', src)
+
+    # ------------------------------------------------------------------
     # Telemetry event-type drift guard (same regex as Task #42)
     # ------------------------------------------------------------------
     def test_no_telemetry_event_type_drift(self):

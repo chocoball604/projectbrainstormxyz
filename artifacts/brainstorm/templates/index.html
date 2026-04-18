@@ -677,6 +677,21 @@
                         var fd = new FormData();
                         fd.append('token', tok);
                         fd.append('intent', intent);
+                        // Send live (possibly unsaved) MG/PC/TA drafts so the
+                        // alignment check sees what the user is actually editing.
+                        // BP/DS still come from the DB on the server side.
+                        var anchorMap = {
+                            live_market_geography: 'market_geography',
+                            live_product_concept: 'product_concept',
+                            live_target_audience: 'target_audience'
+                        };
+                        Object.keys(anchorMap).forEach(function(field) {
+                            var key = anchorMap[field];
+                            var ta = document.querySelector(
+                                '[data-anchor-key="' + key + '"] textarea[name="anchor_value"]'
+                            );
+                            if (ta && ta.value) fd.append(field, ta.value);
+                        });
                         fetch('/mark-alignment-check/' + sid, {
                             method: 'POST', body: fd,
                             headers: {'X-Requested-With': 'XMLHttpRequest'}
