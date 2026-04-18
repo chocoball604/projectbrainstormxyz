@@ -1,0 +1,108 @@
+Prompt #5 — Maintain Framing Continuity & Editable Anchors Through Study Setup
+
+Objective
+Preserve framing continuity and iterative thinking throughout Study Setup by:
+1.	Keeping Business Problem and Decision to Support visible after study type is selected, and
+2.	Keeping all study anchors editable until the user explicitly starts the study.
+This work ensures that downstream anchors remain grounded in the original framing and prepares the UI for safe, scoped AI assistance in later steps.
+This is Study Builder + UI workflow work only.
+Do not modify Mark prompts, reasoning logic, telemetry, or execution behavior.
+ 
+Background / Motivation
+Currently, after a study type is selected:
+•	Business Problem and Decision: 
+o	disappear from view, or
+o	become effectively immutable
+•	Remaining anchors are treated as final once saved
+This breaks the intended workflow:
+Good research framing is iterative, and later anchors must stay tied to the core problem and decision.
+If users uncover misalignment while drafting Market / Product / Audience, they must be able to see and revise the framing immediately.
+ 
+Scope (IN)
+ 
+1) Keep Business Problem & Decision visible throughout Study Setup
+Requirements
+Once a study type is selected (i.e. after Step 1 framing):
+•	Business Problem and Decision to Support must remain: 
+o	✅ visible
+o	✅ clearly labeled as Core Framing
+o	✅ grouped together
+o	✅ collapsible (but expanded by default on first load)
+Behavior
+•	Display these fields at the top of the Research Brief section during anchor completion.
+•	These fields represent the reference frame for all remaining anchors.
+Editability
+•	Fields must be editable until Start Study, not locked at study type selection.
+•	Default state after study type selection: 
+o	Read only appearance
+o	Clear affordance to “Edit framing”
+•	Editing: 
+o	Re enables text input
+o	Uses the same save/checkpoint mechanics already implemented
+o	Does not reset the study type automatically
+✅ This preserves continuity without encouraging accidental churn.
+ 
+2) Keep all anchors editable until Start Study
+Affected anchors
+•	Business Problem
+•	Decision to Support
+•	Market / Geography
+•	Product / Concept
+•	Target Audience
+•	Optional Context fields
+Rules
+•	✅ Anchors remain editable through the entire Study Setup phase
+•	✅ “Save checkpoint” behavior remains per anchor
+•	❌ No anchor becomes permanently locked during drafting
+•	❌ No “saved = immutable” semantics
+Locking boundary (important)
+•	Anchors may be locked only when: 
+o	the user explicitly clicks Start Study, or
+o	execution begins
+At that moment:
+•	Show a clear, explicit transition
+•	Warn that changes will require restarting or duplicating the study
+ 
+3) Maintain consistency with existing readiness & QA logic
+•	Do not change how Ben QA calculates readiness
+•	Do not auto invalidate personas or study type when framing edits occur
+•	If edits may affect downstream validity: 
+o	allow the edit
+o	surface warnings later (future work)
+This prompt focuses on thinking quality, not enforcement.
+ 
+Scope (OUT)
+•	❌ Do not modify Mark system prompts
+•	❌ Do not add new Mark behaviors
+•	❌ Do not introduce new AI assistance
+•	❌ Do not change telemetry schemas or events
+•	❌ Do not change execution or persona generation
+This work is strictly UI + workflow continuity.
+ 
+Definition of Done
+•	✅ After study type selection: 
+o	Business Problem & Decision remain visible
+o	Clearly marked as Core Framing
+•	✅ All anchors remain editable up to Start Study
+•	✅ Edits use existing save/checkpoint mechanics
+•	✅ No anchors disappear during drafting
+•	✅ No changes to Mark behavior yet (that comes next)
+ 
+How to Test
+1.	Create a new study
+2.	Complete Business Problem & Decision
+3.	Select a study type
+4.	Verify: 
+o	Problem & Decision still visible
+o	Anchors are editable
+5.	Edit Market / Product / Audience
+6.	Edit Business Problem afterward
+7.	Confirm: 
+o	Changes persist
+o	No unexpected locks or resets
+8.	Click Start Study and confirm: 
+o	Editing is now blocked
+o	Transition is explicit
+ 
+Design Principle (for reference)
+If later answers depend on earlier framing, the framing must never disappear or be prematurely frozen.
