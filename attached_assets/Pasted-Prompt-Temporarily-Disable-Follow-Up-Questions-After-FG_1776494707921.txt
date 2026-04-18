@@ -1,0 +1,100 @@
+Prompt — Temporarily Disable Follow‑Up Questions After FG / IDI (V1A Safety Lock)
+Objective
+Temporarily disable post‑execution follow‑up questions for FG and IDI studies in V1A to preserve a coherent research flow and avoid unscoped AI authority.
+Follow‑up questions currently exist as an orphaned feature: they are not clearly anchored to framing, anchors, QA, or decision‑making, and they reopen generative AI interaction at a point where results should be interpreted—not modified.
+This change is a V1A safety and coherence decision, not feature removal. The functionality may be re‑introduced later with explicit structure and intent.
+
+Background / Rationale
+At present:
+
+After an FG or IDI finishes, users may ask up to 2 follow‑up questions
+These questions:
+
+do not alter study design
+do not re‑open framing or anchors
+are not constrained by templates or intent modes
+
+
+This re‑introduces freeform AI authority at the most sensitive moment: after results are generated
+
+Given the disciplined changes already made to Mark (intent‑bound help, phase‑aware presence, minimized chat), this unrestricted follow‑up step is inconsistent with the rest of the system.
+
+Scope (IN)
+1) Disable follow‑up question UI affordances
+For FG and IDI studies:
+
+Remove or disable:
+
+follow‑up question input box
+“Ask follow‑up question” buttons
+remaining question counters (e.g. “2 questions remaining”)
+
+
+This applies after:
+
+synthetic FG execution
+synthetic IDI execution
+
+
+
+The goal is no generative input path post‑execution in V1A.
+
+2) Preserve backend safety and reversibility
+
+Do not delete follow‑up question code paths
+Do not remove routes or data structures yet
+Do not refactor execution logic
+
+This is a feature flag / UI gating decision, not a destructive change.
+
+3) User‑facing messaging (important)
+Replace the follow‑up UI with a clear, brief explanation:
+
+Follow‑up questions are temporarily unavailable in V1A.
+This release focuses on getting the study framing right before execution.
+Clarification and iteration features will return in a future update.
+
+This avoids confusion and reinforces good research behavior.
+
+Scope (OUT)
+
+❌ Do not introduce a “1 question only” compromise
+❌ Do not reroute follow‑ups into Mark chat
+❌ Do not modify Mark prompts or reasoning
+❌ Do not change telemetry schemas or events
+❌ Do not alter FG / IDI execution behavior
+❌ Do not add new forms of interpretation or explanation logic
+
+The goal is removal of ambiguity, not substitution.
+
+Definition of Done
+
+✅ After FG or IDI completes:
+
+No follow‑up question input is available
+No question counter is shown
+
+
+✅ Users are informed why the feature is disabled
+✅ Results, summaries, personas, and outputs are unchanged
+✅ No AI interaction is possible post‑execution in V1A
+✅ The change can be reversed later without data loss
+
+
+How to Test
+
+Run a synthetic FG study
+View results screen
+Confirm:
+
+no follow‑up question input exists
+explanatory message is shown instead
+
+
+Repeat for a synthetic IDI
+Confirm nothing in execution, summaries, or personas is affected
+
+
+Design Principle (for reference)
+
+AI should not reopen the research process after execution unless the user is explicitly starting a new research action.
