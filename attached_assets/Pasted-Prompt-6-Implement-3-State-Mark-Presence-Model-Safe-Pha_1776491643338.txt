@@ -1,0 +1,138 @@
+Prompt #6 -- Implement 3 State Mark Presence Model (Safe, Phase Scoped)
+
+Objective
+Implement a 3 state Mark presence model across the Study Setup flow so that:
+•	Mark is prominent only when he has a clear, bounded job
+•	Mark becomes quiet and non authoritative when users are completing downstream anchors
+•	Mark never appears to provide guidance outside his explicitly defined scope
+This work is UI + routing only.
+Do not modify existing Mark prompts, logic, telemetry, or pattern libraries.
+ 
+The 3 Mark Presence States (authoritative definition)
+STATE 1 — Active Coach (Step 1 Framing)
+Where
+•	Study Setup
+•	Before a study type is selected
+•	Business Problem + Decision to Support
+Behavior
+•	Mark is fully visible
+•	Quick Actions and structured chat enabled
+•	Uses existing Step 1 framing prompts (Prompt 2)
+•	Users can freely rewrite, bias check, and refine
+✅ This state is already implemented and must remain unchanged.
+ 
+STATE 2 — Quiet Consistency Helper (Remaining Required Anchors)
+Where
+•	Study Setup
+•	After study type is selected
+•	While filling: 
+o	Market / Geography
+o	Product / Concept
+o	Target Audience
+o	(before execution readiness)
+Purpose
+•	Prevent authority misuse
+•	Preserve continuity with the original Problem & Decision
+•	Offer alignment checks only, not ideation or drafting
+Visual requirements
+•	Mark panel is collapsed/minimized by default
+•	Replace header text with: 
+Mark — Brief Consistency Helper (optional)
+•	No free text chat input
+•	No chat transcript by default
+Interaction rules
+Provide only buttons, no open chat:
+•	✅ “Check alignment with Business Problem”
+•	✅ “Check alignment with Decision”
+•	✅ “Remind me what question this study is answering”
+Each button:
+•	Sends current anchor content + saved Problem/Decision
+•	Uses intent specific routing (no rewrite mode)
+•	Mark reply must be: 
+o	single sentence
+o	non generative
+o	no follow up questions
+o	no rewriting
+o	no study type suggestions
+Examples of allowed replies:
+•	“This product description still aligns with the uncertainty about population growth drivers.”
+•	“This target audience does not clearly connect back to the decision about market expansion.”
+Hard prohibitions in State 2
+Mark must not:
+•	Rewrite anchors
+•	Suggest methods (IDI, FG, Survey)
+•	Suggest execution tactics
+•	Ask open-ended questions
+•	Accept free text chat input
+ 
+STATE 3 — Suppressed / On Demand Advisor
+Where
+•	After execution readiness
+•	During survey building
+•	During persona selection
+•	During results
+Behavior
+•	Mark is hidden by default
+•	No visible chat panel
+•	No proactive suggestions
+Mark may only re appear:
+•	If user explicitly clicks “Ask Mark” (future work)
+•	Or in a later, dedicated task specific helper mode
+✅ No new Mark behavior is required in this prompt.
+ 
+Phase Detection Logic (required)
+Define an explicit UI phase variable derived from existing study state:
+Plain Text
+STEP_1_FRAMING
+STEP_2_ANCHORS
+STEP_3_EXECUTION_READY
+Show more lines
+Rules (conceptual):
+•	STEP_1_FRAMING: before study_type is set
+•	STEP_2_ANCHORS: study_type set, precheck incomplete
+•	STEP_3_EXECUTION_READY: precheck passes or execution started
+Use this variable only to control Mark presence and UI affordances.
+ 
+Critical UI Requirement (must implement)
+Business Problem and Decision to Support must remain visible (read only or collapsible):
+•	Always visible during STEP_2_ANCHORS
+•	Shown above or alongside remaining anchors
+•	Clearly labeled as “Core framing (read only)”
+This preserves reasoning continuity and prevents anchor drift.
+ 
+Hard Constraints (non negotiable)
+•	❌ Do not modify Mark prompt text
+•	❌ Do not add new Mark capabilities
+•	❌ Do not extend Step 1 rewrite logic into other anchors
+•	❌ Do not enable free chat in State 2
+•	❌ Do not add adaptive behavior
+•	❌ Do not change telemetry behavior or schemas
+This is presence management only, not intelligence expansion.
+ 
+Definition of Done
+•	✅ Step 1 behavior is unchanged
+•	✅ After study type selection: 
+o	Mark is minimized
+o	No free text chat is available
+o	Only alignment buttons appear
+•	✅ Mark replies in State 2 are: 
+o	one sentence
+o	evaluative only
+o	non authoritative
+•	✅ Business Problem & Decision remain visible through anchor completion
+•	✅ Users cannot mistakenly use Mark as a general advisor outside Step 1
+ 
+How to Test
+1.	Create a new study
+2.	Complete Step 1 framing with Mark (verify unchanged behavior)
+3.	Select a study type
+4.	Verify: 
+o	Mark collapses automatically
+o	No chat input is present
+o	Alignment buttons function
+5.	Fill Market / Product / Audience
+6.	Confirm Mark never rewrites or suggests methods
+7.	Confirm Problem & Decision remain visible until execution
+ 
+Design Principle (for reference)
+Mark should feel like a senior researcher who speaks only when necessary — not a chat window that’s always open.
