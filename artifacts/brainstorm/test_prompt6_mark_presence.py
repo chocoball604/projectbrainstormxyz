@@ -183,7 +183,9 @@ class MarkPresenceTests(unittest.TestCase):
     # Alignment-check route — bounded reply, no telemetry
     # ------------------------------------------------------------------
     def test_alignment_check_route_returns_single_sentence_no_telemetry(self):
-        sid = self._make_study(study_type="synthetic_idi")
+        # Keep the study in STEP_2_ANCHORS by leaving TA empty — the route
+        # now phase-guards and rejects requests outside State 2 with 409.
+        sid = self._make_study(study_type="synthetic_idi", ta="")
 
         # Snapshot telemetry row count BEFORE.
         conn = sqlite3.connect(DB_PATH, timeout=10)
@@ -247,23 +249,9 @@ class MarkPresenceTests(unittest.TestCase):
     # branch of the ui_phase derivation block in app.py.
     # ------------------------------------------------------------------
     def test_ui_phase_derivation_branches(self):
-        """Mirror of the derivation in app.py:
-            no study_type             -> STEP_1_FRAMING
-            qa==precheck_passed       -> STEP_3_EXECUTION_READY
-            status not in ('draft',)  -> STEP_3_EXECUTION_READY
-            else                      -> STEP_2_ANCHORS
-        """
-        def derive(study):
-            if not study:
-                return None
-            st = (study.get("study_type") or "")
-            qa = (study.get("qa_status") or "")
-            status = (study.get("status") or "")
-            if not st:
-                return "STEP_1_FRAMING"
-            if qa == "precheck_passed" or status not in ("draft",):
-                return "STEP_3_EXECUTION_READY"
-            return "STEP_2_ANCHORS"
+        """Exercises the shared `derive_ui_phase` helper (app.py)."""
+        sys.path.insert(0, HERE)
+        from app import derive_ui_phase as derive
 
         cases = [
             ({"study_type": "", "qa_status": "", "status": "draft"},
@@ -285,13 +273,15 @@ class MarkPresenceTests(unittest.TestCase):
         for study, expected in cases:
             self.assertEqual(derive(study), expected, f"case={study}")
 
-        # Source-of-truth check: the derivation block exists and looks
-        # the way this unit test expects (regex against app.py).
+        # Source-of-truth check: the helper exists and is wired into
+        # the configure render path.
         with open(os.path.join(HERE, "app.py")) as f:
             src = f.read()
-        self.assertIn('ui_phase = "STEP_1_FRAMING"', src)
-        self.assertIn('ui_phase = "STEP_2_ANCHORS"', src)
-        self.assertIn('ui_phase = "STEP_3_EXECUTION_READY"', src)
+        self.assertIn("def derive_ui_phase(", src)
+        self.assertIn("ui_phase = derive_ui_phase(", src)
+        self.assertIn('"STEP_1_FRAMING"', src)
+        self.assertIn('"STEP_2_ANCHORS"', src)
+        self.assertIn('"STEP_3_EXECUTION_READY"', src)
 
     # ------------------------------------------------------------------
     # Telemetry event-type drift guard (same regex as Task #42)

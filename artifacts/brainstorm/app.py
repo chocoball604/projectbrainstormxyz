@@ -351,6 +351,31 @@ def send_email(to, subject, body_text):
         return False
 
 
+def derive_ui_phase(study):
+    """Prompt 6 — single source of truth for the 3-state Mark presence model.
+
+    Returns one of ``'STEP_1_FRAMING'``, ``'STEP_2_ANCHORS'``,
+    ``'STEP_3_EXECUTION_READY'``, or ``None`` when no study is supplied.
+    Phase governs Mark tile presence only; it never alters Mark replies.
+
+    Mapping:
+      - no ``study_type``                         -> STEP_1_FRAMING
+      - ``qa_status == 'precheck_passed'`` or
+        ``status`` not in ('draft',)              -> STEP_3_EXECUTION_READY
+      - else                                      -> STEP_2_ANCHORS
+    """
+    if not study:
+        return None
+    st_type = (study.get("study_type") or "")
+    qa = (study.get("qa_status") or "")
+    status = (study.get("status") or "")
+    if not st_type:
+        return "STEP_1_FRAMING"
+    if qa == "precheck_passed" or status not in ("draft",):
+        return "STEP_3_EXECUTION_READY"
+    return "STEP_2_ANCHORS"
+
+
 def call_llm(model_id, messages, purpose="", timeout_seconds=60):
     """Single wrapper for all LLM calls via Replit AI Integrations (OpenRouter)."""
     import openai as _openai
@@ -3410,17 +3435,7 @@ def index():
 
     # Prompt 6 — derive 3-state Mark presence phase from existing study state.
     # Phase governs Mark tile presence only; it never alters Mark replies.
-    ui_phase = None
-    if configure_study:
-        _st_type = configure_study.get("study_type") or ""
-        _qa = configure_study.get("qa_status") or ""
-        _status = configure_study.get("status") or ""
-        if not _st_type:
-            ui_phase = "STEP_1_FRAMING"
-        elif _qa == "precheck_passed" or _status not in ("draft",):
-            ui_phase = "STEP_3_EXECUTION_READY"
-        else:
-            ui_phase = "STEP_2_ANCHORS"
+    ui_phase = derive_ui_phase(configure_study)
 
     return render_template(
         "index.html",
@@ -7959,6 +7974,7 @@ def mark_alignment_check(study_id):
     try:
         row = conn.execute(
             "SELECT id, business_problem, decision_to_support, study_type, "
+            "qa_status, status, "
             "study_fit, known_vs_unknown, target_audience "
             "FROM studies WHERE id = ? AND user_id = ?",
             (study_id, user["id"]),
@@ -7975,6 +7991,17 @@ def mark_alignment_check(study_id):
             conn.close()
         except Exception:
             pass
+
+    # Server-side phase guard: alignment-check is a State 2 affordance.
+    # The UI only surfaces it in State 2, but reject direct hits from
+    # State 1 (no study type) or State 3 (precheck passed / past draft)
+    # so the route's scope cannot drift via raw POSTs.
+    phase = derive_ui_phase(study_dict)
+    if phase != "STEP_2_ANCHORS":
+        return jsonify({
+            "ok": False,
+            "error": "Alignment check is only available during brief drafting.",
+        }), 409
 
     mark_model_id = mc.get("mark_model")
     if not mark_model_id:
