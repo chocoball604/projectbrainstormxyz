@@ -3317,22 +3317,13 @@
             {% endfor %}
             {% endif %}
 
-            {% if view_study_output.followup_count < 2 %}
-            <form action="/submit-followup/{{ view_study_output.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div style="flex: 1;">
-                    <label style="font-size: 13px; font-weight: 500; color: #555; display: block; margin-bottom: 4px;">
-                        Ask a follow-up question ({{ 2 - view_study_output.followup_count }} remaining)
-                    </label>
-                    <input type="text" name="followup_question" required placeholder="e.g. Can you elaborate on the pricing concerns?" style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
-                </div>
-                <button type="submit" class="btn btn-primary" style="white-space: nowrap;">Submit Follow-up</button>
-            </form>
-            {% else %}
-            <div style="background: #e8f4fd; border: 1px solid #b8daff; border-radius: 6px; padding: 12px; font-size: 13px; color: #004085;">
-                Maximum of 2 follow-up rounds reached for this study. No further follow-ups are allowed.
+            {# V1A safety lock: post-execution follow-up input is gated.
+               Backend route /submit-followup, the followups table, and the
+               historical follow-up list above remain intact so this gate
+               is fully reversible. #}
+            <div style="background: #f4f6f8; border: 1px solid #d4dde2; border-radius: 6px; padding: 12px 14px; font-size: 13px; color: #1a1a2e; line-height: 1.5;">
+                Follow-up questions are temporarily unavailable in V1A. This release focuses on getting the study framing right before execution. Clarification and iteration features will return in a future update.
             </div>
-            {% endif %}
             {% endif %}
             {% endif %}
         </div>
