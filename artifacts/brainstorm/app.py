@@ -3408,6 +3408,20 @@ def index():
     elif _be:
         del _pending_blog_errors[token]
 
+    # Prompt 6 — derive 3-state Mark presence phase from existing study state.
+    # Phase governs Mark tile presence only; it never alters Mark replies.
+    ui_phase = None
+    if configure_study:
+        _st_type = configure_study.get("study_type") or ""
+        _qa = configure_study.get("qa_status") or ""
+        _status = configure_study.get("status") or ""
+        if not _st_type:
+            ui_phase = "STEP_1_FRAMING"
+        elif _qa == "precheck_passed" or _status not in ("draft",):
+            ui_phase = "STEP_3_EXECUTION_READY"
+        else:
+            ui_phase = "STEP_2_ANCHORS"
+
     return render_template(
         "index.html",
         user=user,
@@ -3419,6 +3433,7 @@ def index():
         new_research_step=new_research_step,
         new_research_type=new_research_type,
         configure_study=configure_study,
+        ui_phase=ui_phase,
         configure_study_personas=configure_study_personas,
         available_personas=available_personas,
         step1_library=load_step1_library(),
@@ -7882,6 +7897,132 @@ def chat_status(study_id):
     conn.close()
     messages = [{"id": m["id"], "sender": m["sender"], "text": m["message_text"], "time": m["timestamp_utc"]} for m in msgs]
     return jsonify({"ready": pending == 0, "pending": pending, "messages": messages})
+
+
+_MARK_ALIGNMENT_SYSTEM_PROMPT = (
+    "You are Mark, acting strictly as a Brief Consistency Helper. "
+    "Your ONLY job is to give a single short evaluative sentence (max 30 words) "
+    "answering the user's alignment question against the saved Business Problem "
+    "and Decision. "
+    "Hard constraints: do NOT rewrite the Business Problem or Decision. "
+    "Do NOT propose new wording, methods, study types, sample sizes, personas, "
+    "or execution suggestions. Do NOT ask the user a follow-up question. "
+    "Do NOT add caveats, lists, or multiple sentences. "
+    "If something is empty or unclear, say so plainly in one sentence."
+)
+
+_MARK_ALIGNMENT_INTENTS = {
+    "align_problem": (
+        "Question: Does the rest of the brief stay aligned with the saved "
+        "Business Problem? Reply in one short evaluative sentence."
+    ),
+    "align_decision": (
+        "Question: Does the rest of the brief stay aligned with the saved "
+        "Decision This Study Will Support? Reply in one short evaluative "
+        "sentence."
+    ),
+    "remind_question": (
+        "Question: In one short sentence, what underlying question is this "
+        "study trying to answer, given the saved Business Problem and "
+        "Decision?"
+    ),
+}
+
+
+@app.route("/mark-alignment-check/<int:study_id>", methods=["POST"])
+def mark_alignment_check(study_id):
+    """Prompt 6 — State 2 (STEP_2_ANCHORS) Brief Consistency Helper.
+
+    Returns a single evaluative sentence. Additive system prompt — does NOT
+    modify the existing Mark Step 1 prompts. Does NOT emit Step 1 telemetry
+    events. DB connection is closed before call_llm() per V1A locking rule.
+    """
+    token = get_token()
+    user, _ = get_session_data(token)
+    if not user or user["state"] != "active":
+        return jsonify({"ok": False, "error": "Unauthorized."}), 403
+
+    intent = (request.form.get("intent") or "").strip()
+    if intent not in _MARK_ALIGNMENT_INTENTS:
+        return jsonify({"ok": False, "error": "Invalid intent."}), 400
+
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id, business_problem, decision_to_support, study_type, "
+            "study_fit, known_vs_unknown, target_audience "
+            "FROM studies WHERE id = ? AND user_id = ?",
+            (study_id, user["id"]),
+        ).fetchone()
+        if not row:
+            return jsonify({"ok": False, "error": "Study not found."}), 404
+        study_dict = dict(row)
+        mc = {
+            r["key"]: r["value"]
+            for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+        }
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    mark_model_id = mc.get("mark_model")
+    if not mark_model_id:
+        return jsonify({"ok": False, "error": "Mark model not configured."}), 500
+
+    bp = (study_dict.get("business_problem") or "").strip() or "(empty)"
+    ds = (study_dict.get("decision_to_support") or "").strip() or "(empty)"
+    st_type = (study_dict.get("study_type") or "").strip() or "(none)"
+    mg = (study_dict.get("study_fit") or "").strip() or "(empty)"
+    pc = (study_dict.get("known_vs_unknown") or "").strip() or "(empty)"
+    ta = (study_dict.get("target_audience") or "").strip() or "(empty)"
+
+    user_block = (
+        f"Saved Business Problem:\n\"{bp}\"\n\n"
+        f"Saved Decision This Study Will Support:\n\"{ds}\"\n\n"
+        f"Study type: {st_type}\n"
+        f"Market / Geography: {mg}\n"
+        f"Product / Concept: {pc}\n"
+        f"Target Audience: {ta}\n\n"
+        f"{_MARK_ALIGNMENT_INTENTS[intent]}"
+    )
+
+    messages = [
+        {"role": "system", "content": _MARK_ALIGNMENT_SYSTEM_PROMPT},
+        {"role": "user", "content": user_block},
+    ]
+
+    try:
+        reply_raw = call_llm(
+            mark_model_id, messages,
+            purpose=f"mark_alignment_check:{intent}",
+            timeout_seconds=30,
+        )
+    except Exception as e:
+        print(
+            f"MARK_ALIGN_LLM_ERROR study={study_id} intent={intent} err={e}",
+            flush=True,
+        )
+        return jsonify({"ok": False, "error": "LLM call failed."}), 502
+
+    reply = (reply_raw or "").strip()
+    # Hard-bound to a single short sentence: take the first sentence only.
+    for sep in ("\n\n", "\n"):
+        if sep in reply:
+            reply = reply.split(sep, 1)[0].strip()
+    # Pick first sentence terminator if present.
+    cut = -1
+    for term in (". ", "! ", "? "):
+        idx = reply.find(term)
+        if idx != -1 and (cut == -1 or idx < cut):
+            cut = idx + 1
+    if cut != -1:
+        reply = reply[:cut].strip()
+    if len(reply) > 400:
+        reply = reply[:397].rstrip() + "..."
+
+    return jsonify({"ok": True, "intent": intent, "reply": reply})
 
 
 @app.route("/send-chat/<int:study_id>", methods=["POST", "GET"])

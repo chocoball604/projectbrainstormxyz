@@ -625,7 +625,83 @@
 
         {% set is_discovery_stage = not configure_study.study_type %}
         {% set has_existing_chat = chat_messages|selectattr('sender', 'equalto', 'mark')|list|length > 0 %}
-        <div id="mark-chat-tile" style="width: 340px; flex-shrink: 0; position: sticky; top: 80px;" data-discovery="{{ '1' if is_discovery_stage else '0' }}" data-has-chat="{{ '1' if has_existing_chat else '0' }}">
+        {# Prompt 6 — 3-state Mark presence model.
+           STATE 1 (STEP_1_FRAMING): full Problem Framing Helper (today's tile, unchanged).
+           STATE 2 (STEP_2_ANCHORS): minimised Brief Consistency Helper (alignment buttons only).
+           STATE 3 (STEP_3_EXECUTION_READY): Mark tile hidden entirely. #}
+        {% if ui_phase == 'STEP_3_EXECUTION_READY' %}
+        {# State 3 — Mark tile hidden. JS lookups for #mark-chat-tile must tolerate absence. #}
+        {% elif ui_phase == 'STEP_2_ANCHORS' %}
+        <div id="mark-chat-tile" data-ui-phase="STEP_2_ANCHORS" style="width: 340px; flex-shrink: 0; position: sticky; top: 80px;">
+            <div class="card" style="padding: 14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                    <div>
+                        <h3 style="font-size: 15px; color: #1a1a2e; margin: 0; border-bottom: 2px solid #5C7E8F; padding-bottom: 6px;">Mark &mdash; Brief Consistency Helper <span style="font-size:11px;color:#888;font-weight:400;">(optional)</span></h3>
+                    </div>
+                    <button type="button" id="mark-s2-toggle" class="btn btn-secondary btn-small" aria-expanded="false">Expand</button>
+                </div>
+                <p style="font-size:12px;color:#666;margin:8px 0 0;">Quick alignment checks against your saved Business Problem &amp; Decision. No rewriting, no method advice.</p>
+                <div id="mark-s2-body" style="display:none;margin-top:10px;">
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        <button type="button" class="mark-align-btn" data-intent="align_problem" style="padding: 8px 10px; font-size: 12px; border: 1px solid #5C7E8F; background: #fff; color: #5C7E8F; border-radius: 6px; cursor: pointer; text-align: left;">Check alignment with Business Problem</button>
+                        <button type="button" class="mark-align-btn" data-intent="align_decision" style="padding: 8px 10px; font-size: 12px; border: 1px solid #5C7E8F; background: #fff; color: #5C7E8F; border-radius: 6px; cursor: pointer; text-align: left;">Check alignment with Decision</button>
+                        <button type="button" class="mark-align-btn" data-intent="remind_question" style="padding: 8px 10px; font-size: 12px; border: 1px solid #5C7E8F; background: #fff; color: #5C7E8F; border-radius: 6px; cursor: pointer; text-align: left;">Remind me what question this study is answering</button>
+                    </div>
+                    <div id="mark-align-status" style="font-size:11px;color:#777;margin-top:8px;min-height:14px;"></div>
+                    <div id="mark-align-reply" style="display:none;margin-top:8px;background:#f5f8fa;border:1px solid #e0e8ec;border-radius:6px;padding:10px 12px;font-size:13px;color:#1a1a2e;line-height:1.45;"></div>
+                </div>
+            </div>
+            <script>
+            (function() {
+                var sid = {{ configure_study.id }};
+                var tok = '{{ token }}';
+                var toggle = document.getElementById('mark-s2-toggle');
+                var body = document.getElementById('mark-s2-body');
+                var statusEl = document.getElementById('mark-align-status');
+                var replyEl = document.getElementById('mark-align-reply');
+                if (toggle && body) {
+                    toggle.addEventListener('click', function() {
+                        var open = body.style.display !== 'none';
+                        body.style.display = open ? 'none' : '';
+                        toggle.textContent = open ? 'Expand' : 'Collapse';
+                        toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+                    });
+                }
+                document.querySelectorAll('.mark-align-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var intent = btn.getAttribute('data-intent');
+                        statusEl.textContent = 'Checking\u2026';
+                        replyEl.style.display = 'none';
+                        replyEl.textContent = '';
+                        document.querySelectorAll('.mark-align-btn').forEach(function(b) { b.disabled = true; });
+                        var fd = new FormData();
+                        fd.append('token', tok);
+                        fd.append('intent', intent);
+                        fetch('/mark-alignment-check/' + sid, {
+                            method: 'POST', body: fd,
+                            headers: {'X-Requested-With': 'XMLHttpRequest'}
+                        }).then(function(r) { return r.json(); }).then(function(data) {
+                            document.querySelectorAll('.mark-align-btn').forEach(function(b) { b.disabled = false; });
+                            if (!data || !data.ok) {
+                                statusEl.textContent = 'Check failed: ' + ((data && data.error) || 'unknown');
+                                statusEl.style.color = '#c0392b';
+                                return;
+                            }
+                            statusEl.textContent = '';
+                            replyEl.textContent = data.reply || '';
+                            replyEl.style.display = '';
+                        }).catch(function() {
+                            document.querySelectorAll('.mark-align-btn').forEach(function(b) { b.disabled = false; });
+                            statusEl.textContent = 'Check failed (network)';
+                            statusEl.style.color = '#c0392b';
+                        });
+                    });
+                });
+            })();
+            </script>
+        </div>
+        {% else %}
+        <div id="mark-chat-tile" data-ui-phase="STEP_1_FRAMING" style="width: 340px; flex-shrink: 0; position: sticky; top: 80px;" data-discovery="{{ '1' if is_discovery_stage else '0' }}" data-has-chat="{{ '1' if has_existing_chat else '0' }}">
             <div class="card" style="padding: 16px;">
                 {% if is_discovery_stage %}
                 <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 4px; border-bottom: 2px solid #5C7E8F; padding-bottom: 8px;">Mark &ndash; Problem Framing Helper</h3>
@@ -854,6 +930,7 @@
                 </script>
             </div>
         </div>
+        {% endif %}{# /Prompt 6 ui_phase switch #}
 
         <div id="study-builder-right" style="flex: 1; min-width: 0;">
         <div class="card" id="configure-study-section">
