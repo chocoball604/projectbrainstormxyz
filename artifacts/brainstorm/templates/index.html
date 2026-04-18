@@ -1221,6 +1221,120 @@
 
             {% if configure_study.study_type %}
 
+            {# Prompt 5: Core Framing card — BP/DS stay visible & editable after study type is set. #}
+            <div id="core-framing-card" style="background: #f0f4ff; border: 1px solid #d0d9f5; border-radius: 8px; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer;" id="core-framing-header">
+                    <div>
+                        <strong style="font-size: 14px; color: #1a1a2e;">Core Framing</strong>
+                        <span style="font-size: 12px; color: #666; margin-left: 8px;">Business Problem &middot; Decision to Support</span>
+                    </div>
+                    <div>
+                        <button type="button" id="core-framing-edit-btn" class="btn btn-secondary btn-small" style="margin-right: 8px;">Edit framing</button>
+                        <button type="button" id="core-framing-toggle-btn" class="btn btn-secondary btn-small" aria-expanded="true">Collapse</button>
+                    </div>
+                </div>
+                <div id="core-framing-body" style="padding: 0 16px 14px;">
+                    <div id="core-framing-readonly">
+                        <div style="margin-bottom: 10px;">
+                            <div style="font-size: 12px; color: #666; font-weight: 600; margin-bottom: 2px;">1. Business Problem or Opportunity</div>
+                            <div style="background: #fff; border: 1px solid #e6ecf5; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #333; overflow-wrap: break-word;">{{ configure_study.business_problem or '(empty)' }}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: #666; font-weight: 600; margin-bottom: 2px;">2. Decision This Study Will Support</div>
+                            <div style="background: #fff; border: 1px solid #e6ecf5; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #333; overflow-wrap: break-word;">{{ configure_study.decision_to_support or '(empty)' }}</div>
+                        </div>
+                    </div>
+                    <div id="core-framing-edit" style="display: none;">
+                        <div class="core-framing-field" data-field="business_problem" style="margin-bottom: 12px;">
+                            <label for="core-framing-input-business_problem" style="font-weight: 600; font-size: 13px; display: block; margin-bottom: 4px;">1. Business Problem or Opportunity</label>
+                            <textarea id="core-framing-input-business_problem" data-field="business_problem" rows="3" maxlength="2000" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;font-family:inherit;line-height:1.5;resize:vertical;">{{ configure_study.business_problem or '' }}</textarea>
+                            <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
+                                <button type="button" class="btn btn-primary btn-small core-framing-save-btn" data-field="business_problem">Save checkpoint</button>
+                                <span class="core-framing-status" data-field="business_problem" style="font-size:12px;color:#777;"></span>
+                            </div>
+                        </div>
+                        <div class="core-framing-field" data-field="decision_to_support">
+                            <label for="core-framing-input-decision_to_support" style="font-weight: 600; font-size: 13px; display: block; margin-bottom: 4px;">2. Decision This Study Will Support</label>
+                            <textarea id="core-framing-input-decision_to_support" data-field="decision_to_support" rows="3" maxlength="2000" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;font-family:inherit;line-height:1.5;resize:vertical;">{{ configure_study.decision_to_support or '' }}</textarea>
+                            <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
+                                <button type="button" class="btn btn-primary btn-small core-framing-save-btn" data-field="decision_to_support">Save checkpoint</button>
+                                <span class="core-framing-status" data-field="decision_to_support" style="font-size:12px;color:#777;"></span>
+                            </div>
+                        </div>
+                        <p style="font-size:11px;color:#888;margin:10px 0 0;">Editing framing here updates the study record. Study type stays set; readiness recomputes on save.</p>
+                    </div>
+                </div>
+            </div>
+            <script>
+            (function() {
+                var cfStudyId = {{ configure_study.id }};
+                var cfToken = '{{ token }}';
+                var cfSession = {{ step1_session_id | tojson }};
+                var bodyEl = document.getElementById('core-framing-body');
+                var toggleBtn = document.getElementById('core-framing-toggle-btn');
+                var editBtn = document.getElementById('core-framing-edit-btn');
+                var roEl = document.getElementById('core-framing-readonly');
+                var editEl = document.getElementById('core-framing-edit');
+                if (toggleBtn && bodyEl) {
+                    toggleBtn.addEventListener('click', function() {
+                        var collapsed = bodyEl.style.display === 'none';
+                        bodyEl.style.display = collapsed ? '' : 'none';
+                        toggleBtn.textContent = collapsed ? 'Collapse' : 'Expand';
+                        toggleBtn.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
+                    });
+                }
+                if (editBtn && roEl && editEl) {
+                    editBtn.addEventListener('click', function() {
+                        var editing = editEl.style.display !== 'none';
+                        editEl.style.display = editing ? 'none' : '';
+                        roEl.style.display = editing ? '' : 'none';
+                        editBtn.textContent = editing ? 'Edit framing' : 'Done editing';
+                    });
+                }
+                function cfStatus(field, text, color) {
+                    var el = document.querySelector('.core-framing-status[data-field="' + field + '"]');
+                    if (!el) return;
+                    el.textContent = text;
+                    el.style.color = color || '#777';
+                }
+                document.querySelectorAll('.core-framing-save-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        var field = btn.getAttribute('data-field');
+                        var ta = document.getElementById('core-framing-input-' + field);
+                        if (!ta) return;
+                        var fd = new FormData();
+                        fd.append('token', cfToken);
+                        fd.append('field', field);
+                        fd.append('value', ta.value);
+                        fd.append('mode', 'checkpoint');
+                        if (cfSession) fd.append('step1_session_id', cfSession);
+                        cfStatus(field, 'Saving\u2026', '#777');
+                        btn.disabled = true;
+                        fetch('/save-discovery/' + cfStudyId, {
+                            method: 'POST', body: fd,
+                            headers: {'X-Requested-With': 'XMLHttpRequest'}
+                        }).then(function(r) { return r.json(); }).then(function(data) {
+                            btn.disabled = false;
+                            if (!data || !data.ok) {
+                                cfStatus(field, 'Save failed: ' + ((data && data.error) || 'unknown'), '#c0392b');
+                                return;
+                            }
+                            cfStatus(field, '\u2713 Saved ' + (data.saved_at || ''), '#27ae60');
+                            var roBlock = document.getElementById('core-framing-readonly');
+                            if (roBlock) {
+                                var divs = roBlock.querySelectorAll('div > div:last-child');
+                                if (field === 'business_problem' && divs[0]) divs[0].textContent = ta.value || '(empty)';
+                                if (field === 'decision_to_support' && divs[1]) divs[1].textContent = ta.value || '(empty)';
+                            }
+                        }).catch(function() {
+                            btn.disabled = false;
+                            cfStatus(field, 'Save failed (network)', '#c0392b');
+                        });
+                    });
+                });
+            })();
+            </script>
+
             {% set has_bp = configure_study.business_problem and configure_study.business_problem|trim|length > 0 %}
             {% set has_ds = configure_study.decision_to_support and configure_study.decision_to_support|trim|length > 0 %}
             {% set has_mg = configure_study.study_fit and configure_study.study_fit|trim|length > 0 %}
@@ -1232,81 +1346,55 @@
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">2. Research Brief</h3>
             {% if all_anchors_complete %}
-            <div style="background: #e8f5e9; border-radius: 6px; padding: 16px; margin-bottom: 16px; font-size: 13px;">
-                <p style="margin: 0; font-weight: 600; color: #27ae60;">Research Brief Complete
-                    (5 required anchors filled{% if has_dui %} + optional insight{% endif %})
-                </p>
-                <ul style="margin: 8px 0 0 20px; line-height: 1.6;">
-                    <li><strong>Business Problem:</strong> {{ configure_study.business_problem }}</li>
-                    <li><strong>Decision to Support:</strong> {{ configure_study.decision_to_support }}</li>
-                    <li><strong>Market / Geography:</strong> {{ configure_study.study_fit }}</li>
-                    <li><strong>Product / Concept:</strong> {{ configure_study.known_vs_unknown }}</li>
-                    <li><strong>Target Audience (Demographics / Socio-economics):</strong> {{ configure_study.target_audience }}</li>
-                    {% if has_dui %}<li><strong>Definition of Useful Insight:</strong> {{ configure_study.definition_useful_insight }}</li>{% endif %}
-                </ul>
+            <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
+                <strong style="color: #27ae60;">&#10003; Research Brief Complete</strong>
+                <span style="color:#555;">(5 required anchors filled{% if has_dui %} + optional insight{% endif %}). Anchors below remain editable until you click <em>Start Study</em>.</span>
             </div>
-            {% else %}
-            <div style="background: #fff3cd; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ffc107;">
+            {% endif %}
+            <div style="background: #fff8e1; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #ffd966;">
+                {% if not all_anchors_complete %}
                 <p style="font-size: 13px; color: #666; margin: 0 0 16px;">
-                    Business Problem and Decision to Support were collected during discovery. Save each remaining anchor individually below.
+                    Save each anchor individually below. All anchors stay editable until you click <em>Start Study</em>.
                 </p>
+                {% endif %}
 
                 <div id="anchor-slot-market_geography">
-                {% if has_mg %}
-                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
-                    <strong style="color: #27ae60;">&#10003; 3. Market / Geography:</strong> {{ configure_study.study_fit }}
-                </div>
-                {% else %}
                 <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="market_geography">
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="hidden" name="anchor_key" value="market_geography">
                     <div class="form-group" style="margin-bottom: 6px;">
-                        <label>3. Market / Geography</label>
-                        <textarea name="anchor_value" rows="2" required maxlength="300" placeholder="What market or geography does this study focus on?"></textarea>
+                        <label>3. Market / Geography {% if has_mg %}<span class="anchor-saved-badge" style="color:#27ae60;font-size:12px;font-weight:400;margin-left:6px;">&#10003; Saved</span>{% else %}<span class="anchor-saved-badge" style="display:none;color:#27ae60;font-size:12px;font-weight:400;margin-left:6px;"></span>{% endif %}</label>
+                        <textarea name="anchor_value" rows="2" required maxlength="300" placeholder="What market or geography does this study focus on?">{{ configure_study.study_fit or '' }}</textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-small">Save Market / Geography</button>
+                    <button type="submit" class="btn btn-primary btn-small">{% if has_mg %}Update Market / Geography{% else %}Save Market / Geography{% endif %}</button>
                 </form>
-                {% endif %}
                 </div>
 
                 <div id="anchor-slot-product_concept">
-                {% if has_pc %}
-                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
-                    <strong style="color: #27ae60;">&#10003; 4. Product / Concept:</strong> {{ configure_study.known_vs_unknown }}
-                </div>
-                {% else %}
                 <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="product_concept">
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="hidden" name="anchor_key" value="product_concept">
                     <div class="form-group" style="margin-bottom: 6px;">
-                        <label>4. Product / Concept</label>
-                        <textarea name="anchor_value" rows="2" required maxlength="300" placeholder="What product, service, or concept is being researched?"></textarea>
+                        <label>4. Product / Concept {% if has_pc %}<span class="anchor-saved-badge" style="color:#27ae60;font-size:12px;font-weight:400;margin-left:6px;">&#10003; Saved</span>{% else %}<span class="anchor-saved-badge" style="display:none;color:#27ae60;font-size:12px;font-weight:400;margin-left:6px;"></span>{% endif %}</label>
+                        <textarea name="anchor_value" rows="2" required maxlength="300" placeholder="What product, service, or concept is being researched?">{{ configure_study.known_vs_unknown or '' }}</textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-small">Save Product / Concept</button>
+                    <button type="submit" class="btn btn-primary btn-small">{% if has_pc %}Update Product / Concept{% else %}Save Product / Concept{% endif %}</button>
                 </form>
-                {% endif %}
                 </div>
 
                 <div id="anchor-slot-target_audience">
-                {% if has_ta %}
-                <div style="background: #e8f5e9; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px;">
-                    <strong style="color: #27ae60;">&#10003; 5. Target Audience (Demographics / Socio-economics):</strong> {{ configure_study.target_audience }}
-                </div>
-                {% else %}
                 <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="target_audience">
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="hidden" name="anchor_key" value="target_audience">
                     <div class="form-group" style="margin-bottom: 6px;">
-                        <label>5. Target Audience (Demographics / Socio-economics)</label>
-                        <textarea name="anchor_value" rows="2" required maxlength="300" placeholder="Describe demographic and socio‑economic characteristics (eg, age/life range, occupation, education, income range). Do not describe attitudes toward the product."></textarea>
+                        <label>5. Target Audience (Demographics / Socio-economics) {% if has_ta %}<span class="anchor-saved-badge" style="color:#27ae60;font-size:12px;font-weight:400;margin-left:6px;">&#10003; Saved</span>{% else %}<span class="anchor-saved-badge" style="display:none;color:#27ae60;font-size:12px;font-weight:400;margin-left:6px;"></span>{% endif %}</label>
+                        <textarea name="anchor_value" rows="2" required maxlength="300" placeholder="Describe demographic and socio‑economic characteristics (eg, age/life range, occupation, education, income range). Do not describe attitudes toward the product.">{{ configure_study.target_audience or '' }}</textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-small">Save Target Audience</button>
+                    <button type="submit" class="btn btn-primary btn-small">{% if has_ta %}Update Target Audience{% else %}Save Target Audience{% endif %}</button>
                 </form>
-                {% endif %}
                 </div>
 
             </div>
-            {% endif %}
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">3. Grounding Documents</h3>
@@ -1628,23 +1716,17 @@
                     ] %}
                     {% for fk, fl, fp in oc_fields_list %}
                     {% set fv = dui_oc_val if fk == 'definition_useful_insight' else (oc_data.get(fk, '') if oc_data else '') %}
+                    {% set fv_has = fv and fv|trim|length > 0 %}
                     <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
-                        {% if fv and fv|trim|length > 0 %}
-                        <div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;">
-                            <strong style="color:#27ae60;">&#10003; {{ fl }}:</strong> {{ fv }}
-                            <a href="#" class="oc-edit-link" data-field="{{ fk }}" data-label="{{ fl }}" data-placeholder="{{ fp }}" data-value="{{ fv }}" data-action="/save-optional-context-field/{{ configure_study.id }}" style="margin-left:8px;font-size:12px;color:#5C7E8F;">Edit</a>
-                        </div>
-                        {% else %}
                         <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
                             <input type="hidden" name="token" value="{{ token }}">
                             <input type="hidden" name="field_key" value="{{ fk }}">
                             <div class="form-group" style="margin-bottom:4px;">
-                                <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span></label>
-                                <textarea name="field_value" rows="2" maxlength="300" placeholder="{{ fp }}"></textarea>
+                                <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span> <span class="oc-saved-badge" style="{% if not fv_has %}display:none;{% endif %}color:#27ae60;font-size:12px;font-weight:400;margin-left:6px;">{% if fv_has %}&#10003; Saved{% endif %}</span></label>
+                                <textarea name="field_value" rows="2" maxlength="300" placeholder="{{ fp }}">{{ fv or '' }}</textarea>
                             </div>
-                            <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">Save</button>
+                            <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">{% if fv_has %}Update{% else %}Save{% endif %}</button>
                         </form>
-                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>
@@ -2041,6 +2123,9 @@
 
             function autoRunStudy() {
                 if (_executionRunning) return;
+                if (!window.confirm('Start the study now?\n\nAnchors will be locked. Changes after this point require restarting or duplicating the study.\n\nContinue?')) {
+                    return;
+                }
                 _executionRunning = true;
                 stopExecProgress();
                 var strip = document.getElementById('exec-control-strip');
@@ -2600,13 +2685,16 @@
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                         if (data.ok) {
-                            var slot = document.getElementById('anchor-slot-' + key);
-                            if (slot) {
-                                slot.innerHTML = '<div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:13px;overflow-wrap:break-word;word-wrap:break-word;">'
-                                    + '<strong style="color:#27ae60;">\u2713 ' + escHtml(anchorLabels[key] || key) + ':</strong> '
-                                    + escHtml(val)
-                                    + '</div>';
+                            var badge = form.querySelector('.anchor-saved-badge');
+                            if (badge) {
+                                var now = new Date();
+                                var hh = String(now.getHours()).padStart(2, '0');
+                                var mm = String(now.getMinutes()).padStart(2, '0');
+                                badge.textContent = '\u2713 Saved ' + hh + ':' + mm;
+                                badge.style.display = '';
                             }
+                            btn.disabled = false;
+                            btn.textContent = 'Update ' + (anchorLabels[key] || key);
                             handleAjaxResponse(data);
                         } else {
                             alert(data.error || 'Save failed');
@@ -2621,28 +2709,6 @@
                     });
                 });
             });
-
-            function ocRenderSaved(slot, fieldKey, label, val, actionUrl) {
-                slot.innerHTML = '<div style="background:#e8f5e9;border-radius:6px;padding:10px 14px;font-size:13px;overflow-wrap:break-word;word-wrap:break-word;">'
-                    + '<strong style="color:#27ae60;">\u2713 ' + escHtml(label) + ':</strong> ' + escHtml(val)
-                    + ' <span style="color:#27ae60;font-size:12px;margin-left:6px;">Saved</span>'
-                    + ' <a href="#" class="oc-edit-link" style="margin-left:8px;font-size:12px;color:#5C7E8F;">Edit</a></div>';
-                slot.querySelector('.oc-edit-link').addEventListener('click', function(ev) {
-                    ev.preventDefault();
-                    ocRenderForm(slot, fieldKey, label, val, actionUrl);
-                });
-            }
-
-            function ocRenderForm(slot, fieldKey, label, currentVal, actionUrl) {
-                slot.innerHTML = '<form class="oc-field-form" action="' + escHtml(actionUrl) + '" method="POST">'
-                    + '<input type="hidden" name="token" value="' + escHtml(token) + '">'
-                    + '<input type="hidden" name="field_key" value="' + escHtml(fieldKey) + '">'
-                    + '<div class="form-group" style="margin-bottom:4px;">'
-                    + '<label>' + escHtml(label) + ' <span style="font-weight:400;color:#999;">(optional)</span></label>'
-                    + '<textarea name="field_value" rows="2" maxlength="300">' + escHtml(currentVal) + '</textarea></div>'
-                    + '<button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">Save</button></form>';
-                bindOcForm(slot.querySelector('.oc-field-form'));
-            }
 
             function bindOcForm(form) {
                 form.addEventListener('submit', function(e) {
@@ -2660,10 +2726,16 @@
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                         if (data.ok) {
-                            var slot = document.getElementById('oc-slot-' + fieldKey);
-                            if (slot) {
-                                ocRenderSaved(slot, fieldKey, data.field_label || fieldKey, data.field_value || val, form.action);
+                            var badge = form.querySelector('.oc-saved-badge');
+                            if (badge) {
+                                var now = new Date();
+                                var hh = String(now.getHours()).padStart(2, '0');
+                                var mm = String(now.getMinutes()).padStart(2, '0');
+                                badge.textContent = '\u2713 Saved ' + hh + ':' + mm;
+                                badge.style.display = '';
                             }
+                            btn.disabled = false;
+                            btn.textContent = 'Update';
                         } else {
                             alert(data.error || 'Save failed');
                             btn.disabled = false;
@@ -2678,20 +2750,6 @@
                 });
             }
             document.querySelectorAll('.oc-field-form').forEach(bindOcForm);
-
-            document.querySelectorAll('.oc-edit-link').forEach(function(link) {
-                link.addEventListener('click', function(ev) {
-                    ev.preventDefault();
-                    var fieldKey = link.getAttribute('data-field');
-                    var label = link.getAttribute('data-label');
-                    var currentVal = link.getAttribute('data-value') || '';
-                    var actionUrl = link.getAttribute('data-action') || '';
-                    var slot = document.getElementById('oc-slot-' + fieldKey);
-                    if (slot && actionUrl) {
-                        ocRenderForm(slot, fieldKey, label, currentVal, actionUrl);
-                    }
-                });
-            });
 
             function bindAttach(af) {
                 af.addEventListener('submit', function(e) {
