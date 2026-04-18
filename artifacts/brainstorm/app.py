@@ -360,18 +360,21 @@ def derive_ui_phase(study):
 
     Mapping:
       - no ``study_type``                         -> STEP_1_FRAMING
-      - ``qa_status == 'precheck_passed'`` or
-        ``status`` not in ('draft',)              -> STEP_3_EXECUTION_READY
+      - ``status`` not in ('draft',)              -> STEP_3_EXECUTION_READY
       - else                                      -> STEP_2_ANCHORS
+
+    Note: a passing precheck (``qa_status == 'precheck_passed'``) while the
+    study is still in ``draft`` status is intentionally STEP_2_ANCHORS so the
+    minimised "Brief Consistency Helper" stays visible right up until the
+    user actually starts the study.
     """
     if not study:
         return None
     st_type = (study.get("study_type") or "")
-    qa = (study.get("qa_status") or "")
     status = (study.get("status") or "")
     if not st_type:
         return "STEP_1_FRAMING"
-    if qa == "precheck_passed" or status not in ("draft",):
+    if status not in ("draft",):
         return "STEP_3_EXECUTION_READY"
     return "STEP_2_ANCHORS"
 

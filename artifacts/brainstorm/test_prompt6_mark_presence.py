@@ -166,26 +166,33 @@ class MarkPresenceTests(unittest.TestCase):
         self.assertIn('aria-expanded="false"', body)
 
     # ------------------------------------------------------------------
-    # State 3 — STEP_3_EXECUTION_READY (qa_status precheck_passed)
+    # State 3 — STEP_3_EXECUTION_READY (study started, status != draft)
     # ------------------------------------------------------------------
-    def test_state3_hides_mark_tile(self):
+    def test_state3_passing_precheck_in_draft_stays_in_state2(self):
+        # Per the corrected Prompt 6 mapping: a brief that PASSES precheck
+        # while still in draft must stay in State 2 (Brief Consistency
+        # Helper visible) right up until the user starts the study. State 3
+        # is a non-draft study; the configure page redirects away from
+        # non-draft studies, so the helper-level mapping is verified in
+        # test_ui_phase_derivation_branches and the integration check here
+        # focuses on the precheck-passed-in-draft case that previously
+        # hid the tile incorrectly.
         sid = self._make_study(
             study_type="synthetic_idi", qa_status="precheck_passed",
         )
         body = self._get_configure(sid)
-        self.assertNotIn('id="mark-chat-tile"', body)
-        self.assertNotIn("Brief Consistency Helper", body)
-        self.assertNotIn("Mark &ndash; Problem Framing Helper", body)
-        # Configure section itself must still render
-        self.assertIn('id="configure-study-section"', body)
+        self.assertIn('data-ui-phase="STEP_2_ANCHORS"', body)
+        self.assertIn("Brief Consistency Helper", body)
+        self.assertIn('data-intent="align_problem"', body)
 
     # ------------------------------------------------------------------
     # Alignment-check route — bounded reply, no telemetry
     # ------------------------------------------------------------------
     def test_alignment_check_route_returns_single_sentence_no_telemetry(self):
-        # Keep the study in STEP_2_ANCHORS by leaving TA empty — the route
-        # now phase-guards and rejects requests outside State 2 with 409.
-        sid = self._make_study(study_type="synthetic_idi", ta="")
+        # Under the corrected Prompt 6 mapping, any draft study with a
+        # study type set is in STEP_2_ANCHORS regardless of precheck —
+        # the previous ``ta=""`` workaround is no longer needed.
+        sid = self._make_study(study_type="synthetic_idi")
 
         # Snapshot telemetry row count BEFORE.
         conn = sqlite3.connect(DB_PATH, timeout=10)
@@ -262,8 +269,9 @@ class MarkPresenceTests(unittest.TestCase):
               "status": "draft"}, "STEP_2_ANCHORS"),
             ({"study_type": "synthetic_idi", "qa_status": "precheck_failed",
               "status": "draft"}, "STEP_2_ANCHORS"),
+            # Passing precheck while still in draft now stays in State 2.
             ({"study_type": "synthetic_idi", "qa_status": "precheck_passed",
-              "status": "draft"}, "STEP_3_EXECUTION_READY"),
+              "status": "draft"}, "STEP_2_ANCHORS"),
             ({"study_type": "synthetic_idi", "qa_status": "",
               "status": "running"}, "STEP_3_EXECUTION_READY"),
             ({"study_type": "synthetic_idi", "qa_status": "",
