@@ -7996,9 +7996,11 @@ def mark_alignment_check(study_id):
             pass
 
     # Server-side phase guard: alignment-check is a State 2 affordance.
-    # The UI only surfaces it in State 2, but reject direct hits from
-    # State 1 (no study type) or State 3 (precheck passed / past draft)
-    # so the route's scope cannot drift via raw POSTs.
+    # The UI only surfaces it in State 2 (draft study with a study type
+    # set, regardless of precheck result), so reject direct hits from
+    # State 1 (no study type) or State 3 (study has been started, i.e.
+    # status not in ('draft',)) so the route's scope cannot drift via
+    # raw POSTs.
     phase = derive_ui_phase(study_dict)
     if phase != "STEP_2_ANCHORS":
         return jsonify({
