@@ -177,6 +177,26 @@ class FramingContinuityTests(unittest.TestCase):
         self.assertIn("window.confirm(", body)
         self.assertIn("Anchors will be locked", body)
 
+    def test_core_framing_autosave_hooks_present(self):
+        sid = self._make_study_with_anchors(study_type="synthetic_idi")
+        body = self._get_configure(sid)
+        # Stable mirror IDs for read-only display nodes (no fragile
+        # querySelectorAll('div > div:last-child') indexing).
+        self.assertIn(
+            'id="core-framing-display-business_problem"', body,
+        )
+        self.assertIn(
+            'id="core-framing-display-decision_to_support"', body,
+        )
+        # Autosave parity with discovery: input/blur listeners debounced
+        # and a checkpoint button. cfScheduleAutosave + cfSend(...,
+        # 'autosave', ...) + cfSend(..., 'checkpoint', ...) all wired.
+        self.assertIn("cfScheduleAutosave", body)
+        self.assertIn("'autosave'", body)
+        self.assertIn("'checkpoint'", body)
+        self.assertIn("addEventListener('input'", body)
+        self.assertIn("addEventListener('blur'", body)
+
     def test_no_telemetry_event_type_drift(self):
         with open(os.path.join(HERE, "app.py")) as f:
             src = f.read()

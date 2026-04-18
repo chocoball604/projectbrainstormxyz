@@ -1237,11 +1237,11 @@
                     <div id="core-framing-readonly">
                         <div style="margin-bottom: 10px;">
                             <div style="font-size: 12px; color: #666; font-weight: 600; margin-bottom: 2px;">1. Business Problem or Opportunity</div>
-                            <div style="background: #fff; border: 1px solid #e6ecf5; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #333; overflow-wrap: break-word;">{{ configure_study.business_problem or '(empty)' }}</div>
+                            <div id="core-framing-display-business_problem" style="background: #fff; border: 1px solid #e6ecf5; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #333; overflow-wrap: break-word;">{{ configure_study.business_problem or '(empty)' }}</div>
                         </div>
                         <div>
                             <div style="font-size: 12px; color: #666; font-weight: 600; margin-bottom: 2px;">2. Decision This Study Will Support</div>
-                            <div style="background: #fff; border: 1px solid #e6ecf5; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #333; overflow-wrap: break-word;">{{ configure_study.decision_to_support or '(empty)' }}</div>
+                            <div id="core-framing-display-decision_to_support" style="background: #fff; border: 1px solid #e6ecf5; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #333; overflow-wrap: break-word;">{{ configure_study.decision_to_support or '(empty)' }}</div>
                         </div>
                     </div>
                     <div id="core-framing-edit" style="display: none;">
@@ -1297,39 +1297,71 @@
                     el.textContent = text;
                     el.style.color = color || '#777';
                 }
+                function cfMirror(field, val) {
+                    var d = document.getElementById('core-framing-display-' + field);
+                    if (d) d.textContent = val || '(empty)';
+                }
+                var cfLastSent = {business_problem: null, decision_to_support: null};
+                var cfTimers = {};
+                function cfSend(field, value, mode, btn) {
+                    var fd = new FormData();
+                    fd.append('token', cfToken);
+                    fd.append('field', field);
+                    fd.append('value', value);
+                    fd.append('mode', mode);
+                    if (cfSession) fd.append('step1_session_id', cfSession);
+                    cfStatus(field, mode === 'autosave' ? 'Saving draft\u2026' : 'Saving\u2026', '#777');
+                    if (btn) btn.disabled = true;
+                    return fetch('/save-discovery/' + cfStudyId, {
+                        method: 'POST', body: fd,
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    }).then(function(r) { return r.json(); }).then(function(data) {
+                        if (btn) btn.disabled = false;
+                        if (!data || !data.ok) {
+                            cfStatus(field, 'Save failed: ' + ((data && data.error) || 'unknown'), '#c0392b');
+                            return;
+                        }
+                        cfLastSent[field] = value;
+                        if (data.mode === 'autosave') {
+                            cfStatus(field, 'Draft autosaved', '#777');
+                        } else {
+                            cfStatus(field, '\u2713 Saved ' + (data.saved_at || ''), '#27ae60');
+                        }
+                        cfMirror(field, value);
+                    }).catch(function() {
+                        if (btn) btn.disabled = false;
+                        cfStatus(field, 'Save failed (network)', '#c0392b');
+                    });
+                }
+                function cfScheduleAutosave(field) {
+                    if (cfTimers[field]) clearTimeout(cfTimers[field]);
+                    cfTimers[field] = setTimeout(function() {
+                        var ta = document.getElementById('core-framing-input-' + field);
+                        if (!ta) return;
+                        var v = ta.value;
+                        if (v === cfLastSent[field]) return;
+                        cfSend(field, v, 'autosave', null);
+                    }, 1500);
+                }
+                ['business_problem', 'decision_to_support'].forEach(function(field) {
+                    var ta = document.getElementById('core-framing-input-' + field);
+                    if (!ta) return;
+                    cfLastSent[field] = ta.value;
+                    ta.addEventListener('input', function() { cfScheduleAutosave(field); });
+                    ta.addEventListener('blur', function() {
+                        if (cfTimers[field]) clearTimeout(cfTimers[field]);
+                        var v = ta.value;
+                        if (v === cfLastSent[field]) return;
+                        cfSend(field, v, 'autosave', null);
+                    });
+                });
                 document.querySelectorAll('.core-framing-save-btn').forEach(function(btn) {
                     btn.addEventListener('click', function() {
                         var field = btn.getAttribute('data-field');
                         var ta = document.getElementById('core-framing-input-' + field);
                         if (!ta) return;
-                        var fd = new FormData();
-                        fd.append('token', cfToken);
-                        fd.append('field', field);
-                        fd.append('value', ta.value);
-                        fd.append('mode', 'checkpoint');
-                        if (cfSession) fd.append('step1_session_id', cfSession);
-                        cfStatus(field, 'Saving\u2026', '#777');
-                        btn.disabled = true;
-                        fetch('/save-discovery/' + cfStudyId, {
-                            method: 'POST', body: fd,
-                            headers: {'X-Requested-With': 'XMLHttpRequest'}
-                        }).then(function(r) { return r.json(); }).then(function(data) {
-                            btn.disabled = false;
-                            if (!data || !data.ok) {
-                                cfStatus(field, 'Save failed: ' + ((data && data.error) || 'unknown'), '#c0392b');
-                                return;
-                            }
-                            cfStatus(field, '\u2713 Saved ' + (data.saved_at || ''), '#27ae60');
-                            var roBlock = document.getElementById('core-framing-readonly');
-                            if (roBlock) {
-                                var divs = roBlock.querySelectorAll('div > div:last-child');
-                                if (field === 'business_problem' && divs[0]) divs[0].textContent = ta.value || '(empty)';
-                                if (field === 'decision_to_support' && divs[1]) divs[1].textContent = ta.value || '(empty)';
-                            }
-                        }).catch(function() {
-                            btn.disabled = false;
-                            cfStatus(field, 'Save failed (network)', '#c0392b');
-                        });
+                        if (cfTimers[field]) clearTimeout(cfTimers[field]);
+                        cfSend(field, ta.value, 'checkpoint', btn);
                     });
                 });
             })();
