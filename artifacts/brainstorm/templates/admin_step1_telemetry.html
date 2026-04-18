@@ -59,7 +59,7 @@
              value="{{ summary.page_size }}">
       <button class="btn primary" type="submit">Refresh</button>
     </form>
-    <a class="btn" href="/portal?token={{ token }}">Back to portal</a>
+    <a class="btn" href="/?token={{ token }}">Back to Admin Panel</a>
     <a class="btn" href="/admin/step1-library?token={{ token }}">Pattern Library</a>
   </div>
 
@@ -132,7 +132,7 @@
           {% endfor %}
         </tbody>
       </table>
-      {{ pager(summary.quick_actions, 'qa_page', 'page_size') }}
+      {{ pager(summary.quick_actions, 'qa_page') }}
       {% else %}
         <div class="empty">No quick_action_used events in this window.</div>
       {% endif %}
@@ -148,7 +148,7 @@
           {% endfor %}
         </tbody>
       </table>
-      {{ pager(summary.top_templates, 'tpl_page', 'page_size') }}
+      {{ pager(summary.top_templates, 'tpl_page') }}
       {% else %}
         <div class="empty">No template_applied events in this window.</div>
       {% endif %}
