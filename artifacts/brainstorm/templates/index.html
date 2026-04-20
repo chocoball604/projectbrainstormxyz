@@ -2901,7 +2901,7 @@
                 var slot = card.querySelector('.sq-guardrails');
                 if (!slot) return;
                 var prompt = promptEl ? (promptEl.value || '') : '';
-                var qtype = typeSel ? (typeSel.value || 'open') : 'open';
+                var qtype = typeSel ? (typeSel.value || '') : '';
                 var trimmed = prompt.trim();
                 var msgs = [];
                 if (trimmed.length > 0 && /\b(and|or)\b/i.test(trimmed)) {
@@ -2916,6 +2916,7 @@
                     msgs.push("⚠ This is very short. Make sure it's clear what you're measuring.");
                 }
                 if (qtype === 'open') {
+                    // Only show open-ended tip when user has explicitly selected open; never on no-selection state.
                     msgs.push("Tip: Use open-ended questions sparingly. They're best for 'why', not 'how many'.");
                 }
                 slot.innerHTML = msgs.map(function(m){return '<div>' + m + '</div>';}).join('');
