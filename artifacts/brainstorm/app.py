@@ -3890,12 +3890,9 @@ def signup():
             "Too many signup attempts from your network. Please wait "
             f"{max(1, (retry_after or 60) // 60)} minute(s) and try again."
         )
-        resp = render_error(msg)
-        try:
-            resp.headers["Retry-After"] = str(retry_after or 60)
-        except Exception:
-            pass
-        return resp, 429
+        resp = make_response(render_error(msg), 429)
+        resp.headers["Retry-After"] = str(retry_after or 60)
+        return resp
 
     def _signup_reject(message):
         record_auth_failure("signup", identity_key=email)
@@ -4054,12 +4051,9 @@ def login():
             "Too many login attempts. Please wait "
             f"{max(1, (retry_after or 60) // 60)} minute(s) and try again."
         )
-        resp = render_error(msg)
-        try:
-            resp.headers["Retry-After"] = str(retry_after or 60)
-        except Exception:
-            pass
-        return resp, 429
+        resp = make_response(render_error(msg), 429)
+        resp.headers["Retry-After"] = str(retry_after or 60)
+        return resp
 
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
