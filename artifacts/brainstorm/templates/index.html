@@ -1576,7 +1576,7 @@
                 <div id="survey-q-builder">
                     {% for i in range(1, q_count + 1) %}
                     {% set existing = sq_list[i-1] if i <= sq_list|length else none %}
-                    {% set eq_type = existing.type if existing is mapping else 'open' %}
+                    {% set eq_type = existing.type if existing is mapping else '' %}
                     {% set eq_prompt = existing.prompt if existing is mapping else (existing if existing is string else '') %}
                     {% set eq_opts = existing.options if existing is mapping and existing.options else [] %}
                     {% set eq_img_a = existing.images.A if existing is mapping and existing.images else '' %}
@@ -1602,6 +1602,7 @@
                         <div class="sq-row sq-card-body" data-idx="{{ i }}" id="sq-body-{{ i }}" style="display:none;padding:4px 14px 14px;border-top:1px dashed #e0e0e0;">
                             {# Hidden type select preserves existing buildQuestionObj/save payload contract. #}
                             <select class="sq-type-select" data-idx="{{ i }}" style="display:none;">
+                                <option value="" {{ 'selected' if not eq_type }}>(choose format)</option>
                                 <option value="open" {{ 'selected' if eq_type == 'open' }}>Open-ended</option>
                                 <option value="likert" {{ 'selected' if eq_type == 'likert' }}>Likert (1–5)</option>
                                 <option value="mc" {{ 'selected' if eq_type == 'mc' }}>Multiple Choice</option>
@@ -1792,6 +1793,38 @@
             <p style="font-size: 12px; color: #dc3545; font-weight: 600;">Attachment limit reached ({{ upload_max_files }} docs).</p>
             {% endif %}
 
+            {% set oc_data = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <div id="optional-context-section">
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 12px;">5. Optional Context <span style="font-weight: 400; font-size: 12px; color: #999;">(does not affect readiness)</span></h3>
+                <div>
+                    {% set dui_oc_val = configure_study.definition_useful_insight or '' %}
+                    {% set oc_fields_list = [
+                        ('definition_useful_insight', 'Definition of Useful Insight', 'What would a useful insight look like for this study?'),
+                        ('competitive_context', 'Competitive context', 'Key competitors, market positioning, competitive dynamics...'),
+                        ('cultural_sensitivities', 'Cultural sensitivities', 'Cultural factors, local norms, sensitivities to consider...'),
+                        ('adoption_barriers', 'Adoption barriers', 'Known barriers to adoption, switching costs, resistance factors...'),
+                        ('risk_tolerance', 'Risk tolerance', 'Risk appetite of the target audience or business context...')
+                    ] %}
+                    {% for fk, fl, fp in oc_fields_list %}
+                    {% set fv = dui_oc_val if fk == 'definition_useful_insight' else (oc_data.get(fk, '') if oc_data else '') %}
+                    {% set fv_has = fv and fv|trim|length > 0 %}
+                    <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
+                        <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
+                            <input type="hidden" name="token" value="{{ token }}">
+                            <input type="hidden" name="field_key" value="{{ fk }}">
+                            <div class="form-group" style="margin-bottom:4px;">
+                                <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span> <span class="oc-saved-badge" style="{% if not fv_has %}display:none;{% endif %}color:#27ae60;font-size:12px;font-weight:400;margin-left:6px;">{% if fv_has %}&#10003; Saved{% endif %}</span></label>
+                                <textarea name="field_value" rows="2" maxlength="300" placeholder="{{ fp }}">{{ fv or '' }}</textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">{% if fv_has %}Update{% else %}Save{% endif %}</button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">4. Personas</h3>
             {% if configure_study.study_type == 'synthetic_survey' %}
@@ -1868,39 +1901,6 @@
             {% endif %}
             </div>
             {% endif %}
-
-            {# V1A Prompt 8 — Survey Setup block was here; moved above Grounding Documents for synthetic_survey. #}
-            {% set oc_data = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
-            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-            <div id="optional-context-section">
-                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 12px;">5. Optional Context <span style="font-weight: 400; font-size: 12px; color: #999;">(does not affect readiness)</span></h3>
-                <div>
-                    {% set dui_oc_val = configure_study.definition_useful_insight or '' %}
-                    {% set oc_fields_list = [
-                        ('definition_useful_insight', 'Definition of Useful Insight', 'What would a useful insight look like for this study?'),
-                        ('competitive_context', 'Competitive context', 'Key competitors, market positioning, competitive dynamics...'),
-                        ('cultural_sensitivities', 'Cultural sensitivities', 'Cultural factors, local norms, sensitivities to consider...'),
-                        ('adoption_barriers', 'Adoption barriers', 'Known barriers to adoption, switching costs, resistance factors...'),
-                        ('risk_tolerance', 'Risk tolerance', 'Risk appetite of the target audience or business context...')
-                    ] %}
-                    {% for fk, fl, fp in oc_fields_list %}
-                    {% set fv = dui_oc_val if fk == 'definition_useful_insight' else (oc_data.get(fk, '') if oc_data else '') %}
-                    {% set fv_has = fv and fv|trim|length > 0 %}
-                    <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
-                        <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
-                            <input type="hidden" name="token" value="{{ token }}">
-                            <input type="hidden" name="field_key" value="{{ fk }}">
-                            <div class="form-group" style="margin-bottom:4px;">
-                                <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span> <span class="oc-saved-badge" style="{% if not fv_has %}display:none;{% endif %}color:#27ae60;font-size:12px;font-weight:400;margin-left:6px;">{% if fv_has %}&#10003; Saved{% endif %}</span></label>
-                                <textarea name="field_value" rows="2" maxlength="300" placeholder="{{ fp }}">{{ fv or '' }}</textarea>
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">{% if fv_has %}Update{% else %}Save{% endif %}</button>
-                        </form>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-
             {% endif %}
 
 
@@ -2542,7 +2542,8 @@
 
             function buildQuestionObj(row) {
                 var idx = row.getAttribute('data-idx');
-                var qtype = (row.querySelector('.sq-type-select') || {}).value || 'open';
+                var qtype = (row.querySelector('.sq-type-select') || {}).value || '';
+                if (!qtype) return {error: 'Q' + idx + ': choose a question format first (Step 1 → Step 2).'};
                 var prompt = (row.querySelector('.sq-prompt') || {}).value || '';
                 if (!prompt.trim()) return {error: 'Q' + idx + ': question text is required.'};
                 var qobj = {type: qtype, prompt: prompt.trim()};
@@ -2896,14 +2897,22 @@
                 if (body) body.style.display = '';
                 var btn = card.querySelector('.sq-toggle-btn[data-idx="' + idx + '"]');
                 if (btn) btn.textContent = 'Collapse';
-                // Pre-populate signal/format if saved or already chosen
+                // Pre-populate signal/format ONLY for already-saved cards.
+                // New/unsaved cards must require explicit Step 1 → Step 2 picks (no implicit Open-ended default).
+                var isSaved = card.getAttribute('data-saved') === '1';
                 var savedType = card.getAttribute('data-saved-type') || '';
-                var typeSel = card.querySelector('.sq-type-select');
-                var currentType = typeSel ? typeSel.value : '';
-                var initialType = savedType || currentType || '';
-                if (initialType) {
-                    var inferred = SQ_SIGNAL_BY_TYPE[initialType] || 'prevalence';
-                    sqSelectSignal(idx, inferred, initialType);
+                if (isSaved && savedType) {
+                    var inferred = SQ_SIGNAL_BY_TYPE[savedType] || 'prevalence';
+                    sqSelectSignal(idx, inferred, savedType);
+                } else {
+                    // Reset wizard: clear signal radios + hide Step 2/3 so user picks afresh.
+                    card.querySelectorAll('.sq-signal-radio[data-idx="' + idx + '"]').forEach(function(r) { r.checked = false; });
+                    var step2 = card.querySelector('.sq-step-format[data-idx="' + idx + '"]');
+                    if (step2) step2.style.display = 'none';
+                    var step3 = card.querySelector('.sq-step-text[data-idx="' + idx + '"]');
+                    if (step3) step3.style.display = 'none';
+                    var typeSelEl = card.querySelector('.sq-type-select');
+                    if (typeSelEl) typeSelEl.value = '';
                 }
                 sqRunGuardrails(idx);
             }
