@@ -1392,6 +1392,11 @@
                 function cfMirror(field, val) {
                     var d = document.getElementById('core-framing-display-' + field);
                     if (d) d.textContent = val || '(empty)';
+                    // V1A bugfix — keep Survey Purpose strip in sync with Decision edits.
+                    if (field === 'decision_to_support') {
+                        var sp = document.getElementById('survey-purpose-decision');
+                        if (sp) sp.textContent = (val && val.trim()) ? val : '(decision not yet saved)';
+                    }
                 }
                 var cfLastSent = {business_problem: null, decision_to_support: null};
                 var cfTimers = {};
@@ -1565,7 +1570,7 @@
                     <div style="font-size: 12px; color: #555; line-height: 1.5;">
                         Each question should help reduce uncertainty for this decision:
                     </div>
-                    <div style="font-size: 13px; color: #1a1a2e; margin: 4px 0; padding: 6px 10px; background: #fff; border: 1px solid #f0e2c1; border-radius: 4px; overflow-wrap: break-word;">
+                    <div id="survey-purpose-decision" style="font-size: 13px; color: #1a1a2e; margin: 4px 0; padding: 6px 10px; background: #fff; border: 1px solid #f0e2c1; border-radius: 4px; overflow-wrap: break-word;">
                         {{ configure_study.decision_to_support or '(decision not yet saved)' }}
                     </div>
                     <div style="font-size: 12px; color: #555; line-height: 1.5;">
@@ -3063,8 +3068,13 @@
 
             var configForm = document.querySelector('form[action*="/save-survey-config/"]');
             if (configForm) {
+                // V1A bugfix — track q_count baseline so we know whether to re-render Survey Questions list.
+                var qCountInput = configForm.querySelector('input[name="question_count"]');
+                var qCountBaseline = qCountInput ? qCountInput.value : '';
                 configForm.addEventListener('submit', function(e) {
                     e.preventDefault();
+                    var newQCount = qCountInput ? qCountInput.value : '';
+                    var qCountChanged = (newQCount !== qCountBaseline);
                     var fd = new FormData(configForm);
                     var btn = configForm.querySelector('button[type="submit"]');
                     btn.disabled = true;
@@ -3079,6 +3089,13 @@
                         btn.textContent = 'Update Survey Config';
                         if (data.ok) {
                             handleAjaxResponse(data);
+                            qCountBaseline = newQCount;
+                            // If question count changed, the Survey Questions list (Q1..Qn cards) needs to grow/shrink.
+                            // Cards are server-rendered with rich Jinja markup, so reload the configure page to repaint them.
+                            if (qCountChanged) {
+                                window.location.href = '/?token=' + encodeURIComponent(token)
+                                    + '&configure={{ configure_study.id }}#survey-q-builder';
+                            }
                         } else {
                             alert(data.error || 'Save failed.');
                         }
