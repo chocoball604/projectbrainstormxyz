@@ -387,5 +387,101 @@ class HttpSecurityTests(unittest.TestCase):
         )
 
 
+class P2HelpersTest(unittest.TestCase):
+    """Task #57 P2 — exercise the central helpers directly via import.
+
+    These don't need the running server; they import ``app`` to prove the
+    helpers are present, importable, and behave correctly. Running
+    ``app`` requires ``ADMIN_PASSWORD`` and ``FLASK_SECRET`` envs (the
+    fail-fast guards), so we set safe values before import.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # Force development mode so the prod fail-fast guards (which
+        # demand a strong ADMIN_PASSWORD + FLASK_SECRET) don't hard-exit
+        # this test process. We're only exercising helpers, not booting
+        # the app for real traffic.
+        os.environ["FLASK_ENV"] = "development"
+        os.environ.setdefault("ADMIN_PASSWORD", "test-helpers-admin-pw-strong")
+        os.environ.setdefault("FLASK_SECRET", "test-helpers-flask-secret-strong")
+        sys.path.insert(0, HERE)
+        import importlib
+        cls.app_mod = importlib.import_module("app")
+
+    def test_safe_json_loads_depth_rejected(self):
+        # Build a JSON value nested 50 levels deep — must be rejected by
+        # the depth cap (default 8).
+        s = "[" * 50 + "1" + "]" * 50
+        with self.assertRaises(ValueError):
+            self.app_mod.safe_json_loads(s, max_depth=8)
+
+    def test_safe_json_loads_keys_rejected(self):
+        big = {f"k{i}": i for i in range(1000)}
+        import json as _j
+        with self.assertRaises(ValueError):
+            self.app_mod.safe_json_loads(_j.dumps(big), max_keys=500)
+
+    def test_safe_json_loads_happy_path(self):
+        out = self.app_mod.safe_json_loads('{"a": [1, 2, {"b": "c"}]}')
+        self.assertEqual(out, {"a": [1, 2, {"b": "c"}]})
+
+    def test_sniff_file_type_pdf_signature(self):
+        ok, _ = self.app_mod.sniff_file_type(b"%PDF-1.4\n...", "pdf")
+        self.assertTrue(ok)
+        ok, reason = self.app_mod.sniff_file_type(b"MZ\x90...exe", "pdf")
+        self.assertFalse(ok)
+        self.assertIn("does not match", reason)
+
+    def test_sniff_file_type_png_jpg_docx(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        jpg = b"\xff\xd8\xff" + b"\x00" * 16
+        docx = b"PK\x03\x04" + b"\x00" * 16
+        self.assertTrue(self.app_mod.sniff_file_type(png, "png")[0])
+        self.assertTrue(self.app_mod.sniff_file_type(jpg, "jpg")[0])
+        self.assertTrue(self.app_mod.sniff_file_type(jpg, "jpeg")[0])
+        self.assertTrue(self.app_mod.sniff_file_type(docx, "docx")[0])
+        # Cross-type spoof: PNG payload claiming to be a PDF must fail.
+        self.assertFalse(self.app_mod.sniff_file_type(png, "pdf")[0])
+
+    def test_sniff_file_type_text_rejects_nuls(self):
+        self.assertTrue(self.app_mod.sniff_file_type(b"name,age\nA,1\n", "csv")[0])
+        self.assertTrue(self.app_mod.sniff_file_type(b"hello world", "txt")[0])
+        self.assertFalse(self.app_mod.sniff_file_type(b"a\x00b", "csv")[0])
+
+    def test_cap_llm_output_truncates(self):
+        big = "A" * (self.app_mod.LLM_MAX_OUTPUT_BYTES + 5000)
+        out = self.app_mod.cap_llm_output(big, purpose="unit-test")
+        self.assertLessEqual(len(out.encode("utf-8")), self.app_mod.LLM_MAX_OUTPUT_BYTES)
+
+    def test_cap_llm_output_passthrough(self):
+        out = self.app_mod.cap_llm_output("short", purpose="unit-test")
+        self.assertEqual(out, "short")
+
+    def test_realpath_within_blocks_traversal(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            self.assertTrue(self.app_mod.realpath_within(os.path.join(td, "a.txt"), td))
+            self.assertFalse(
+                self.app_mod.realpath_within(os.path.join(td, "..", "evil.txt"), td)
+            )
+
+    def test_audit_log_appends(self):
+        # Capture the path, write, then read it back.
+        path = self.app_mod.AUDIT_LOG_PATH
+        before = os.path.getsize(path) if os.path.exists(path) else 0
+        marker = f"unittest_marker_{uuid.uuid4().hex}"
+        # audit_log uses flask.request internally; call inside a test
+        # request context so request.remote_addr / .path don't blow up.
+        with self.app_mod.app.test_request_context("/__unittest__"):
+            self.app_mod.audit_log("unit_test_event", marker=marker)
+        self.assertTrue(os.path.exists(path), "audit.log should be created")
+        with open(path, "r", encoding="utf-8") as f:
+            f.seek(before)
+            tail = f.read()
+        self.assertIn(marker, tail)
+        self.assertIn('"event": "unit_test_event"', tail)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

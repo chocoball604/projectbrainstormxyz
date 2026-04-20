@@ -216,6 +216,10 @@ def _csrf_reject(reason):
         )
     except Exception:
         pass
+    try:
+        audit_log("csrf_reject", reason=reason, endpoint=request.endpoint or "")
+    except Exception:
+        pass
     if request.path.startswith("/api/") or "application/json" in (request.headers.get("Accept") or ""):
         return jsonify({"ok": False, "error": "CSRF token missing or invalid."}), 403
     return ("CSRF token missing or invalid. Please reload the page and try again.", 403)
@@ -484,6 +488,11 @@ def record_auth_failure(action, identity_key=""):
                 f"fails={len(fails)} lockout_seconds={cfg['lockout']}",
                 flush=True,
             )
+            try:
+                audit_log("auth_lockout", action=action, identity=identity_key,
+                          fails=len(fails), lockout_seconds=cfg["lockout"])
+            except Exception:
+                pass
 
 
 def clear_auth_failures(action, identity_key=""):
@@ -493,6 +502,210 @@ def clear_auth_failures(action, identity_key=""):
     with _RATE_LIMIT_LOCK:
         _RATE_LIMIT_HITS.pop(fail_key, None)
         _RATE_LIMIT_LOCKOUTS.pop(lock_key, None)
+
+
+# ---------------------------------------------------------------------------
+# Task #57 P2 — central security helpers
+#
+# These are intentionally tiny / dependency-light and concentrated in one
+# place so the whole hardening surface is auditable. Each helper has a
+# single responsibility and fails closed.
+# ---------------------------------------------------------------------------
+
+AUDIT_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audit.log")
+ERROR_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "error.log")
+
+LLM_MAX_OUTPUT_BYTES = 200 * 1024  # 200KB ceiling for any single LLM completion
+_AUDIT_LOG_LOCK = _threading_mod.Lock()
+
+
+def audit_log(event, **fields):
+    """Append-only structured audit log. Never raises (fails closed-silent
+    so a malfunctioning audit pipeline can't take the app down)."""
+    try:
+        try:
+            ip = request.remote_addr if request else ""
+        except Exception:
+            ip = ""
+        try:
+            path = request.path if request else ""
+        except Exception:
+            path = ""
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        rec = {"ts": ts, "event": event, "ip": ip, "path": path}
+        for k, v in fields.items():
+            try:
+                rec[k] = str(v)[:500]
+            except Exception:
+                pass
+        line = json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n"
+        with _AUDIT_LOG_LOCK:
+            with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(line)
+    except Exception:
+        # Audit must never break a request.
+        pass
+
+
+def safe_json_loads(s, max_depth=8, max_keys=500):
+    """json.loads with structural caps. Raises ValueError on overrun.
+
+    Defends against pathological LLM output (deeply nested structures, dict
+    bombs, huge arrays) that can blow the stack or memory. Also enforces a
+    hard byte cap before parsing, so we don't pay parser costs on data we
+    will reject anyway."""
+    if s is None:
+        raise ValueError("safe_json_loads: input is None")
+    if isinstance(s, bytes):
+        s = s.decode("utf-8", errors="replace")
+    if not isinstance(s, str):
+        raise ValueError("safe_json_loads: input must be str/bytes")
+    if len(s.encode("utf-8")) > LLM_MAX_OUTPUT_BYTES:
+        raise ValueError(
+            f"safe_json_loads: input exceeds {LLM_MAX_OUTPUT_BYTES} bytes"
+        )
+    # Catch RecursionError from json.loads itself: CPython's parser
+    # recurses into nested containers and will overflow the stack on
+    # pathological inputs (~1000+ levels of nesting) before our depth
+    # check ever runs. Convert that into our normal ValueError so callers
+    # have a single failure mode.
+    try:
+        obj = json.loads(s)
+    except RecursionError:
+        raise ValueError("safe_json_loads: input too deeply nested to parse")
+
+    # Iterative walker — avoids stack overflow on hostile input that
+    # squeaks past json.loads (e.g. wide arrays of nested objects).
+    total_keys = 0
+    # Each stack entry is (node, depth).
+    stack = [(obj, 1)]
+    while stack:
+        node, depth = stack.pop()
+        if depth > max_depth:
+            raise ValueError(f"safe_json_loads: depth > {max_depth}")
+        if isinstance(node, dict):
+            total_keys += len(node)
+            if total_keys > max_keys:
+                raise ValueError(f"safe_json_loads: total keys > {max_keys}")
+            for v in node.values():
+                stack.append((v, depth + 1))
+        elif isinstance(node, list):
+            if len(node) > max_keys:
+                raise ValueError(f"safe_json_loads: list len > {max_keys}")
+            for v in node:
+                stack.append((v, depth + 1))
+    return obj
+
+
+# Magic-byte signatures for the file types the app accepts. Each entry is
+# (offset, signature_bytes_or_callable). For ZIP-family formats (docx) we
+# rely on the PK signature plus a presence-check to avoid accepting raw
+# zip archives as docx — the actual docx structural validation happens
+# downstream when the document is parsed.
+_FILE_MAGIC_SIGS = {
+    "pdf":  [(0, b"%PDF-")],
+    "png":  [(0, b"\x89PNG\r\n\x1a\n")],
+    "jpg":  [(0, b"\xff\xd8\xff")],
+    "jpeg": [(0, b"\xff\xd8\xff")],
+    "docx": [(0, b"PK\x03\x04")],   # ZIP container
+    # csv/txt are plain text — no fixed magic. We sample the first chunk
+    # and require it to decode as UTF-8/Latin-1 with no NUL bytes.
+}
+
+
+def sniff_file_type(file_data, declared_ext):
+    """Returns (ok, reason). `declared_ext` is the lowercase extension
+    *without* the leading dot. Defends against extension spoofing
+    (e.g. malware.exe renamed to malware.pdf)."""
+    if not file_data:
+        return False, "empty file"
+    ext = (declared_ext or "").lower().lstrip(".")
+    if ext in ("csv", "txt"):
+        sample = file_data[:4096]
+        if b"\x00" in sample:
+            return False, f".{ext} must not contain NUL bytes"
+        try:
+            sample.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                sample.decode("latin-1")
+            except UnicodeDecodeError:
+                return False, f".{ext} content is not text"
+        return True, ""
+    sigs = _FILE_MAGIC_SIGS.get(ext)
+    if not sigs:
+        return False, f"unsupported declared type .{ext}"
+    for offset, magic in sigs:
+        if file_data[offset:offset + len(magic)] == magic:
+            return True, ""
+    return False, f".{ext} content does not match declared type"
+
+
+def strip_image_exif(file_data, ext):
+    """Re-encodes a PNG/JPG without EXIF/metadata. Returns the cleaned
+    bytes, or the original bytes on any failure (we'd rather store the
+    original than reject a legitimate upload over a metadata strip)."""
+    ext = (ext or "").lower().lstrip(".")
+    if ext not in ("png", "jpg", "jpeg"):
+        return file_data
+    try:
+        from PIL import Image
+        import io as _io
+        with Image.open(_io.BytesIO(file_data)) as im:
+            im.load()
+            # paste() copies pixels via Pillow's C code path — no
+            # Python-level pixel list, so memory stays O(image size in
+            # raw bytes) instead of O(pixels * tuple-overhead). For a
+            # 2MB JPEG this is the difference between ~6MB working set
+            # and ~80MB+.
+            clean = Image.new(im.mode, im.size)
+            clean.paste(im)
+            buf = _io.BytesIO()
+            if ext == "png":
+                # Don't pass im.info — that's where text chunks /
+                # metadata live. A bare save drops them.
+                clean.save(buf, format="PNG", optimize=True)
+            else:
+                # JPEG only retains EXIF when explicitly passed via the
+                # `exif=` kwarg; omitting it strips EXIF.
+                clean.save(buf, format="JPEG", quality=92, optimize=True)
+            return buf.getvalue()
+    except Exception as exc:
+        try:
+            print(f"EXIF_STRIP_FAILED ext={ext} err={exc}", flush=True)
+        except Exception:
+            pass
+        return file_data
+
+
+def cap_llm_output(text, purpose=""):
+    """Truncate any LLM completion to LLM_MAX_OUTPUT_BYTES. Logs to audit
+    when truncation happens so we can spot abuse patterns later."""
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+    raw = text.encode("utf-8", errors="replace")
+    if len(raw) <= LLM_MAX_OUTPUT_BYTES:
+        return text
+    truncated = raw[:LLM_MAX_OUTPUT_BYTES].decode("utf-8", errors="replace")
+    try:
+        audit_log("llm_output_truncated", purpose=purpose,
+                  original_bytes=len(raw), kept_bytes=len(truncated.encode("utf-8")))
+    except Exception:
+        pass
+    return truncated
+
+
+def realpath_within(child_path, parent_dir):
+    """Defense-in-depth: confirm an absolute path resolves to inside
+    `parent_dir` after symlink resolution. Returns True if safe."""
+    try:
+        cp = os.path.realpath(child_path)
+        pp = os.path.realpath(parent_dir)
+        return cp == pp or cp.startswith(pp + os.sep)
+    except Exception:
+        return False
 
 
 ADMIN_PASSWORD = _ADMIN_PASSWORD_RAW or "admin123"
@@ -737,7 +950,7 @@ def call_llm(model_id, messages, purpose="", timeout_seconds=60):
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_do_call)
             resp = future.result(timeout=wall_clock_limit)
-        return resp.choices[0].message.content or ""
+        return cap_llm_output(resp.choices[0].message.content or "", purpose=purpose)
     except concurrent.futures.TimeoutError:
         raise RuntimeError(f"LLM timeout for {model_id}: Wall-clock limit ({wall_clock_limit}s) exceeded")
     except _openai.APITimeoutError as e:
@@ -4061,9 +4274,11 @@ def login():
 
     if not user or not check_password_hash(user["password_hash"], password):
         record_auth_failure("login", identity_key=email)
+        audit_log("login_failed", email=email)
         return render_error("Invalid email or password.")
 
     clear_auth_failures("login", identity_key=email)
+    audit_log("login_success", email=email, user_id=user["id"])
     token = create_session(user_id=user["id"])
     resp = redirect(url_for("index"))
     return set_session_cookie(resp, token)
@@ -4095,9 +4310,11 @@ def admin_login():
 
     if password != ADMIN_PASSWORD:
         record_auth_failure("admin_login", identity_key="admin")
+        audit_log("admin_login_failed")
         return redirect(url_for("admin_portal", error="Invalid admin password."))
 
     clear_auth_failures("admin_login", identity_key="admin")
+    audit_log("admin_login_success")
     token = create_session(is_admin=True)
     resp = redirect(url_for("index"))
     return set_session_cookie(resp, token)
@@ -4194,9 +4411,18 @@ def upload_survey_image(study_id, q_index, side):
         max_kb = AB_IMAGE_LIMITS["max_size_bytes"] // 1024
         return jsonify({"ok": False, "error": f"Image exceeds {max_kb}KB limit ({len(data) // 1024}KB)."}), 400
 
+    ok_sniff, reason = sniff_file_type(data, ext.lstrip("."))
+    if not ok_sniff:
+        audit_log("upload_magic_mismatch", route="upload_survey_image",
+                  filename=orig, ext=ext, reason=reason)
+        return jsonify({"ok": False, "error": f"Image content does not match its extension ({reason})."}), 400
+    data = strip_image_exif(data, ext.lstrip("."))
+
     import uuid as _uuid
     safe_name = f"s{study_id}_q{q_index}_{side}_{_uuid.uuid4().hex[:8]}{ext}"
     dest = os.path.join(SURVEY_IMAGES_DIR, safe_name)
+    if not realpath_within(dest, SURVEY_IMAGES_DIR):
+        return jsonify({"ok": False, "error": "Invalid storage path."}), 400
     with open(dest, "wb") as out:
         out.write(data)
 
@@ -4383,8 +4609,16 @@ def admin_create_blog_post():
             return blog_err(
                 f"Blog image must be under 2MB. Got: {len(img_data) // 1024}KB"
             )
+        ok_sniff, reason = sniff_file_type(img_data, ext)
+        if not ok_sniff:
+            audit_log("upload_magic_mismatch", route="blog_post_create",
+                      filename=fname, ext=ext, reason=reason)
+            return blog_err(f"Image content does not match its extension ({reason}).")
+        img_data = strip_image_exif(img_data, ext)
         safe_name = f"{int(datetime.utcnow().timestamp())}_{secrets.token_hex(4)}.{ext}"
         dest = os.path.join(BLOG_STATIC_DIR, safe_name)
+        if not realpath_within(dest, BLOG_STATIC_DIR):
+            return blog_err("Invalid storage path.")
         with open(dest, "wb") as f:
             f.write(img_data)
         image_path = safe_name
@@ -4515,8 +4749,18 @@ def admin_update_blog_post(post_id):
         if len(img_data) > BLOG_IMAGE_MAX_SIZE:
             conn.close()
             return blog_err(f"Blog image must be under 2MB. Got: {len(img_data) // 1024}KB")
+        ok_sniff, reason = sniff_file_type(img_data, ext)
+        if not ok_sniff:
+            conn.close()
+            audit_log("upload_magic_mismatch", route="blog_post_update",
+                      filename=fname, ext=ext, reason=reason)
+            return blog_err(f"Image content does not match its extension ({reason}).")
+        img_data = strip_image_exif(img_data, ext)
         safe_name = f"{int(datetime.utcnow().timestamp())}_{secrets.token_hex(4)}.{ext}"
         dest = os.path.join(BLOG_STATIC_DIR, safe_name)
+        if not realpath_within(dest, BLOG_STATIC_DIR):
+            conn.close()
+            return blog_err("Invalid storage path.")
         with open(dest, "wb") as f:
             f.write(img_data)
         if existing["image_path"]:
@@ -5157,6 +5401,17 @@ def upload_study_file(study_id):
             f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024 * 1024)}MB size limit."
         )
 
+    _ext_decl = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+    ok_sniff, reason = sniff_file_type(file_data, _ext_decl)
+    if not ok_sniff:
+        conn.close()
+        audit_log("upload_magic_mismatch", route="upload_study_file",
+                  filename=f.filename, ext=_ext_decl, reason=reason)
+        return render_error(f"File content does not match its extension ({reason}).")
+    if _ext_decl in ("png", "jpg", "jpeg"):
+        file_data = strip_image_exif(file_data, _ext_decl)
+        file_size = len(file_data)
+
     current_storage = _get_user_storage_used(conn, user["id"])
     if current_storage + file_size > UPLOAD_USER_STORAGE_CAP:
         conn.close()
@@ -5234,6 +5489,16 @@ def upload_user_doc():
         return render_error(
             f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024 * 1024)}MB size limit."
         )
+
+    _ext_decl = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+    ok_sniff, reason = sniff_file_type(file_data, _ext_decl)
+    if not ok_sniff:
+        audit_log("upload_magic_mismatch", route="upload_user_doc",
+                  filename=f.filename, ext=_ext_decl, reason=reason)
+        return render_error(f"File content does not match its extension ({reason}).")
+    if _ext_decl in ("png", "jpg", "jpeg"):
+        file_data = strip_image_exif(file_data, _ext_decl)
+        file_size = len(file_data)
 
     conn = get_db()
     current_storage = _get_user_storage_used(conn, user["id"])
@@ -5425,6 +5690,16 @@ def admin_upload_document():
         return render_error(
             f"File exceeds the {UPLOAD_MAX_FILE_SIZE // (1024 * 1024)}MB size limit."
         )
+
+    _ext_decl = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+    ok_sniff, reason = sniff_file_type(file_data, _ext_decl)
+    if not ok_sniff:
+        audit_log("upload_magic_mismatch", route="admin_upload_document",
+                  filename=f.filename, ext=_ext_decl, reason=reason)
+        return render_error(f"File content does not match its extension ({reason}).")
+    if _ext_decl in ("png", "jpg", "jpeg"):
+        file_data = strip_image_exif(file_data, _ext_decl)
+        file_size = len(file_data)
 
     import uuid
 
@@ -9105,11 +9380,52 @@ def run_study(study_id):
             return jsonify({"ok": False, "error": "You must select a study type before running the study."}), 400
         return render_error("You must select a study type before running the study.")
 
-    conn.execute(
-        "UPDATE studies SET status = 'running' WHERE id = ? AND status = 'draft'",
-        (study_id,),
-    )
-    conn.commit()
+    # Atomic flip draft -> running with concurrency cap. SQLite serializes
+    # writes inside a single BEGIN IMMEDIATE transaction, so two concurrent
+    # /run-study POSTs cannot both succeed on the same draft. The rowcount
+    # check below tells us whether *we* won the race; the loser returns 409.
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        running_count = conn.execute(
+            "SELECT COUNT(*) FROM studies WHERE user_id = ? AND status = 'running'",
+            (user["id"],),
+        ).fetchone()[0]
+        if running_count >= 2:
+            conn.execute("ROLLBACK")
+            conn.close()
+            audit_log("run_study_concurrency_cap", user_id=user["id"], study_id=study_id,
+                      running=running_count)
+            if ajax:
+                return jsonify({
+                    "ok": False,
+                    "error": "You already have 2 studies running. Please wait for one to finish.",
+                }), 429
+            return render_error(
+                "You already have 2 studies running. Please wait for one to finish."
+            ), 429
+        cur = conn.execute(
+            "UPDATE studies SET status = 'running' WHERE id = ? AND status = 'draft'",
+            (study_id,),
+        )
+        rows_changed = cur.rowcount
+        conn.execute("COMMIT")
+    except Exception:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise
+    if rows_changed == 0:
+        # Lost the race: another concurrent request already flipped this
+        # study out of 'draft'. Don't redo the work.
+        conn.close()
+        audit_log("run_study_idempotent_409", user_id=user["id"], study_id=study_id)
+        if ajax:
+            return jsonify({
+                "ok": False,
+                "error": "Study is already running or has been executed.",
+            }), 409
+        return render_error("Study is already running or has been executed."), 409
 
     def _reset_to_draft():
         try:
@@ -12047,6 +12363,51 @@ def admin_step1_library_validate():
     if not ok:
         return jsonify({"ok": False, "error": err}), 400
     return jsonify({"ok": True})
+
+
+@app.errorhandler(Exception)
+def _p2_global_error_handler(exc):
+    """Last-resort handler that converts any unhandled exception into a
+    generic 500 page (or JSON for AJAX) and writes the full traceback to
+    ./error.log with a request id, so we never leak stack traces or
+    secrets to end users.
+
+    Werkzeug HTTPException subclasses (404, 403, etc.) are re-raised so
+    Flask's normal handling continues to work.
+    """
+    from werkzeug.exceptions import HTTPException
+    if isinstance(exc, HTTPException):
+        return exc
+    request_id = secrets.token_hex(8)
+    try:
+        import traceback as _tb
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            path = request.path if request else ""
+            method = request.method if request else ""
+            ip = request.remote_addr if request else ""
+        except Exception:
+            path, method, ip = "", "", ""
+        block = (
+            f"---\n[{ts}] request_id={request_id} method={method} path={path} ip={ip}\n"
+            + _tb.format_exc()
+        )
+        with open(ERROR_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(block)
+    except Exception:
+        pass
+    audit_log("unhandled_exception", request_id=request_id, exc_type=type(exc).__name__)
+    if request.path.startswith("/api/") or "application/json" in (request.headers.get("Accept") or ""):
+        return jsonify({
+            "ok": False,
+            "error": "An internal error occurred. Please try again.",
+            "request_id": request_id,
+        }), 500
+    return (
+        f"<h1>Something went wrong.</h1>"
+        f"<p>An internal error occurred. Reference: <code>{request_id}</code>.</p>",
+        500,
+    )
 
 
 if __name__ == "__main__":
