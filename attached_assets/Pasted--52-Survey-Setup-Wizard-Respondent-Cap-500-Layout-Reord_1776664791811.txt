@@ -1,0 +1,95 @@
+#52 - Survey Setup Wizard + Respondent Cap 500 + Layout Reorder
+What & Why
+The Survey Setup screen (study_type = synthetic_survey) currently:
+
+Caps respondent_count at 100, but the cost model now supports up to 500.
+Renders a wall of always-expanded Q1..Qn blocks all defaulting to "Open-ended", which silently nudges users toward open-ended questions and is overwhelming.
+Shows Grounding Documents, Personas (N/A for surveys), and Optional Context above Survey Questions, pulling attention away from question writing.
+This V1A change consolidates four UI/workflow-only updates: raise the respondent cap to 500, reorder so supporting panels move below the gating Brief So Far, replace question entry with an intent-first wizard, and add deterministic non-blocking guardrails. No schema, endpoint, payload, Mark prompt, Ben QA, telemetry, persona, or execution changes.
+
+Done looks like
+0. Respondent cap raised to 500
+Survey configure form's Respondent Count input accepts 25–500 and the label reads "Respondent Count (25–500)".
+New-research Step 2 wizard's respondent input accepts up to 500.
+Backend clamps respondent_count to a max of 500 (was 100); error message reads "between 25 and 500".
+Default respondent_count stays 100, default question_count stays 8.
+No new pricing copy, warnings, or usage callouts.
+A. Layout reorder for surveys
+On a synthetic_survey configure page, the visible top-to-bottom order in the main column is:
+
+Mission Control + Study Identity
+Core Framing (Problem + Decision)
+Research Brief anchors (Market/Geo, Product/Concept, Target Audience)
+Survey Setup (counts)
+Survey Questions (wizard cards)
+Brief So Far / Required to run / Precheck (existing right-rail #side-panel-brief is the gating view; structurally it is a separate column and stays where it is — the requirement is satisfied by ensuring the moved panels no longer precede Survey Questions in the main column)
+Grounding Documents
+Optional Context
+Personas (still renders the existing "Personas — Not applicable for surveys" line for surveys)
+Mark — Brief Consistency Helper may stay near Core Framing.
+
+B1. Survey Purpose framing strip
+Immediately above the Survey Questions list, render a small reminder box with title "Survey purpose", body "Each question should help reduce uncertainty for this decision:", followed by the saved Decision to Support. Display-only, no new fields.
+
+B2. Question-by-question wizard
+Each Q1..Qn slot renders collapsed by default as "Q{i} — Not configured" with a "Configure Q{i}" button. Already-saved questions render as a collapsed saved summary that can be expanded for editing (Saved badge / green background preserved).
+Clicking Configure expands a 3-step inline wizard:
+Signal: radios "Measure prevalence or intensity" / "Compare options or trade-offs" / "Understand reasons or motivations".
+Format: shows only the formats allowed for the chosen signal:
+prevalence/intensity → Likert, Range/Scale, Multiple Choice
+compare → A/B Choice, A/B Image, Multiple Choice
+reasons → Open-ended, Multiple Choice
+Question text + type-specific fields: reuses the existing prompt textarea and per-type controls (likert labels, mc options, ab options, ab images, range min/max).
+Saving still POSTs to /save-survey-question/<study_id>/<q_index> with the same payload shape; "Save All Questions" still POSTs to /save-survey-questions and still iterates every Q (including pre-saved cards the user never expanded).
+B3. Deterministic guardrails (non-blocking)
+Inline warnings appear under the question text. Saving is never blocked.
+
+"and"/"or" with multiple clauses → "⚠ This question may be asking about more than one thing. Consider splitting it."
+leading words ("helpful", "improved", "best", "responsible", case-insensitive) → "⚠ This wording may influence responses. Try to keep it neutral."
+prompt length below a small threshold (e.g. < 12 chars) → "⚠ This is very short. Make sure it's clear what you're measuring."
+type == open → "Tip: Use open-ended questions sparingly. They're best for 'why', not 'how many'."
+Pure client-side string checks. No server route, no persistence.
+
+B4. One-card-expanded-at-a-time
+Opening a question card auto-collapses any other expanded card. Implemented in small JS, no backend change.
+
+C. Brief So Far unchanged
+Brief So Far / Required to run / Precheck logic and copy unchanged; remains the gating view.
+
+Out of scope
+Any change to backend routes, payload shapes, or DB schema (/save-survey-config, /save-survey-questions, /save-survey-question/<id>/<idx>, survey_questions column, _normalize_survey_question, _validate_survey_questions, VALID_SURVEY_Q_TYPES all untouched).
+Any change to Mark prompts, Mark presence model (Prompts 5/6/7), or routing survey help through Mark.
+Any change to Ben QA, scoring, readiness rules, or precheck logic.
+Any change to telemetry schemas, event types, or Step 1 telemetry hooks.
+Any change to persona generation, Lisa execution, report rendering, or translation.
+Token accounting, billing, pricing tiers, or usage warnings.
+IDI / Focus Group configure pages — only {% if configure_study.study_type == 'synthetic_survey' %} branches are touched.
+The legacy ALTER TABLE … DEFAULT 100 column default (only used when adding the column to old DBs; safe to leave).
+Any change to brainstorm_v1_replit_singlepage_pack/.
+AI-driven question rewriting or auto-fixing of guardrail warnings.
+Steps
+Raise respondent cap to 500 — Update both survey respondent inputs (configure form max + label, new-research wizard max) and the two backend clamp call sites + the matching error message string from 100 to 500. Defaults remain 100 / 8.
+Reorder main-column sections for surveys — Gate the Grounding Documents, Personas, and Optional Context blocks so that for study_type == 'synthetic_survey' they render after the Survey Questions block instead of before. Non-survey study types keep current order. Preserve dividers, headings, and spacing; do not change the inner content of those blocks.
+Add Survey Purpose framing strip — Insert a small reminder box immediately above the Survey Questions list inside Survey Setup, displaying the saved Decision to Support. Display-only, reads from the existing template scope.
+Convert Q1..Qn to collapsible wizard cards — Replace the always-expanded Q-block with a collapsed "Q{i} — Not configured / Configure Q{i}" card by default; for already-saved questions, render a collapsed saved summary that expands for editing. When expanded, render the 3-step signal → format → text wizard. Step 3 reuses every existing input so save payloads are byte-identical. Enforce one-card-expanded-at-a-time via small JS.
+Add deterministic guardrails — Inline JS computes the four warning checks against the current prompt text and selected type and renders them in a warning slot beneath the prompt. Warnings recompute on input/type change. Warnings never disable or block Save.
+Verify save paths unchanged — In preview, set respondent_count to 500 and confirm it persists; try 600 and confirm it clamps to 500; try 10 and confirm the 25-min still applies. Confirm Save Q{i}, Save All Questions, and Update Survey Config all still hit the same endpoints with the same payload shapes (network tab); confirm saved questions persist on reload, the Saved badge / green background still renders, and Brief So Far precheck readiness behavior is unchanged. Trigger a leading word and a double-barrel phrase, confirm warnings appear, and confirm Save still works.
+Document & commit — Add a short "Prompt 8 — Survey Setup Wizard + cap 500" entry to replit.md summarizing the four changes as UI-only V1A. Commit and push to https://github.com/chocoball604/projectbrainstormxyz (git push github master:main).
+Notes for the executor
+Two-column layout: the right-rail #side-panel-brief (Brief So Far) starts at templates/index.html:1864 and is a separate column from the main configure form. "Below Brief So Far" in this plan means: in the main column, the moved panels render after the survey-questions block (so they no longer compete for attention with question writing). The right-rail Brief So Far card itself does not need to be relocated.
+The "Survey purpose" strip uses the same Decision to Support value already rendered in Core Framing — pull from the same template variable, do not re-fetch.
+Guardrails are pure client-side string checks; do NOT add a server route for them, and do NOT persist warnings.
+Keep the existing "Save All Questions" button working; with collapsed cards it must still iterate every Q (including ones the user never expanded but were pre-saved).
+The frozen reference pack brainstorm_v1_replit_singlepage_pack/ must not be touched.
+Do not commit artifacts/brainstorm/brainstorm.db.
+Relevant files
+artifacts/brainstorm/templates/index.html:1523-1672
+artifacts/brainstorm/templates/index.html:1675-1826
+artifacts/brainstorm/templates/index.html:1828-1859
+artifacts/brainstorm/templates/index.html:1864-1940
+artifacts/brainstorm/templates/index.html:3432
+artifacts/brainstorm/app.py:1716-1800
+artifacts/brainstorm/app.py:4574-4581
+artifacts/brainstorm/app.py:8742-8749
+artifacts/brainstorm/app.py:9581-9870
+replit.md

@@ -1,0 +1,127 @@
+Implementation Prompt — Survey Setup Wizard + Guardrails + Move “Supporting Panels” Below Brief So Far (Low Lift)
+Objective
+Redesign the Survey Setup section (shown immediately after Step 1 framing + selecting “synthetic_survey”) to better help users build high quality surveys without adding AI authorship. The redesign must:
+1.	Increase the maximum allowed survey respondent count from 100 to 500
+2.	Convert question entry into a wizard-like, intent first flow (question-by-question) with simple guardrails (non AI, deterministic). 
+3.	Move Grounding Documents, Optional Context, and Personas sections below “Brief So Far”, so they don’t influence survey question writing. 
+4.	Keep engineering lift minimal: no schema changes, no endpoint changes, and reuse existing survey config + question saving behavior. 
+This is UI/workflow only. Do not modify Mark prompts, Ben QA logic, telemetry schemas, persona generation, or study execution.
+Current Page (baseline)
+The current Survey Setup page includes:
+•	Core Framing card (Problem + Decision) and editable required anchors (Market/Geo, Product/Concept, Target Audience).  
+•	Survey Setup config (respondent count + question count) and a long list of question blocks Q1…Qn with Save per question.
+•	“Brief So Far” and precheck checklist. 
+•	Grounding Documents, Optional Context, Personas (not applicable), and Mark consistency helper currently appear above/around Survey Setup in the page flow.
+Scope (IN)
+0) Survey respondent cap increase (explicit change)
+Requirement
+Increase the maximum allowed respondent count for synthetic_survey studies:
+•	Old limit: 100
+•	✅ New limit: 500
+Implementation details (low lift)
+•	Update the UI control (slider / input validation) to allow values up to 500.
+•	Update frontend validation to accept values ≤ 500.
+•	Update backend validation, if present, to accept values ≤ 500.
+•	Do not add new pricing logic, warnings, or UX copy unless the system already displays usage limits.
+•	Keep default respondent count at 100, default question count at 8.
+Non goals
+•	❌ Do not change token accounting or billing logic.
+•	❌ Do not rebalance QA thresholds.
+•	❌ Do not introduce new telemetry.
+This is a limit increase only, based on updated cost assumptions.
+
+A) Layout change (move supporting panels below “Brief So Far”)
+Requirement: In Study Setup for surveys, reorder sections so that Survey Setup and Survey Questions are not preceded by:
+•	Grounding Documents
+•	Optional Context
+•	Personas (survey: not applicable)
+New order must be:
+1.	Mission Control + Study Identity
+2.	Core Framing (Problem + Decision)
+3.	Research Brief anchors (Market/Geo, Product/Concept, Target Audience)
+4.	Survey Setup (counts)
+5.	Survey Questions (wizard + guardrails)
+6.	Brief So Far / Required to run this study / Precheck
+7.	(Moved down here) Grounding Documents
+8.	(Moved down here) Optional Context
+9.	(Moved down here) Personas (not applicable for surveys)
+10.	Mark — Brief Consistency Helper (optional) may stay near Core Framing, but must not interrupt survey writing.
+Constraints:
+•	Do not change what these panels do, only reposition them.
+•	Keep existing endpoints and save behavior unchanged.
+
+B) Survey Setup redesign: “Question-by-question wizard” (minimal lift)
+Goal: Replace the “wall of Q1…Qn blocks” with a guided, intent first question entry flow while still using the existing question storage and Save per question behavior.
+B1) Add a “Survey framing strip” above Survey Questions
+Immediately above the Survey Questions section, render a small reminder box:
+Title: “Survey purpose”
+Body: “Each question should help reduce uncertainty for this decision:”
+Then display the current Decision to Support (from Core Framing). 
+No new data fields; this is just display.
+B2) Replace default question type behavior
+Currently the UI shows many questions defaulting to open-ended blocks (Q1..Qn). 
+Change the default so that new questions start unconfigured (no type chosen yet) and the user must choose an “intent” first.
+For each question slot (Q1..Qn), show collapsed card by default:
+•	“Q1 — Not configured”
+•	Button: “Configure Q1”
+When clicked, expand a 3-step mini wizard:
+Step 1 — “What signal do you want?”
+Radio buttons:
+•	“Measure prevalence or intensity”
+•	“Compare options or trade-offs”
+•	“Understand reasons or motivations”
+Step 2 — “Choose question format”
+Show formats based on Step 1 selection (low lift mapping):
+•	Measure prevalence/intensity → Likert, Range/Scale, Multiple choice
+•	Compare → A/B Choice, A/B Image, Multiple choice
+•	Understand reasons → Open-ended (with the existing max words rule), Multiple choice
+Step 3 — “Write the question”
+Show the existing input controls for that chosen type (reuse current fields, do not change request shapes).
+Save behavior Keep “Save Q1” exactly as it is today (same endpoint + payload).
+Important: This wizard must be UI-only; do not change storage schema or save endpoints.
+B3) Guardrails (deterministic, non-blocking, minimal)
+Add inline, non-blocking warnings under the question text box (or just above Save) using simple checks. These warnings should not prevent saving; they are guidance only.
+Guardrail 1 — Possible double-barreled If question contains “ and ” / “ or ” and has more than one clause (simple heuristic), show:
+•	“⚠ This question may be asking about more than one thing. Consider splitting it.”
+Guardrail 2 — Leading / loaded language If question includes words like “helpful”, “improved”, “best”, “responsible”, show:
+•	“⚠ This wording may influence responses. Try to keep it neutral.”
+Guardrail 3 — Too short / vague If question length < N characters (choose a reasonable threshold), show:
+•	“⚠ This is very short. Make sure it’s clear what you’re measuring.”
+Guardrail 4 — Open-ended caution If question type is Open-ended, show:
+•	“Tip: Use open-ended questions sparingly. They’re best for ‘why’, not ‘how many’.”
+No rewriting. No AI. These are just warnings.
+B4) Reduce overwhelm: show one active question at a time
+To minimize cognitive overload, default UI should:
+•	Expand only one question card at a time
+•	Collapsing others automatically when a new card is opened
+This can be done with simple JS and no backend change.
+C) Brief So Far stays the gating view
+Keep the existing “Brief So Far / Required to run this study / Precheck” block and logic unchanged. 
+But place it above the moved “supporting panels” so survey writing remains the focus.
+Scope (OUT) — Hard constraints
+•	Do not modify Mark prompts or add survey drafting help via Mark
+•	Do not change Ben QA logic, scoring, or readiness rules
+•	Do not change telemetry schemas or event types
+•	Do not change survey save endpoints or payload shapes
+•	Do not change database schema
+•	Do not modify the frozen reference pack (brainstorm_v1_replit_singlepage_pack/)
+Definition of Done
+•	Grounding Documents, Optional Context, Personas appear below Brief So Far in survey studies. 
+•	Survey Questions are presented as collapsible question cards with a simple 3-step configuration (signal → format → question text), without changing save behavior.
+•	Deterministic guardrails display warnings inline (non-blocking).
+•	Only one question card is expanded at a time.
+•	No endpoint, schema, Mark prompt, or QA behavior changes.
+How to Test (step-by-step)
+1.	Create a new study, choose synthetic_survey, confirm Core Framing and anchors still visible. 
+2.	Confirm layout order: Survey Setup + Questions appear before Brief So Far; Grounding Docs/Optional Context/Personas appear after Brief So Far. 
+3.	Set respondent count + question count; confirm Survey Questions render as “Q1 Not configured” cards.
+4.	Configure Q1 via the 3-step flow; save Q1; confirm it counts as saved.
+5.	Enter a leading question (“How helpful is…”) and confirm warning appears.
+6.	Enter “price and quality” question and confirm double barrel warning appears.
+7.	Confirm saving still works even if warnings show.
+8.	Confirm only one question card expands at a time.
+Deliverables required in agent response
+•	Files changed
+•	What changed
+•	How to test (step by step)
+Commit changes to https://github.com/chocoball604/projectbrainstormxyz
