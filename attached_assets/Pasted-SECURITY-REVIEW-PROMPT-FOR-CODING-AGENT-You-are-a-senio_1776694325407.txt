@@ -1,0 +1,131 @@
+SECURITY REVIEW PROMPT FOR CODING AGENT
+You are a senior application security engineer reviewing a single page Flask application using SQLite and server rendered Jinja templates. This app is preparing for beta/public release.
+Source of truth / files to review (entire app)
+Perform a security review of the entire repository, prioritizing:
+•  artifacts/brainstorm/app.py (main Flask app; this is the authoritative runtime code) 
+•  artifacts/brainstorm/templates/*.html (Jinja templates, including index/admin pages) 
+•  artifacts/brainstorm/mark_reply_worker.py (LLM worker) 
+•  Any Step 1 telemetry / pattern library files under artifacts/brainstorm/ 
+•  Any upload handling code and document storage code
+
+Your task (must do all)
+1.	Perform a complete application security review: authentication, authorization, session management, secrets, transport security, injection, uploads, output encoding, abuse controls, logging, and operational hardening.
+2.	Propose and implement concrete code changes (minimal, patch style) prioritized for beta/public safety.
+3.	Verify changes with tests and manual test steps.
+Non negotiable constraints
+•	Minimal edits only; do not refactor unrelated code.
+•	Prefer no database schema changes unless absolutely necessary for security (if you believe a schema change is required, justify it explicitly and keep it tiny).
+•	Never hold a DB connection open during any LLM call (commit+close before network calls).
+•	Do not rewrite Mark/Lisa/Ben product logic. This is security hardening only.
+•	Do not add new product features.
+•	All changes must preserve existing route payload shapes unless required for security.
+Security issues you MUST address explicitly (required scope)
+
+1) AI codebase review (LLM safety + prompt injection resilience)
+•	Identify where LLM outputs are stored, rendered, or used to drive logic.
+•	Add hard caps: 
+o	max LLM response size (chars)
+o	max JSON depth/key count for any structured outputs
+•	Add strict validation for any JSON structures consumed (allowlist keys).
+•	Ensure no LLM output is rendered as “trusted HTML” without robust escaping.
+2) HTTPS mandatory
+•	Enforce HTTPS behind a reverse proxy: 
+o	redirect HTTP→HTTPS where appropriate
+o	correctly honor X-Forwarded-Proto
+•	Secure cookies: 
+o	Secure, HttpOnly, SameSite
+•	Add HSTS in production mode.
+3) Rate limiting (100 requests/hour/IP)
+Implement rate limiting for:
+•	Auth endpoints (/login, /signup, /admin-login) → strict caps (e.g., 10/min/IP)
+•	LLM-triggering endpoints (/send-chat, execution triggers) → per-IP and per-user limits
+•	Upload routes → per-IP and per-user caps
+Support multi-instance deployments (e.g., Redis) if applicable; otherwise implement in-memory with clear note of limitations.
+4) Row Level Security (RLS)
+SQLite does not support native RLS; enforce at application layer.
+•	Verify every read/write route that touches studies, personas, documents, telemetry, admin tools checks ownership (user_id) and prevents cross-user access.
+•	Verify admin routes are gated by is_admin (and cannot be reached by URL guessing).
+•	Add centralized authorization helper if needed to reduce missed checks.
+5) Scan for unhidden API keys / secrets
+•	Search for hardcoded secrets, fallback secrets, test keys.
+•	Remove “dangerous fallbacks” for beta/public: 
+o	app secret key must not default to a known string
+o	admin password must not default to a known string
+•	Fail fast when required secrets missing in production mode.
+•	Ensure secrets are never written to logs.
+6) Sanitize all uploads
+•	Enforce server-side allowlist by extension and MIME/content sniffing.
+•	Strip metadata from images (e.g., EXIF) if you store images.
+•	Ensure uploaded files cannot cause path traversal.
+•	Ensure uploads are stored outside executable paths.
+•	Apply strict size limits server-side (not just UI).
+Optional: integrate lightweight malware scanning if feasible without heavy infra; if not, document limitation and mitigate via strict allowlists and non-executability.
+7) Sanitize all form submissions (SQL injection)
+•	Confirm every DB write uses parameterized queries.
+•	Confirm no dynamic SQL with user-provided identifiers (ORDER BY must be whitelisted).
+•	Confirm query strings and filters are not concatenated unsafely.
+•	Add input length validation server-side to reduce attack surface.
+
+Additional high priority security items you MUST include (must-fix for beta)
+8) CSRF protection
+•	Add CSRF tokens to all POST routes that mutate data, especially: 
+o	admin routes
+o	uploads
+o	login/session actions
+o	any “save anchor” / “save survey question” routes
+Use Flask-WTF or a lightweight custom CSRF mechanism. Ensure tokens are stored in secure cookies/session.
+9) Security headers
+Add a default set of security headers:
+•	Content-Security-Policy (CSP) tuned for server-rendered pages
+•	X-Frame-Options / frame-ancestors (clickjacking protection)
+•	X-Content-Type-Options
+•	Referrer-Policy
+•	Permissions-Policy
+CSP should be compatible with how the app renders LLM output and uses inline JS; if inline JS exists, plan a safe CSP approach (nonce or strict-dynamic) or tighten template structure.
+10) Brute-force protection
+•	Add login attempt throttling and lockout/backoff.
+•	Ensure admin login has stricter throttling and logging.
+11) Session management hardening
+If sessions/tokens appear in URLs or query params:
+•	migrate to secure cookie-based sessions where possible
+•	add expiration
+•	prevent reuse indefinitely (rotation recommended)
+•	mitigate token leakage via referer headers and logs
+12) Request size / payload caps
+•	Add server-side max request size for: 
+o	chat messages
+o	survey questions/options
+o	anchor fields
+o	uploads (already capped; verify)
+•	Reject large payloads early with clear error.
+13) Execution idempotency + cost protection
+•	Make execution endpoints idempotent: 
+o	/run-study/<id> should not double-execute on retries/double clicks.
+•	Add a basic circuit breaker / kill switch: 
+o	if repeated LLM failures or runaway errors occur, pause new executions and show a maintenance message.
+•	Add per-user concurrency limits for executions.
+14) Logging & error handling
+•	Ensure exceptions do not leak secrets or user content in logs.
+•	Ensure production mode does not expose debug traces to users.
+•	Add minimal audit logs for admin actions (even without schema changes; file-based append-only acceptable if DB changes are disallowed).
+Output requirements (your response must include)
+1.	Job List (numbered) before any implementation
+2.	Findings, categorized: 
+o	🔴 Critical (must fix before beta)
+o	🟠 High priority
+o	🟡 Medium / backlog
+o	✅ Already good
+3.	Concrete code changes: 
+o	implement fixes with minimal patches
+o	list each file changed
+o	explain each change in one sentence
+4.	How to test (step-by-step): 
+o	include manual verification steps for each fix
+o	include any automated tests added (or updated)
+5.	Security regression considerations: 
+o	note where future changes are likely to regress and how to guard
+Implementation guidance (to prevent breaking the app)
+•	Do not change existing endpoint request shapes unless necessary for security (if you must, document and update templates accordingly).
+•	If you introduce new dependencies (e.g., Flask-Limiter, Flask-WTF), keep them minimal and document how they are configured.
+•	Preserve “Chat suggests. Fields decide. Users save.” and do not reintroduce chat-driven persistence.
+•	Ensure no DB connection stays open during LLM calls.
