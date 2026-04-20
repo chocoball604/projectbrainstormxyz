@@ -57,11 +57,66 @@ from flask import (
 from fpdf import FPDF
 from werkzeug.security import check_password_hash, generate_password_hash
 
+FLASK_ENV = os.environ.get("FLASK_ENV", "production").strip().lower()
+IS_PRODUCTION = FLASK_ENV != "development"
+
+_INSECURE_SECRETS = {"", "dev-fallback-key", "changeme", "secret", "default"}
+_INSECURE_ADMIN_PASSWORDS = {"", "admin", "admin123", "password", "changeme", "default"}
+
+_FLASK_SECRET_RAW = os.environ.get("FLASK_SECRET", "")
+_ADMIN_PASSWORD_RAW = os.environ.get("ADMIN_PASSWORD", "")
+
+if IS_PRODUCTION:
+    if (_FLASK_SECRET_RAW or "").strip() in _INSECURE_SECRETS:
+        sys.stderr.write(
+            "FATAL: FLASK_SECRET is missing or set to an insecure default. "
+            "Set a strong, random FLASK_SECRET environment variable before starting "
+            "the app in production (FLASK_ENV != 'development').\n"
+        )
+        sys.exit(1)
+    if (_ADMIN_PASSWORD_RAW or "").strip().lower() in _INSECURE_ADMIN_PASSWORDS:
+        sys.stderr.write(
+            "FATAL: ADMIN_PASSWORD is missing or set to an insecure default "
+            "(e.g. 'admin123'). Set a strong ADMIN_PASSWORD environment variable "
+            "before starting the app in production (FLASK_ENV != 'development').\n"
+        )
+        sys.exit(1)
+
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET", "dev-fallback-key")
+app.secret_key = _FLASK_SECRET_RAW or "dev-fallback-key"
 
 import re as _re_mod
 from markupsafe import Markup
+import bleach as _bleach
+
+_BLEACH_ALLOWED_TAGS = [
+    "p", "br", "h1", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li", "a", "strong", "em", "b", "i", "u",
+    "code", "pre", "blockquote", "hr", "span", "div",
+    "img", "figure", "figcaption",
+]
+_BLEACH_ALLOWED_ATTRS = {
+    "a": ["href", "title", "target", "rel"],
+    "img": ["src", "alt", "title", "width", "height"],
+    "span": ["class"],
+    "div": ["class"],
+    "code": ["class"],
+    "pre": ["class"],
+}
+_BLEACH_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
+
+
+@app.template_filter("sanitize_html")
+def _sanitize_html(text):
+    if text is None:
+        return ""
+    return _bleach.clean(
+        str(text),
+        tags=_BLEACH_ALLOWED_TAGS,
+        attributes=_BLEACH_ALLOWED_ATTRS,
+        protocols=_BLEACH_ALLOWED_PROTOCOLS,
+        strip=True,
+    )
 
 @app.template_filter("format_report_text")
 def _format_report_text(text):
@@ -161,7 +216,87 @@ def enforce_email_verification():
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "brainstorm.db")
 
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+import threading as _threading_mod
+
+_RATE_LIMIT_LOCK = _threading_mod.Lock()
+_RATE_LIMIT_HITS = {}
+_RATE_LIMIT_LOCKOUTS = {}
+
+AUTH_RATE_LIMITS = {
+    "login":       {"window_seconds": 60,  "max_hits": 10, "fail_window": 900, "max_fails": 5,  "lockout": 900},
+    "admin_login": {"window_seconds": 60,  "max_hits": 10, "fail_window": 900, "max_fails": 5,  "lockout": 1800},
+    "signup":      {"window_seconds": 3600, "max_hits": 10, "fail_window": 3600, "max_fails": 10, "lockout": 1800},
+}
+
+
+def _client_ip():
+    # SECURITY: do NOT trust X-Forwarded-For until ProxyFix is wired
+    # (Task #55 follow-up batch). Until then, key the limiter on the
+    # direct peer address so attackers can't spoof headers to escape
+    # their own lockouts. This makes lockouts effectively per-instance
+    # behind the proxy, which is acceptable for the V1A beta (single
+    # low-traffic instance); ProxyFix + trusted-proxy config will
+    # restore per-client granularity in the next batch.
+    return request.remote_addr or "unknown"
+
+
+def check_auth_rate_limit(action, identity_key=""):
+    """Returns (allowed: bool, retry_after: int|None, reason: str)."""
+    cfg = AUTH_RATE_LIMITS.get(action)
+    if not cfg:
+        return True, None, ""
+    ip = _client_ip()
+    now = time.time()
+    rate_key = f"{action}:ip:{ip}"
+    lock_key = f"{action}:lock:{ip}:{identity_key.lower()}"
+    with _RATE_LIMIT_LOCK:
+        # Lockout check
+        unlock_at = _RATE_LIMIT_LOCKOUTS.get(lock_key)
+        if unlock_at and unlock_at > now:
+            return False, int(unlock_at - now), "locked_out"
+        if unlock_at and unlock_at <= now:
+            _RATE_LIMIT_LOCKOUTS.pop(lock_key, None)
+        # Per-IP window
+        hits = [t for t in _RATE_LIMIT_HITS.get(rate_key, []) if t > now - cfg["window_seconds"]]
+        if len(hits) >= cfg["max_hits"]:
+            retry = int(hits[0] + cfg["window_seconds"] - now) + 1
+            return False, retry, "rate_limited"
+        hits.append(now)
+        _RATE_LIMIT_HITS[rate_key] = hits
+    return True, None, ""
+
+
+def record_auth_failure(action, identity_key=""):
+    cfg = AUTH_RATE_LIMITS.get(action)
+    if not cfg:
+        return
+    ip = _client_ip()
+    now = time.time()
+    fail_key = f"{action}:fail:{ip}:{identity_key.lower()}"
+    lock_key = f"{action}:lock:{ip}:{identity_key.lower()}"
+    with _RATE_LIMIT_LOCK:
+        fails = [t for t in _RATE_LIMIT_HITS.get(fail_key, []) if t > now - cfg["fail_window"]]
+        fails.append(now)
+        _RATE_LIMIT_HITS[fail_key] = fails
+        if len(fails) >= cfg["max_fails"]:
+            _RATE_LIMIT_LOCKOUTS[lock_key] = now + cfg["lockout"]
+            print(
+                f"AUTH_LOCKOUT action={action} ip={ip} identity={identity_key} "
+                f"fails={len(fails)} lockout_seconds={cfg['lockout']}",
+                flush=True,
+            )
+
+
+def clear_auth_failures(action, identity_key=""):
+    ip = _client_ip()
+    fail_key = f"{action}:fail:{ip}:{identity_key.lower()}"
+    lock_key = f"{action}:lock:{ip}:{identity_key.lower()}"
+    with _RATE_LIMIT_LOCK:
+        _RATE_LIMIT_HITS.pop(fail_key, None)
+        _RATE_LIMIT_LOCKOUTS.pop(lock_key, None)
+
+
+ADMIN_PASSWORD = _ADMIN_PASSWORD_RAW or "admin123"
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
 
 DM_FILE = os.path.join(os.path.dirname(__file__), "data", "messages.json")
@@ -3544,16 +3679,33 @@ def signup():
     password2 = request.form.get("password2") or ""
     tos_agreed = request.form.get("tos_agreed") or ""
 
+    allowed, retry_after, _reason = check_auth_rate_limit("signup", identity_key=email)
+    if not allowed:
+        msg = (
+            "Too many signup attempts from your network. Please wait "
+            f"{max(1, (retry_after or 60) // 60)} minute(s) and try again."
+        )
+        resp = render_error(msg)
+        try:
+            resp.headers["Retry-After"] = str(retry_after or 60)
+        except Exception:
+            pass
+        return resp, 429
+
+    def _signup_reject(message):
+        record_auth_failure("signup", identity_key=email)
+        return render_error(message)
+
     if not email or not first_name or not surname or not location or not password:
-        return render_error("Please fill in all required fields.")
+        return _signup_reject("Please fill in all required fields.")
     if len(password) < 6 or len(password) > 10:
-        return render_error("Password must be 6–10 characters.")
+        return _signup_reject("Password must be 6–10 characters.")
     if password != password2:
-        return render_error("Passwords do not match.")
+        return _signup_reject("Passwords do not match.")
     if tos_agreed != "1":
-        return render_error("You must agree to the Terms of Service and Privacy Policy to sign up.")
+        return _signup_reject("You must agree to the Terms of Service and Privacy Policy to sign up.")
     if linkedin and not linkedin.startswith("https://"):
-        return render_error("LinkedIn URL must start with https://")
+        return _signup_reject("LinkedIn URL must start with https://")
 
     base_username = email.split("@")[0]
     now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -3562,6 +3714,7 @@ def signup():
     existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
     if existing:
         conn.close()
+        record_auth_failure("signup", identity_key=email)
         return render_error("That email is already registered.")
 
     username = base_username
@@ -3602,6 +3755,7 @@ def signup():
         ),
     )
 
+    clear_auth_failures("signup", identity_key=email)
     token = create_session(user_id=user_row["id"])
     return redirect(url_for("index", token=token))
 
@@ -3685,13 +3839,28 @@ def login():
     if not email or not password:
         return render_error("Email and password are required.")
 
+    allowed, retry_after, reason = check_auth_rate_limit("login", identity_key=email)
+    if not allowed:
+        msg = (
+            "Too many login attempts. Please wait "
+            f"{max(1, (retry_after or 60) // 60)} minute(s) and try again."
+        )
+        resp = render_error(msg)
+        try:
+            resp.headers["Retry-After"] = str(retry_after or 60)
+        except Exception:
+            pass
+        return resp, 429
+
     conn = get_db()
     user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
     conn.close()
 
     if not user or not check_password_hash(user["password_hash"], password):
+        record_auth_failure("login", identity_key=email)
         return render_error("Invalid email or password.")
 
+    clear_auth_failures("login", identity_key=email)
     token = create_session(user_id=user["id"])
     return redirect(url_for("index", token=token))
 
@@ -3712,9 +3881,19 @@ def admin_portal():
 @app.route("/admin-login", methods=["POST"])
 def admin_login():
     password = request.form.get("admin_password") or ""
+
+    allowed, retry_after, reason = check_auth_rate_limit("admin_login", identity_key="admin")
+    if not allowed:
+        return redirect(url_for(
+            "admin_portal",
+            error=f"Too many admin login attempts. Try again in {max(1, (retry_after or 60) // 60)} minute(s).",
+        ))
+
     if password != ADMIN_PASSWORD:
+        record_auth_failure("admin_login", identity_key="admin")
         return redirect(url_for("admin_portal", error="Invalid admin password."))
 
+    clear_auth_failures("admin_login", identity_key="admin")
     token = create_session(is_admin=True)
     return redirect(url_for("index", token=token))
 
@@ -11667,4 +11846,4 @@ def admin_step1_library_validate():
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=port, debug=(not IS_PRODUCTION), use_reloader=False)

@@ -18,3 +18,4 @@ run = "python /home/runner/workspace/artifacts/brainstorm/app.py"
 
 [services.env]
 PORT = "24634"
+FLASK_ENV = "development"

@@ -174,7 +174,7 @@
         {% if post.image_path %}
         <img src="/static/blog/{{ post.image_path }}" alt="{{ post.title }}" class="post-image">
         {% endif %}
-        <div class="post-body">{{ post.body | safe }}</div>
+        <div class="post-body">{{ post.body | sanitize_html | safe }}</div>
     </article>
 </div>
 
