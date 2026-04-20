@@ -1793,6 +1793,8 @@
             <p style="font-size: 12px; color: #dc3545; font-weight: 600;">Attachment limit reached ({{ upload_max_files }} docs).</p>
             {% endif %}
 
+            {% if configure_study.study_type == 'synthetic_survey' %}
+            {# V1A Prompt 8 — survey order: Grounding → Optional Context → Personas (stub) #}
             {% set oc_data = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <div id="optional-context-section">
@@ -1823,7 +1825,6 @@
                     {% endfor %}
                 </div>
             </div>
-
 
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">4. Personas</h3>
@@ -1899,6 +1900,116 @@
             {% else %}
             <p style="color: #999; font-size: 13px;">No personas available for reuse. Lisa will create personas when the study runs.</p>
             {% endif %}
+            </div>
+            {% endif %}
+            {% else %}
+            {# Non-survey order preserved: Grounding → Personas → Optional Context #}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">4. Personas</h3>
+            {% if configure_study.study_type == 'synthetic_survey' %}
+            <p style="font-size: 13px; color: #999; margin-bottom: 12px; font-style: italic;">Personas — Not applicable for surveys</p>
+            {% elif configure_study.study_type in ['synthetic_idi', 'synthetic_focus_group'] %}
+            <div style="background: #f0f4ff; border-radius: 6px; padding: 14px; margin-bottom: 16px; border: 1px solid #d0d9f5; font-size: 13px; color: #555;">
+                <strong style="font-size: 14px; color: #1a1a2e;">Persona Rules</strong><br>
+                {% if configure_study.study_type == 'synthetic_idi' %}
+                IDI requires exactly 1 persona. If none is selected for reuse below, Lisa will generate one automatically when the study starts.
+                {% else %}
+                Focus Group requires 4–6 personas. If fewer are selected for reuse below, Lisa will generate additional personas to reach the minimum when the study starts.
+                {% endif %}
+            </div>
+            <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
+                You can reuse existing personas, or continue without selecting — Lisa will generate new ones.
+            </p>
+            <p style="font-size: 12px; color: #888; margin-bottom: 12px;">
+                {% if configure_study.study_type == 'synthetic_idi' %}Exactly 1 persona will be used{% else %}4–6 personas will be used{% endif %}
+            </p>
+
+            <div id="persona-table-area">
+            {% if configure_study_personas %}
+            {% set persona_count = configure_study_personas|length %}
+            <p style="font-size: 13px; color: #27ae60; margin-bottom: 8px; font-weight: 600;">{{ persona_count }} persona{{ 's' if persona_count != 1 else '' }} selected for reuse</p>
+            <table style="margin-bottom: 16px;">
+                <thead>
+                    <tr>
+                        <th>Persona</th>
+                        <th>Persona ID</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="persona-tbody">
+                    {% for cp in configure_study_personas %}
+                    <tr data-persona-id="{{ cp.id }}">
+                        <td>{{ cp.name }}</td>
+                        <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ cp.id }}</code></td>
+                        <td>
+                            <form class="detach-form" action="/detach-persona/{{ configure_study.id }}" method="POST" style="display:inline;">
+                                <input type="hidden" name="token" value="{{ token }}">
+                                <input type="hidden" name="persona_instance_id" value="{{ cp.id }}">
+                                <button type="submit" class="btn btn-danger btn-small">Remove</button>
+                            </form>
+                            <a href="/?token={{ token }}&view_persona={{ cp.id }}" class="btn btn-primary btn-small">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p id="no-personas-msg" style="color: #999; font-size: 13px; margin-bottom: 12px;">No personas selected — Lisa will generate new ones</p>
+            {% endif %}
+            </div>
+
+            <div id="attach-persona-area">
+            {% if available_personas %}
+            <form id="attach-form" action="/attach-persona/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="flex: 1;">
+                    <label style="font-size: 13px; font-weight: 500; color: #555; display: block; margin-bottom: 4px;">Select persona to attach</label>
+                    <select name="persona_instance_id" required style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: #fff;">
+                        <option value="">— Choose —</option>
+                        {% for p in available_personas %}
+                        <option value="{{ p.persona_instance_id }}">{% if p.translated_name %}{{ p.translated_name }} ({{ p.name }}){% else %}{{ p.name }}{% endif %} ({{ p.persona_instance_id }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-success btn-small" style="white-space: nowrap;">Attach</button>
+            </form>
+            {% elif personas_list %}
+            <p style="color: #999; font-size: 13px;">All personas are already attached.</p>
+            {% else %}
+            <p style="color: #999; font-size: 13px;">No personas available for reuse. Lisa will create personas when the study runs.</p>
+            {% endif %}
+            </div>
+            {% endif %}
+
+            {% set oc_data = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <div id="optional-context-section">
+                <h3 style="font-size: 16px; color: #1a1a2e; margin: 0 0 12px;">5. Optional Context <span style="font-weight: 400; font-size: 12px; color: #999;">(does not affect readiness)</span></h3>
+                <div>
+                    {% set dui_oc_val = configure_study.definition_useful_insight or '' %}
+                    {% set oc_fields_list = [
+                        ('definition_useful_insight', 'Definition of Useful Insight', 'What would a useful insight look like for this study?'),
+                        ('competitive_context', 'Competitive context', 'Key competitors, market positioning, competitive dynamics...'),
+                        ('cultural_sensitivities', 'Cultural sensitivities', 'Cultural factors, local norms, sensitivities to consider...'),
+                        ('adoption_barriers', 'Adoption barriers', 'Known barriers to adoption, switching costs, resistance factors...'),
+                        ('risk_tolerance', 'Risk tolerance', 'Risk appetite of the target audience or business context...')
+                    ] %}
+                    {% for fk, fl, fp in oc_fields_list %}
+                    {% set fv = dui_oc_val if fk == 'definition_useful_insight' else (oc_data.get(fk, '') if oc_data else '') %}
+                    {% set fv_has = fv and fv|trim|length > 0 %}
+                    <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
+                        <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
+                            <input type="hidden" name="token" value="{{ token }}">
+                            <input type="hidden" name="field_key" value="{{ fk }}">
+                            <div class="form-group" style="margin-bottom:4px;">
+                                <label>{{ fl }} <span style="font-weight: 400; color: #999;">(optional)</span> <span class="oc-saved-badge" style="{% if not fv_has %}display:none;{% endif %}color:#27ae60;font-size:12px;font-weight:400;margin-left:6px;">{% if fv_has %}&#10003; Saved{% endif %}</span></label>
+                                <textarea name="field_value" rows="2" maxlength="300" placeholder="{{ fp }}">{{ fv or '' }}</textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-small" style="background:#5C7E8F;">{% if fv_has %}Update{% else %}Save{% endif %}</button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
             {% endif %}
             {% endif %}
