@@ -14,8 +14,7 @@ paths = [ "/" ]
 localPort = 24634
 
 [services.development]
-run = "python /home/runner/workspace/artifacts/brainstorm/app.py"
+run = "FLASK_ENV=development python /home/runner/workspace/artifacts/brainstorm/app.py"
 
 [services.env]
 PORT = "24634"
-FLASK_ENV = "development"
