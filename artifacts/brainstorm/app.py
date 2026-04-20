@@ -1708,7 +1708,7 @@ def get_monthly_usage(conn, user_id):
 
 
 STUDY_TYPE_LIMITS = {
-    "synthetic_survey": {"max_questions": 12, "max_respondents": 400},
+    "synthetic_survey": {"max_questions": 12, "max_respondents": 500},
     "synthetic_idi": {"min_personas": 1, "max_personas": 1},
     "synthetic_focus_group": {"min_personas": 4, "max_personas": 6},
 }
@@ -4578,7 +4578,7 @@ def create_study():
             question_count = int(request.form.get("question_count", 8))
         except (ValueError, TypeError):
             question_count = 8
-        respondent_count = max(25, min(100, respondent_count))
+        respondent_count = max(25, min(500, respondent_count))
         question_count = max(1, min(12, question_count))
 
         survey_questions = []
@@ -6810,8 +6810,8 @@ def ben_precheck(study, persona_count, persona_dossiers=None):
                 sq = [q for q in json.loads(study["survey_questions"]) if q is not None]
             except (json.JSONDecodeError, TypeError):
                 sq = []
-        if rc < 25 or rc > 100:
-            failures.append("Respondent count must be between 25 and 100.")
+        if rc < 25 or rc > 500:
+            failures.append("Respondent count must be between 25 and 500.")
         if qc < 1 or qc > 12:
             failures.append("Question count must be between 1 and 12.")
         if len(sq) != qc:
@@ -8741,12 +8741,12 @@ def run_study(study_id):
     if study_type == "synthetic_survey":
         r_count = study["respondent_count"] or 100
         q_count = study["question_count"] or 8
-        if r_count < 25 or r_count > 100:
+        if r_count < 25 or r_count > 500:
             conn.close()
             _reset_to_draft()
             if ajax:
-                return jsonify({"ok": False, "error": "Survey respondent count must be between 25 and 100."}), 400
-            return render_error("Survey respondent count must be between 25 and 100.")
+                return jsonify({"ok": False, "error": "Survey respondent count must be between 25 and 500."}), 400
+            return render_error("Survey respondent count must be between 25 and 500.")
         if q_count < 1 or q_count > 12:
             conn.close()
             _reset_to_draft()
@@ -9606,7 +9606,7 @@ def save_survey_config(study_id):
     except (ValueError, TypeError):
         q_count = 8
 
-    r_count = max(25, min(100, r_count))
+    r_count = max(25, min(500, r_count))
     q_count = max(1, min(12, q_count))
 
     conn.execute(

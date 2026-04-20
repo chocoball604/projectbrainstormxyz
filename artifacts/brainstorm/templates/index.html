@@ -1520,6 +1520,205 @@
 
             </div>
 
+            {# V1A Prompt 8 — Survey Setup moved above supporting panels for synthetic_survey. #}
+            {% if configure_study.study_type == 'synthetic_survey' %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Survey Setup</h3>
+            <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
+                Configure respondent and question counts, then build your survey instrument question by question.
+            </p>
+
+            {% set sq_list = configure_study.survey_questions_list or [] %}
+            {% set q_count = configure_study.question_count or 8 %}
+            {% set r_count = configure_study.respondent_count or 100 %}
+
+            <form action="/save-survey-config/{{ configure_study.id }}" method="POST" style="margin-bottom: 16px;">
+                <input type="hidden" name="token" value="{{ token }}">
+                <div style="display: flex; gap: 16px; margin-bottom: 12px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="respondent-count">Respondent Count (25–500)</label>
+                        <input type="number" id="respondent-count" name="respondent_count"
+                               value="{{ r_count }}"
+                               min="25" max="500" required
+                               style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="question-count">Question Count (1–12)</label>
+                        <input type="number" id="question-count" name="question_count"
+                               value="{{ q_count }}"
+                               min="1" max="12" required
+                               style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-small">Update Survey Config</button>
+            </form>
+
+            <div style="background: #f0f4ff; border-radius: 8px; padding: 20px; margin-bottom: 16px; border: 1px solid #d0d9f5;">
+                <h4 style="margin: 0 0 4px; font-size: 15px; color: #1a1a2e;">
+                    Survey Questions ({{ sq_list|reject("none")|list|length }}/{{ q_count }} saved)
+                </h4>
+                <p style="font-size: 12px; color: #777; margin: 0 0 12px;">Save each question individually. Open-ended responses are capped at 50 words.</p>
+
+                {# V1A Prompt 8 — Survey Purpose framing strip (display-only) #}
+                <div style="background: #fffaf0; border: 1px solid #f5e3c0; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px;">
+                    <div style="font-size: 13px; font-weight: 600; color: #8a6d2c; margin-bottom: 4px;">Survey purpose</div>
+                    <div style="font-size: 12px; color: #555; line-height: 1.5;">
+                        Each question should help reduce uncertainty for this decision:
+                    </div>
+                    <div style="font-size: 13px; color: #1a1a2e; margin: 4px 0; padding: 6px 10px; background: #fff; border: 1px solid #f0e2c1; border-radius: 4px; overflow-wrap: break-word;">
+                        {{ configure_study.decision_to_support or '(decision not yet saved)' }}
+                    </div>
+                    <div style="font-size: 12px; color: #555; line-height: 1.5;">
+                        If a question doesn't change your confidence in the decision, consider removing it.
+                    </div>
+                </div>
+
+                <div id="survey-q-builder">
+                    {% for i in range(1, q_count + 1) %}
+                    {% set existing = sq_list[i-1] if i <= sq_list|length else none %}
+                    {% set eq_type = existing.type if existing is mapping else 'open' %}
+                    {% set eq_prompt = existing.prompt if existing is mapping else (existing if existing is string else '') %}
+                    {% set eq_opts = existing.options if existing is mapping and existing.options else [] %}
+                    {% set eq_img_a = existing.images.A if existing is mapping and existing.images else '' %}
+                    {% set eq_img_b = existing.images.B if existing is mapping and existing.images else '' %}
+                    {% set eq_min = existing.min if existing is mapping and existing.min is defined else 0 %}
+                    {% set eq_max = existing.max if existing is mapping and existing.max is defined else 100 %}
+                    {% set eq_saved = existing is not none and existing is mapping and eq_prompt %}
+                    {# V1A Prompt 8 — Collapsed-by-default wizard card (signal → format → text). #}
+                    <div class="sq-card" data-idx="{{ i }}" data-saved="{{ '1' if eq_saved else '0' }}" data-saved-type="{{ eq_type if eq_saved else '' }}" style="margin-bottom: 10px; border: 1px solid {{ '#c3e6cb' if eq_saved else '#e0e0e0' }}; border-radius: 6px; background: {{ '#f0fff0' if eq_saved else '#fff' }}; overflow: hidden;">
+                        <div class="sq-card-header" data-idx="{{ i }}" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;">
+                            <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                <strong style="font-size:13px;color:#1a1a2e;">Q{{ i }}</strong>
+                                {% if eq_saved %}
+                                <span style="color:#27ae60;font-size:11px;font-weight:600;margin-left:6px;">✓ Saved</span>
+                                <span style="color:#555;font-size:12px;margin-left:6px;">— {{ eq_prompt|truncate(70) }}</span>
+                                {% else %}
+                                <span style="color:#999;font-size:12px;margin-left:6px;">— Not configured</span>
+                                {% endif %}
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-small sq-toggle-btn" data-idx="{{ i }}">{{ 'Edit Q' ~ i if eq_saved else 'Configure Q' ~ i }}</button>
+                        </div>
+
+                        <div class="sq-row sq-card-body" data-idx="{{ i }}" id="sq-body-{{ i }}" style="display:none;padding:4px 14px 14px;border-top:1px dashed #e0e0e0;">
+                            {# Hidden type select preserves existing buildQuestionObj/save payload contract. #}
+                            <select class="sq-type-select" data-idx="{{ i }}" style="display:none;">
+                                <option value="open" {{ 'selected' if eq_type == 'open' }}>Open-ended</option>
+                                <option value="likert" {{ 'selected' if eq_type == 'likert' }}>Likert (1–5)</option>
+                                <option value="mc" {{ 'selected' if eq_type == 'mc' }}>Multiple Choice</option>
+                                <option value="ab" {{ 'selected' if eq_type == 'ab' }}>A/B Choice</option>
+                                <option value="ab_image" {{ 'selected' if eq_type == 'ab_image' }}>A/B Image</option>
+                                <option value="range" {{ 'selected' if eq_type == 'range' }}>Range/Scale</option>
+                            </select>
+
+                            <div class="sq-step sq-step-signal" data-idx="{{ i }}" style="margin-top:10px;">
+                                <div style="font-size:13px;font-weight:600;color:#1a1a2e;margin-bottom:6px;">Step 1 — What signal do you want?</div>
+                                <label style="display:block;margin-bottom:4px;font-size:13px;cursor:pointer;"><input type="radio" name="sq-signal-{{ i }}" class="sq-signal-radio" data-idx="{{ i }}" value="prevalence" style="margin-right:6px;"> Measure prevalence or intensity</label>
+                                <label style="display:block;margin-bottom:4px;font-size:13px;cursor:pointer;"><input type="radio" name="sq-signal-{{ i }}" class="sq-signal-radio" data-idx="{{ i }}" value="compare" style="margin-right:6px;"> Compare options or trade-offs</label>
+                                <label style="display:block;margin-bottom:4px;font-size:13px;cursor:pointer;"><input type="radio" name="sq-signal-{{ i }}" class="sq-signal-radio" data-idx="{{ i }}" value="reasons" style="margin-right:6px;"> Understand reasons or motivations</label>
+                            </div>
+
+                            <div class="sq-step sq-step-format" data-idx="{{ i }}" style="margin-top:14px;display:none;">
+                                <div style="font-size:13px;font-weight:600;color:#1a1a2e;margin-bottom:6px;">Step 2 — Choose question format</div>
+                                <div class="sq-format-options" data-idx="{{ i }}" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                            </div>
+
+                            <div class="sq-step sq-step-text" data-idx="{{ i }}" style="margin-top:14px;display:none;">
+                                <div style="font-size:13px;font-weight:600;color:#1a1a2e;margin-bottom:6px;">Step 3 — Write the question</div>
+                                <textarea class="sq-prompt" data-idx="{{ i }}" rows="2" placeholder="Enter question {{ i }}" style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; resize: vertical;">{{ eq_prompt }}</textarea>
+                                <div class="sq-guardrails" data-idx="{{ i }}" style="margin-top:6px;font-size:12px;color:#c87b00;min-height:0;line-height:1.5;"></div>
+
+                                <div class="sq-type-fields" id="sq-fields-{{ i }}" style="margin-top:10px;">
+                                    <div class="sq-field-likert" style="{{ '' if eq_type == 'likert' else 'display:none;' }}margin-bottom:8px;">
+                                        <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Scale labels (1 = lowest, 5 = highest):</span>
+                                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                            {% for li in range(5) %}
+                                            <div style="flex:1;min-width:80px;">
+                                                <label style="font-size:11px;color:#777;">{{ li + 1 }}.</label>
+                                                <input type="text" class="sq-likert-label" data-pos="{{ li }}" value="{{ eq_opts[li] if eq_opts|length > li else '' }}" placeholder="Label {{ li + 1 }}" style="width:100%;padding:4px 6px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    <div class="sq-field-mc" style="{{ '' if eq_type == 'mc' else 'display:none;' }}margin-bottom:8px;">
+                                        <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Options (min 3):</span>
+                                        <div class="sq-mc-options">
+                                            {% set mc_count = [eq_opts|length, 3] | max if eq_type == 'mc' else 3 %}
+                                            {% for oi in range(mc_count) %}
+                                            <div style="display:flex;gap:4px;margin-bottom:4px;align-items:center;">
+                                                <input type="text" class="sq-mc-opt" value="{{ eq_opts[oi] if eq_opts|length > oi else '' }}" placeholder="Option {{ oi + 1 }}" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
+                                                {% if oi >= 3 %}<button type="button" class="sq-mc-remove" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:14px;padding:2px 4px;" title="Remove">&times;</button>{% endif %}
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        <button type="button" class="sq-mc-add" style="font-size:12px;color:#5C7E8F;background:none;border:none;cursor:pointer;padding:2px 0;margin-top:2px;">+ Add option</button>
+                                    </div>
+                                    <div class="sq-field-ab" style="{{ '' if eq_type == 'ab' else 'display:none;' }}margin-bottom:8px;">
+                                        <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">A/B options (exactly 2):</span>
+                                        <div style="display:flex;gap:8px;">
+                                            <input type="text" class="sq-ab-a" value="{{ eq_opts[0] if eq_opts|length > 0 else '' }}" placeholder="Option A" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
+                                            <input type="text" class="sq-ab-b" value="{{ eq_opts[1] if eq_opts|length > 1 else '' }}" placeholder="Option B" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
+                                        </div>
+                                    </div>
+                                    <div class="sq-field-imgs" style="{{ '' if eq_type == 'ab_image' else 'display:none;' }}margin-bottom:8px;">
+                                        <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Upload images (JPG/PNG, max 500KB each):</span>
+                                        <input type="hidden" class="sq-img-a" value="{{ eq_img_a }}">
+                                        <input type="hidden" class="sq-img-b" value="{{ eq_img_b }}">
+                                        <div style="display:flex;gap:12px;">
+                                            <div style="flex:1;">
+                                                <label style="font-size:11px;color:#777;display:block;margin-bottom:2px;">Image A</label>
+                                                <input type="file" class="sq-img-file-a" accept=".jpg,.jpeg,.png" style="font-size:11px;max-width:100%;" data-idx="{{ i }}">
+                                                {% if eq_img_a %}
+                                                <div class="sq-img-preview-a" style="margin-top:4px;">
+                                                    <img src="/survey-image/{{ eq_img_a }}?token={{ token }}" style="max-width:80px;max-height:60px;border:1px solid #ddd;border-radius:3px;" alt="Image A" onerror="this.style.display='none';this.nextElementSibling.style.display='';">
+                                                    <span style="display:none;font-size:10px;color:#e67e22;">{{ eq_img_a }} (preview unavailable)</span>
+                                                    <span style="font-size:10px;color:#27ae60;margin-left:4px;">Uploaded</span>
+                                                </div>
+                                                {% else %}
+                                                <div class="sq-img-preview-a" style="margin-top:4px;font-size:11px;color:#999;">No image</div>
+                                                {% endif %}
+                                            </div>
+                                            <div style="flex:1;">
+                                                <label style="font-size:11px;color:#777;display:block;margin-bottom:2px;">Image B</label>
+                                                <input type="file" class="sq-img-file-b" accept=".jpg,.jpeg,.png" style="font-size:11px;max-width:100%;" data-idx="{{ i }}">
+                                                {% if eq_img_b %}
+                                                <div class="sq-img-preview-b" style="margin-top:4px;">
+                                                    <img src="/survey-image/{{ eq_img_b }}?token={{ token }}" style="max-width:80px;max-height:60px;border:1px solid #ddd;border-radius:3px;" alt="Image B" onerror="this.style.display='none';this.nextElementSibling.style.display='';">
+                                                    <span style="display:none;font-size:10px;color:#e67e22;">{{ eq_img_b }} (preview unavailable)</span>
+                                                    <span style="font-size:10px;color:#27ae60;margin-left:4px;">Uploaded</span>
+                                                </div>
+                                                {% else %}
+                                                <div class="sq-img-preview-b" style="margin-top:4px;font-size:11px;color:#999;">No image</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="sq-field-range" style="{{ '' if eq_type == 'range' else 'display:none;' }}margin-bottom:8px;">
+                                        <div style="display:flex;gap:8px;align-items:center;">
+                                            <label style="font-size:12px;">Min:</label>
+                                            <input type="number" class="sq-range-min" value="{{ eq_min }}" style="width:80px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
+                                            <label style="font-size:12px;">Max:</label>
+                                            <input type="number" class="sq-range-max" value="{{ eq_max }}" style="width:80px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style="display:flex;justify-content:flex-end;margin-top:10px;align-items:center;">
+                                    <button type="button" class="btn btn-primary btn-small sq-save-btn" data-idx="{{ i }}">Save Q{{ i }}</button>
+                                    <span class="sq-save-status" data-idx="{{ i }}" style="font-size:12px;margin-left:8px;line-height:30px;color:#27ae60;display:none;"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div style="display:flex;justify-content:flex-end;margin-top:12px;gap:8px;align-items:center;">
+                    <button type="button" id="sq-save-all-btn" class="btn btn-primary btn-small" style="padding:6px 18px;">Save All Questions</button>
+                    <span id="sq-save-all-status" style="font-size:12px;color:#27ae60;display:none;"></span>
+                </div>
+            </div>
+            {% endif %}
+            {# /V1A Prompt 8 — moved Survey Setup #}
+
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 4px;">3. Grounding Documents</h3>
             <p style="font-size: 12px; color: #888; margin-bottom: 10px;">
@@ -1670,161 +1869,7 @@
             </div>
             {% endif %}
 
-            <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
-
-            {% if configure_study.study_type == 'synthetic_survey' %}
-            <h3 style="font-size: 16px; color: #1a1a2e; margin-bottom: 12px;">Survey Setup</h3>
-            <p style="font-size: 13px; color: #777; margin-bottom: 12px;">
-                Configure respondent and question counts, then build your survey instrument question by question.
-            </p>
-
-            {% set sq_list = configure_study.survey_questions_list or [] %}
-            {% set q_count = configure_study.question_count or 8 %}
-            {% set r_count = configure_study.respondent_count or 100 %}
-
-            <form action="/save-survey-config/{{ configure_study.id }}" method="POST" style="margin-bottom: 16px;">
-                <input type="hidden" name="token" value="{{ token }}">
-                <div style="display: flex; gap: 16px; margin-bottom: 12px;">
-                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label for="respondent-count">Respondent Count (25–100)</label>
-                        <input type="number" id="respondent-count" name="respondent_count"
-                               value="{{ r_count }}"
-                               min="25" max="100" required
-                               style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
-                    </div>
-                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                        <label for="question-count">Question Count (1–12)</label>
-                        <input type="number" id="question-count" name="question_count"
-                               value="{{ q_count }}"
-                               min="1" max="12" required
-                               style="width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary btn-small">Update Survey Config</button>
-            </form>
-
-            <div style="background: #f0f4ff; border-radius: 8px; padding: 20px; margin-bottom: 16px; border: 1px solid #d0d9f5;">
-                <h4 style="margin: 0 0 4px; font-size: 15px; color: #1a1a2e;">
-                    Survey Questions ({{ sq_list|reject("none")|list|length }}/{{ q_count }} saved)
-                </h4>
-                <p style="font-size: 12px; color: #777; margin: 0 0 16px;">Save each question individually. Open-ended responses are capped at 50 words.</p>
-
-                <div id="survey-q-builder">
-                    {% for i in range(1, q_count + 1) %}
-                    {% set existing = sq_list[i-1] if i <= sq_list|length else none %}
-                    {% set eq_type = existing.type if existing is mapping else 'open' %}
-                    {% set eq_prompt = existing.prompt if existing is mapping else (existing if existing is string else '') %}
-                    {% set eq_opts = existing.options if existing is mapping and existing.options else [] %}
-                    {% set eq_img_a = existing.images.A if existing is mapping and existing.images else '' %}
-                    {% set eq_img_b = existing.images.B if existing is mapping and existing.images else '' %}
-                    {% set eq_min = existing.min if existing is mapping and existing.min is defined else 0 %}
-                    {% set eq_max = existing.max if existing is mapping and existing.max is defined else 100 %}
-                    {% set eq_saved = existing is not none and existing is mapping and eq_prompt %}
-                    <div class="sq-row" data-idx="{{ i }}" style="margin-bottom: 12px; padding: 14px; background: {{ '#f0fff0' if eq_saved else '#fff' }}; border: 1px solid {{ '#c3e6cb' if eq_saved else '#e0e0e0' }}; border-radius: 6px;">
-                        <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
-                            <span style="font-size: 13px; font-weight: 700; min-width: 30px; color: #1a1a2e;">Q{{ i }}</span>
-                            <select class="sq-type-select" data-idx="{{ i }}" style="padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; min-width: 130px;">
-                                <option value="open" {{ 'selected' if eq_type == 'open' }}>Open-ended</option>
-                                <option value="likert" {{ 'selected' if eq_type == 'likert' }}>Likert (1–5)</option>
-                                <option value="mc" {{ 'selected' if eq_type == 'mc' }}>Multiple Choice</option>
-                                <option value="ab" {{ 'selected' if eq_type == 'ab' }}>A/B Choice</option>
-                                <option value="ab_image" {{ 'selected' if eq_type == 'ab_image' }}>A/B Image</option>
-                                <option value="range" {{ 'selected' if eq_type == 'range' }}>Range/Scale</option>
-                            </select>
-                            {% if eq_saved %}<span style="color: #27ae60; font-size: 11px; font-weight: 600; margin-left: auto;">Saved</span>{% endif %}
-                        </div>
-                        <div style="margin-bottom: 8px;">
-                            <textarea class="sq-prompt" rows="2" placeholder="Enter question {{ i }}" style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; resize: vertical;">{{ eq_prompt }}</textarea>
-                        </div>
-                        <div class="sq-type-fields" id="sq-fields-{{ i }}">
-                            <div class="sq-field-likert" style="{{ '' if eq_type == 'likert' else 'display:none;' }}margin-bottom:8px;">
-                                <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Scale labels (1 = lowest, 5 = highest):</span>
-                                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                                    {% for li in range(5) %}
-                                    <div style="flex:1;min-width:80px;">
-                                        <label style="font-size:11px;color:#777;">{{ li + 1 }}.</label>
-                                        <input type="text" class="sq-likert-label" data-pos="{{ li }}" value="{{ eq_opts[li] if eq_opts|length > li else '' }}" placeholder="Label {{ li + 1 }}" style="width:100%;padding:4px 6px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            <div class="sq-field-mc" style="{{ '' if eq_type == 'mc' else 'display:none;' }}margin-bottom:8px;">
-                                <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Options (min 3):</span>
-                                <div class="sq-mc-options">
-                                    {% set mc_count = [eq_opts|length, 3] | max if eq_type == 'mc' else 3 %}
-                                    {% for oi in range(mc_count) %}
-                                    <div style="display:flex;gap:4px;margin-bottom:4px;align-items:center;">
-                                        <input type="text" class="sq-mc-opt" value="{{ eq_opts[oi] if eq_opts|length > oi else '' }}" placeholder="Option {{ oi + 1 }}" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
-                                        {% if oi >= 3 %}<button type="button" class="sq-mc-remove" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:14px;padding:2px 4px;" title="Remove">&times;</button>{% endif %}
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                                <button type="button" class="sq-mc-add" style="font-size:12px;color:#5C7E8F;background:none;border:none;cursor:pointer;padding:2px 0;margin-top:2px;">+ Add option</button>
-                            </div>
-                            <div class="sq-field-ab" style="{{ '' if eq_type == 'ab' else 'display:none;' }}margin-bottom:8px;">
-                                <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">A/B options (exactly 2):</span>
-                                <div style="display:flex;gap:8px;">
-                                    <input type="text" class="sq-ab-a" value="{{ eq_opts[0] if eq_opts|length > 0 else '' }}" placeholder="Option A" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
-                                    <input type="text" class="sq-ab-b" value="{{ eq_opts[1] if eq_opts|length > 1 else '' }}" placeholder="Option B" style="flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:3px;font-size:12px;">
-                                </div>
-                            </div>
-                            <div class="sq-field-imgs" style="{{ '' if eq_type == 'ab_image' else 'display:none;' }}margin-bottom:8px;">
-                                <span style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:4px;">Upload images (JPG/PNG, max 500KB each):</span>
-                                <input type="hidden" class="sq-img-a" value="{{ eq_img_a }}">
-                                <input type="hidden" class="sq-img-b" value="{{ eq_img_b }}">
-                                <div style="display:flex;gap:12px;">
-                                    <div style="flex:1;">
-                                        <label style="font-size:11px;color:#777;display:block;margin-bottom:2px;">Image A</label>
-                                        <input type="file" class="sq-img-file-a" accept=".jpg,.jpeg,.png" style="font-size:11px;max-width:100%;" data-idx="{{ i }}">
-                                        {% if eq_img_a %}
-                                        <div class="sq-img-preview-a" style="margin-top:4px;">
-                                            <img src="/survey-image/{{ eq_img_a }}?token={{ token }}" style="max-width:80px;max-height:60px;border:1px solid #ddd;border-radius:3px;" alt="Image A" onerror="this.style.display='none';this.nextElementSibling.style.display='';">
-                                            <span style="display:none;font-size:10px;color:#e67e22;">{{ eq_img_a }} (preview unavailable)</span>
-                                            <span style="font-size:10px;color:#27ae60;margin-left:4px;">Uploaded</span>
-                                        </div>
-                                        {% else %}
-                                        <div class="sq-img-preview-a" style="margin-top:4px;font-size:11px;color:#999;">No image</div>
-                                        {% endif %}
-                                    </div>
-                                    <div style="flex:1;">
-                                        <label style="font-size:11px;color:#777;display:block;margin-bottom:2px;">Image B</label>
-                                        <input type="file" class="sq-img-file-b" accept=".jpg,.jpeg,.png" style="font-size:11px;max-width:100%;" data-idx="{{ i }}">
-                                        {% if eq_img_b %}
-                                        <div class="sq-img-preview-b" style="margin-top:4px;">
-                                            <img src="/survey-image/{{ eq_img_b }}?token={{ token }}" style="max-width:80px;max-height:60px;border:1px solid #ddd;border-radius:3px;" alt="Image B" onerror="this.style.display='none';this.nextElementSibling.style.display='';">
-                                            <span style="display:none;font-size:10px;color:#e67e22;">{{ eq_img_b }} (preview unavailable)</span>
-                                            <span style="font-size:10px;color:#27ae60;margin-left:4px;">Uploaded</span>
-                                        </div>
-                                        {% else %}
-                                        <div class="sq-img-preview-b" style="margin-top:4px;font-size:11px;color:#999;">No image</div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="sq-field-range" style="{{ '' if eq_type == 'range' else 'display:none;' }}margin-bottom:8px;">
-                                <div style="display:flex;gap:8px;align-items:center;">
-                                    <label style="font-size:12px;">Min:</label>
-                                    <input type="number" class="sq-range-min" value="{{ eq_min }}" style="width:80px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
-                                    <label style="font-size:12px;">Max:</label>
-                                    <input type="number" class="sq-range-max" value="{{ eq_max }}" style="width:80px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;">
-                                </div>
-                            </div>
-                        </div>
-                        <div style="display:flex;justify-content:flex-end;margin-top:6px;">
-                            <button type="button" class="btn btn-primary btn-small sq-save-btn" data-idx="{{ i }}">Save Q{{ i }}</button>
-                            <span class="sq-save-status" data-idx="{{ i }}" style="font-size:12px;margin-left:8px;line-height:30px;color:#27ae60;display:none;"></span>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                <div style="display:flex;justify-content:flex-end;margin-top:12px;gap:8px;align-items:center;">
-                    <button type="button" id="sq-save-all-btn" class="btn btn-primary btn-small" style="padding:6px 18px;">Save All Questions</button>
-                    <span id="sq-save-all-status" style="font-size:12px;color:#27ae60;display:none;"></span>
-                </div>
-            </div>
-
-            {% endif %}
-
+            {# V1A Prompt 8 — Survey Setup block was here; moved above Grounding Documents for synthetic_survey. #}
             {% set oc_data = configure_study.get('survey_brief_data', {}).get('optional_context', {}) if configure_study.get('survey_brief_data') else {} %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
             <div id="optional-context-section">
@@ -2634,6 +2679,7 @@
                         if (data.ok) {
                             row.style.background = '#f0fff0';
                             row.style.borderColor = '#c3e6cb';
+                            sqMarkCardSaved(idx, result.question);
                             if (status) { status.textContent = 'Saved'; status.style.display = ''; }
                             if (data.precheck) updatePrecheckPanel(data.precheck);
                             if (data.qa_status) updatePrecheckStatusBox(data);
@@ -2648,6 +2694,30 @@
                     });
                 });
             });
+
+            // V1A Prompt 8 — update outer card visual + metadata after save so collapsed view reflects saved state without reload.
+            function sqMarkCardSaved(idx, qobj) {
+                var card = document.querySelector('.sq-card[data-idx="' + idx + '"]');
+                if (!card) return;
+                card.setAttribute('data-saved', '1');
+                if (qobj && qobj.type) card.setAttribute('data-saved-type', qobj.type);
+                card.style.background = '#f0fff0';
+                card.style.borderColor = '#c3e6cb';
+                var header = card.querySelector('.sq-card-header > div');
+                if (header && qobj && qobj.prompt) {
+                    var p = qobj.prompt;
+                    if (p.length > 70) p = p.substring(0, 67) + '…';
+                    var safe = document.createElement('div');
+                    safe.textContent = p;
+                    header.innerHTML = '<strong style="font-size:13px;color:#1a1a2e;">Q' + idx + '</strong>'
+                        + '<span style="color:#27ae60;font-size:11px;font-weight:600;margin-left:6px;">✓ Saved</span>'
+                        + '<span style="color:#555;font-size:12px;margin-left:6px;">— ' + safe.innerHTML + '</span>';
+                }
+                var toggle = card.querySelector('.sq-toggle-btn[data-idx="' + idx + '"]');
+                var body = card.querySelector('.sq-card-body[data-idx="' + idx + '"]');
+                var isOpen = body && body.style.display !== 'none';
+                if (toggle) toggle.textContent = isOpen ? 'Collapse' : ('Edit Q' + idx);
+            }
 
             var saveAllBtn = document.getElementById('sq-save-all-btn');
             if (saveAllBtn) {
@@ -2678,9 +2748,11 @@
                         saveAllBtn.textContent = 'Save All Questions';
                         if (data.ok) {
                             if (statusEl) { statusEl.textContent = 'All saved'; statusEl.style.display = ''; }
-                            rows.forEach(function(row) {
+                            rows.forEach(function(row, ri) {
                                 row.style.background = '#f0fff0';
                                 row.style.borderColor = '#c3e6cb';
+                                var ridx = row.getAttribute('data-idx');
+                                sqMarkCardSaved(ridx, questions[ri]);
                             });
                             if (data.precheck) updatePrecheckPanel(data.precheck);
                             if (data.qa_status) updatePrecheckStatusBox(data);
@@ -2695,6 +2767,178 @@
                     });
                 });
             }
+
+            // V1A Prompt 8 — Survey Question wizard (signal → format → text), guardrails, one-card-expanded.
+            var SQ_FORMATS_BY_SIGNAL = {
+                prevalence: [['likert','Likert (1–5)'], ['range','Range/Scale'], ['mc','Multiple Choice']],
+                compare:    [['ab','A/B Choice'], ['ab_image','A/B Image'], ['mc','Multiple Choice']],
+                reasons:    [['open','Open-ended'], ['mc','Multiple Choice']]
+            };
+            var SQ_SIGNAL_BY_TYPE = {
+                likert: 'prevalence', range: 'prevalence',
+                ab: 'compare', ab_image: 'compare',
+                open: 'reasons', mc: 'prevalence'
+            };
+            var SQ_LEADING_BAD = ['helpful','improved','best','responsible'];
+
+            function sqRunGuardrails(idx) {
+                var card = document.querySelector('.sq-card[data-idx="' + idx + '"]');
+                if (!card) return;
+                var promptEl = card.querySelector('.sq-prompt');
+                var typeSel = card.querySelector('.sq-type-select');
+                var slot = card.querySelector('.sq-guardrails');
+                if (!slot) return;
+                var prompt = promptEl ? (promptEl.value || '') : '';
+                var qtype = typeSel ? (typeSel.value || 'open') : 'open';
+                var trimmed = prompt.trim();
+                var msgs = [];
+                if (trimmed.length > 0 && /\b(and|or)\b/i.test(trimmed)) {
+                    var clauses = trimmed.split(/\s+(?:and|or)\s+/i).filter(function(s){return s.trim().length > 0;});
+                    if (clauses.length >= 2) msgs.push('⚠ This question may be asking about more than one thing. Consider splitting it.');
+                }
+                var leadMatch = trimmed.match(/^\s*([A-Za-z]+)/);
+                if (leadMatch && SQ_LEADING_BAD.indexOf(leadMatch[1].toLowerCase()) !== -1) {
+                    msgs.push('⚠ This wording may influence responses. Try to keep it neutral.');
+                }
+                if (trimmed.length > 0 && trimmed.length < 12) {
+                    msgs.push("⚠ This is very short. Make sure it's clear what you're measuring.");
+                }
+                if (qtype === 'open') {
+                    msgs.push("Tip: Use open-ended questions sparingly. They're best for 'why', not 'how many'.");
+                }
+                slot.innerHTML = msgs.map(function(m){return '<div>' + m + '</div>';}).join('');
+            }
+
+            function sqRenderFormatOptions(idx, signal, selectedType) {
+                var card = document.querySelector('.sq-card[data-idx="' + idx + '"]');
+                if (!card) return;
+                var container = card.querySelector('.sq-format-options[data-idx="' + idx + '"]');
+                if (!container) return;
+                var formats = SQ_FORMATS_BY_SIGNAL[signal] || [];
+                container.innerHTML = '';
+                formats.forEach(function(pair) {
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'btn btn-secondary btn-small sq-format-btn';
+                    btn.setAttribute('data-idx', idx);
+                    btn.setAttribute('data-format', pair[0]);
+                    btn.textContent = pair[1];
+                    btn.style.padding = '4px 10px';
+                    btn.style.fontSize = '12px';
+                    if (selectedType && pair[0] === selectedType) {
+                        btn.style.background = '#5C7E8F';
+                        btn.style.color = '#fff';
+                        btn.style.borderColor = '#5C7E8F';
+                    }
+                    btn.addEventListener('click', function() {
+                        sqSelectFormat(idx, pair[0]);
+                    });
+                    container.appendChild(btn);
+                });
+            }
+
+            function sqSelectFormat(idx, fmt) {
+                var card = document.querySelector('.sq-card[data-idx="' + idx + '"]');
+                if (!card) return;
+                var typeSel = card.querySelector('.sq-type-select');
+                if (typeSel) typeSel.value = fmt;
+                // Highlight chosen button
+                card.querySelectorAll('.sq-format-btn[data-idx="' + idx + '"]').forEach(function(b) {
+                    if (b.getAttribute('data-format') === fmt) {
+                        b.style.background = '#5C7E8F';
+                        b.style.color = '#fff';
+                        b.style.borderColor = '#5C7E8F';
+                    } else {
+                        b.style.background = '';
+                        b.style.color = '';
+                        b.style.borderColor = '';
+                    }
+                });
+                // Show + populate per-type fields via existing helper
+                sqToggleFields(idx, fmt);
+                // Reveal Step 3
+                var step3 = card.querySelector('.sq-step-text[data-idx="' + idx + '"]');
+                if (step3) step3.style.display = '';
+                sqRunGuardrails(idx);
+            }
+
+            function sqSelectSignal(idx, signal, selectedType) {
+                var card = document.querySelector('.sq-card[data-idx="' + idx + '"]');
+                if (!card) return;
+                var radio = card.querySelector('.sq-signal-radio[data-idx="' + idx + '"][value="' + signal + '"]');
+                if (radio) radio.checked = true;
+                var step2 = card.querySelector('.sq-step-format[data-idx="' + idx + '"]');
+                if (step2) step2.style.display = '';
+                sqRenderFormatOptions(idx, signal, selectedType || null);
+                if (selectedType) {
+                    sqSelectFormat(idx, selectedType);
+                } else {
+                    var step3 = card.querySelector('.sq-step-text[data-idx="' + idx + '"]');
+                    if (step3) step3.style.display = 'none';
+                }
+            }
+
+            function sqCollapseAll() {
+                document.querySelectorAll('.sq-card-body').forEach(function(b) { b.style.display = 'none'; });
+                document.querySelectorAll('.sq-toggle-btn').forEach(function(btn) {
+                    var idx = btn.getAttribute('data-idx');
+                    var card = document.querySelector('.sq-card[data-idx="' + idx + '"]');
+                    var saved = card && card.getAttribute('data-saved') === '1';
+                    btn.textContent = (saved ? 'Edit Q' : 'Configure Q') + idx;
+                });
+            }
+
+            function sqExpandCard(idx) {
+                sqCollapseAll();
+                var card = document.querySelector('.sq-card[data-idx="' + idx + '"]');
+                if (!card) return;
+                var body = card.querySelector('.sq-card-body[data-idx="' + idx + '"]');
+                if (body) body.style.display = '';
+                var btn = card.querySelector('.sq-toggle-btn[data-idx="' + idx + '"]');
+                if (btn) btn.textContent = 'Collapse';
+                // Pre-populate signal/format if saved or already chosen
+                var savedType = card.getAttribute('data-saved-type') || '';
+                var typeSel = card.querySelector('.sq-type-select');
+                var currentType = typeSel ? typeSel.value : '';
+                var initialType = savedType || currentType || '';
+                if (initialType) {
+                    var inferred = SQ_SIGNAL_BY_TYPE[initialType] || 'prevalence';
+                    sqSelectSignal(idx, inferred, initialType);
+                }
+                sqRunGuardrails(idx);
+            }
+
+            // Wire up signal radios
+            document.querySelectorAll('.sq-signal-radio').forEach(function(r) {
+                r.addEventListener('change', function() {
+                    if (!r.checked) return;
+                    var idx = r.getAttribute('data-idx');
+                    sqSelectSignal(idx, r.value, null);
+                });
+            });
+
+            // Wire up toggle buttons + header click
+            document.querySelectorAll('.sq-toggle-btn').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var idx = btn.getAttribute('data-idx');
+                    var card = document.querySelector('.sq-card[data-idx="' + idx + '"]');
+                    var body = card && card.querySelector('.sq-card-body[data-idx="' + idx + '"]');
+                    var isOpen = body && body.style.display !== 'none';
+                    if (isOpen) {
+                        sqCollapseAll();
+                    } else {
+                        sqExpandCard(idx);
+                    }
+                });
+            });
+
+            // Wire up prompt input → guardrails
+            document.querySelectorAll('.sq-prompt').forEach(function(t) {
+                t.addEventListener('input', function() {
+                    sqRunGuardrails(t.getAttribute('data-idx'));
+                });
+            });
 
             var configForm = document.querySelector('form[action*="/save-survey-config/"]');
             if (configForm) {
@@ -3365,7 +3609,7 @@
                 <div style="background: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 16px; font-size: 13px;">
                     <strong>Study Type Limits:</strong>
                     <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
-                        <li><strong>Survey:</strong> max 12 questions, max 400 respondents, no persona dossiers</li>
+                        <li><strong>Survey:</strong> max 12 questions, max 500 respondents, no persona dossiers</li>
                         <li><strong>IDI:</strong> exactly 1 persona (Lisa creates if not reused)</li>
                         <li><strong>Focus Group:</strong> 4–6 personas required</li>
                     </ul>
@@ -3428,8 +3672,8 @@
                 <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Survey Configuration</h3>
                 <div style="display: flex; gap: 16px; margin-bottom: 20px;">
                     <div class="form-group" style="flex: 1;">
-                        <label for="sv-respondent-count">Respondent Count (1–400)</label>
-                        <input type="number" id="sv-respondent-count" name="respondent_count" value="100" min="1" max="400" required>
+                        <label for="sv-respondent-count">Respondent Count (1–500)</label>
+                        <input type="number" id="sv-respondent-count" name="respondent_count" value="100" min="1" max="500" required>
                     </div>
                     <div class="form-group" style="flex: 1;">
                         <label for="sv-question-count">Question Count (1–12)</label>
