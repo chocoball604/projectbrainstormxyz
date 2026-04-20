@@ -23,6 +23,32 @@
           border-radius: 6px; font-size: 12px; color: #444; line-height: 1.55; }
   code { background: #f1f1f4; padding: 1px 4px; border-radius: 3px; }
 </style>
+<script>
+window.__csrfToken = "{{ csrf_token }}";
+(function () {
+    try {
+        var m = document.cookie.match(/(?:^|;\s*)pb_csrf=([^;]+)/);
+        if (m && m[1]) window.__csrfToken = decodeURIComponent(m[1]);
+    } catch (e) {}
+    if (!window.fetch || window.__csrfFetchWrapped) return;
+    window.__csrfFetchWrapped = true;
+    var origFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+        init = init || {};
+        var method = (init.method || (input && input.method) || "GET").toUpperCase();
+        if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
+            var url = typeof input === "string" ? input : (input && input.url) || "";
+            var sameOrigin = !/^https?:\/\//i.test(url) || url.indexOf(window.location.origin) === 0;
+            if (sameOrigin && window.__csrfToken) {
+                var headers = new Headers(init.headers || (input && input.headers) || {});
+                if (!headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", window.__csrfToken);
+                init.headers = headers;
+            }
+        }
+        return origFetch(input, init);
+    };
+})();
+</script>
 </head>
 <body>
   <h1>Step 1 Pattern Library</h1>

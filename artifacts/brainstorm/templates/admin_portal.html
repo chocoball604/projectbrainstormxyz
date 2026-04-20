@@ -99,7 +99,7 @@
                     </a>
                 </li>
             </ul>
-            <form action="/logout" method="POST">
+            <form action="/logout" method="POST">{{ csrf_input() }}
                 <button type="submit" class="btn-submit"
                         style="background: #fff; color: #1a1a2e; border: 1px solid #1a1a2e;">
                     Sign out
@@ -110,7 +110,7 @@
             {% if error %}
             <div class="error-msg">{{ error }}</div>
             {% endif %}
-            <form action="/admin-login" method="POST">
+            <form action="/admin-login" method="POST">{{ csrf_input() }}
                 <div class="form-group">
                     <label for="admin-password">Password</label>
                     <input type="password" id="admin-password" name="admin_password" required autofocus>

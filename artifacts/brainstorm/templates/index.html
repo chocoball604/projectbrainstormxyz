@@ -230,6 +230,35 @@
             to { transform: rotate(360deg); }
         }
     </style>
+    <script>
+    // P1 CSRF: expose per-session token to JS and auto-attach it to fetch().
+    // The token is rendered by Jinja (g.csrf_token); we also mirror the
+    // `pb_csrf` cookie so dynamically-constructed forms can read it.
+    window.__csrfToken = "{{ csrf_token }}";
+    (function () {
+        try {
+            var m = document.cookie.match(/(?:^|;\s*)pb_csrf=([^;]+)/);
+            if (m && m[1]) window.__csrfToken = decodeURIComponent(m[1]);
+        } catch (e) {}
+        if (!window.fetch || window.__csrfFetchWrapped) return;
+        window.__csrfFetchWrapped = true;
+        var origFetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+            init = init || {};
+            var method = (init.method || (input && input.method) || "GET").toUpperCase();
+            if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
+                var url = typeof input === "string" ? input : (input && input.url) || "";
+                var sameOrigin = !/^https?:\/\//i.test(url) || url.indexOf(window.location.origin) === 0;
+                if (sameOrigin && window.__csrfToken) {
+                    var headers = new Headers(init.headers || (input && input.headers) || {});
+                    if (!headers.has("X-CSRF-Token")) headers.set("X-CSRF-Token", window.__csrfToken);
+                    init.headers = headers;
+                }
+            }
+            return origFetch(input, init);
+        };
+    })();
+    </script>
 </head>
 <body>
 
@@ -248,7 +277,7 @@
             </a>
             <span>|</span>
             <span>Admin Panel</span>
-            <form action="/logout" method="POST" class="logout-form">
+            <form action="/logout" method="POST" class="logout-form">{{ csrf_input() }}
                 <input type="hidden" name="token" value="{{ token }}">
                 <button type="submit" class="btn btn-secondary btn-small">Logout</button>
             </form>
@@ -267,7 +296,7 @@
             </a>
             <span>|</span>
             <a href="/account?token={{ token }}">Account</a>
-            <form action="/logout" method="POST" class="logout-form">
+            <form action="/logout" method="POST" class="logout-form">{{ csrf_input() }}
                 <input type="hidden" name="token" value="{{ token }}">
                 <button type="submit" class="btn btn-secondary btn-small">Logout</button>
             </form>
@@ -291,7 +320,7 @@
 
         <div class="card" id="tab-login">
             <h2>Login</h2>
-            <form action="/login" method="POST">
+            <form action="/login" method="POST">{{ csrf_input() }}
                 <div class="form-group">
                     <label for="login-email">Email</label>
                     <input type="email" id="login-email" name="email" required>
@@ -309,7 +338,7 @@
             {% if error and show_auth_tab == 'signup' %}
             <div style="background:#fee2e2;color:#dc2626;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:500;margin-bottom:14px;">{{ error }}</div>
             {% endif %}
-            <form action="/signup" method="POST" id="signup-form-main">
+            <form action="/signup" method="POST" id="signup-form-main">{{ csrf_input() }}
                 <div class="form-group">
                     <label for="signup-email">Email</label>
                     <input type="email" id="signup-email" name="email" required>
@@ -423,7 +452,7 @@
 
         <div class="card" id="tab-admin" style="display:none;">
             <h2>Admin Login</h2>
-            <form action="/admin-login" method="POST">
+            <form action="/admin-login" method="POST">{{ csrf_input() }}
                 <div class="form-group">
                     <label for="admin-password">Admin Password</label>
                     <input type="password" id="admin-password" name="admin_password" required>
@@ -756,7 +785,7 @@
                             {% if loop.last and msg.sender == 'mark' and chat_save_buttons %}
                             <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
                                 {% for field_key, btn_label in chat_save_buttons %}
-                                <form action="/save-chat-field/{{ configure_study.id }}" method="POST" style="display: inline;">
+                                <form action="/save-chat-field/{{ configure_study.id }}" method="POST" style="display: inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <input type="hidden" name="field" value="{{ field_key }}">
                                     <button type="submit" style="
@@ -1172,7 +1201,7 @@
                 function recBtn(sid, type, label, recType) {
                     var cls = (type === recType) ? 'btn-success' : 'btn-secondary';
                     var suffix = (type === recType) ? ' (recommended)' : '';
-                    return '<form action="/set-mark-recommendation/' + sid + '" method="POST" style="display:inline;">' +
+                    return '<form action="/set-mark-recommendation/' + sid + '" method="POST" style="display:inline;">{{ csrf_input() }}' +
                         '<input type="hidden" name="token" value="' + escapeHtml(token) + '">' +
                         '<input type="hidden" name="study_type" value="' + type + '">' +
                         '<button type="submit" class="btn ' + cls + '">' + label + suffix + '</button>' +
@@ -1283,21 +1312,21 @@
                     Confirm the study type:
                 </p>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">
+                    <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                         <input type="hidden" name="token" value="{{ token }}">
                         <input type="hidden" name="study_type" value="synthetic_survey">
                         <button type="submit" class="btn {% if mark_recommendation == 'synthetic_survey' %}btn-success{% else %}btn-secondary{% endif %}">
                             Use Survey{% if mark_recommendation == 'synthetic_survey' %} (recommended){% endif %}
                         </button>
                     </form>
-                    <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">
+                    <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                         <input type="hidden" name="token" value="{{ token }}">
                         <input type="hidden" name="study_type" value="synthetic_focus_group">
                         <button type="submit" class="btn {% if mark_recommendation == 'synthetic_focus_group' %}btn-success{% else %}btn-secondary{% endif %}">
                             Use Focus Group{% if mark_recommendation == 'synthetic_focus_group' %} (recommended){% endif %}
                         </button>
                     </form>
-                    <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">
+                    <form action="/set-mark-recommendation/{{ configure_study.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                         <input type="hidden" name="token" value="{{ token }}">
                         <input type="hidden" name="study_type" value="synthetic_idi">
                         <button type="submit" class="btn {% if mark_recommendation == 'synthetic_idi' %}btn-success{% else %}btn-secondary{% endif %}">
@@ -1488,7 +1517,7 @@
                 {% endif %}
 
                 <div id="anchor-slot-market_geography">
-                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="market_geography">
+                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="market_geography">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="hidden" name="anchor_key" value="market_geography">
                     <div class="form-group" style="margin-bottom: 6px;">
@@ -1500,7 +1529,7 @@
                 </div>
 
                 <div id="anchor-slot-product_concept">
-                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="product_concept">
+                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="product_concept">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="hidden" name="anchor_key" value="product_concept">
                     <div class="form-group" style="margin-bottom: 6px;">
@@ -1512,7 +1541,7 @@
                 </div>
 
                 <div id="anchor-slot-target_audience">
-                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="target_audience">
+                <form class="anchor-form" action="/save-single-anchor/{{ configure_study.id }}" method="POST" style="margin-bottom: 12px;" data-anchor-key="target_audience">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="hidden" name="anchor_key" value="target_audience">
                     <div class="form-group" style="margin-bottom: 6px;">
@@ -1537,7 +1566,7 @@
             {% set q_count = configure_study.question_count or 8 %}
             {% set r_count = configure_study.respondent_count or 100 %}
 
-            <form action="/save-survey-config/{{ configure_study.id }}" method="POST" style="margin-bottom: 16px;">
+            <form action="/save-survey-config/{{ configure_study.id }}" method="POST" style="margin-bottom: 16px;">{{ csrf_input() }}
                 <input type="hidden" name="token" value="{{ token }}">
                 <div style="display: flex; gap: 16px; margin-bottom: 12px;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
@@ -1757,7 +1786,7 @@
                         </td>
                         <td>
                             {% if configure_study.status == 'draft' and up.status == 'active' %}
-                            <form action="/detach-doc-from-study/{{ up.attachment_id }}" method="POST" style="display: inline;">
+                            <form action="/detach-doc-from-study/{{ up.attachment_id }}" method="POST" style="display: inline;">{{ csrf_input() }}
                                 <input type="hidden" name="token" value="{{ token }}">
                                 <button type="submit" class="btn btn-secondary btn-small" onclick="return confirm('Detach this document from the study? (It stays in your library.)');">Remove</button>
                             </form>
@@ -1776,13 +1805,13 @@
 
             {% if configure_study.status == 'draft' and study_uploads|length < upload_max_files %}
             <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px;">
-                <form action="/upload-study-file/{{ configure_study.id }}" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
+                <form action="/upload-study-file/{{ configure_study.id }}" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="file" name="file" required style="font-size: 13px;">
                     <button type="submit" class="btn btn-primary btn-small">Upload New</button>
                 </form>
                 {% if study_attachable_docs %}
-                <form action="/attach-doc-to-study/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+                <form action="/attach-doc-to-study/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <select name="doc_id" required style="font-size: 13px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px;">
                         <option value="">-- Attach from My Documents --</option>
@@ -1817,7 +1846,7 @@
                     {% set fv = dui_oc_val if fk == 'definition_useful_insight' else (oc_data.get(fk, '') if oc_data else '') %}
                     {% set fv_has = fv and fv|trim|length > 0 %}
                     <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
-                        <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
+                        <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">{{ csrf_input() }}
                             <input type="hidden" name="token" value="{{ token }}">
                             <input type="hidden" name="field_key" value="{{ fk }}">
                             <div class="form-group" style="margin-bottom:4px;">
@@ -1869,7 +1898,7 @@
                         <td>{{ cp.name }}</td>
                         <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ cp.id }}</code></td>
                         <td>
-                            <form class="detach-form" action="/detach-persona/{{ configure_study.id }}" method="POST" style="display:inline;">
+                            <form class="detach-form" action="/detach-persona/{{ configure_study.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                                 <input type="hidden" name="token" value="{{ token }}">
                                 <input type="hidden" name="persona_instance_id" value="{{ cp.id }}">
                                 <button type="submit" class="btn btn-danger btn-small">Remove</button>
@@ -1887,7 +1916,7 @@
 
             <div id="attach-persona-area">
             {% if available_personas %}
-            <form id="attach-form" action="/attach-persona/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+            <form id="attach-form" action="/attach-persona/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">{{ csrf_input() }}
                 <input type="hidden" name="token" value="{{ token }}">
                 <div style="flex: 1;">
                     <label style="font-size: 13px; font-weight: 500; color: #555; display: block; margin-bottom: 4px;">Select persona to attach</label>
@@ -1947,7 +1976,7 @@
                         <td>{{ cp.name }}</td>
                         <td><code style="font-size: 12px; background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">{{ cp.id }}</code></td>
                         <td>
-                            <form class="detach-form" action="/detach-persona/{{ configure_study.id }}" method="POST" style="display:inline;">
+                            <form class="detach-form" action="/detach-persona/{{ configure_study.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                                 <input type="hidden" name="token" value="{{ token }}">
                                 <input type="hidden" name="persona_instance_id" value="{{ cp.id }}">
                                 <button type="submit" class="btn btn-danger btn-small">Remove</button>
@@ -1965,7 +1994,7 @@
 
             <div id="attach-persona-area">
             {% if available_personas %}
-            <form id="attach-form" action="/attach-persona/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+            <form id="attach-form" action="/attach-persona/{{ configure_study.id }}" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">{{ csrf_input() }}
                 <input type="hidden" name="token" value="{{ token }}">
                 <div style="flex: 1;">
                     <label style="font-size: 13px; font-weight: 500; color: #555; display: block; margin-bottom: 4px;">Select persona to attach</label>
@@ -2003,7 +2032,7 @@
                     {% set fv = dui_oc_val if fk == 'definition_useful_insight' else (oc_data.get(fk, '') if oc_data else '') %}
                     {% set fv_has = fv and fv|trim|length > 0 %}
                     <div id="oc-slot-{{ fk }}" style="margin-bottom: 12px;">
-                        <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">
+                        <form class="oc-field-form" action="/save-optional-context-field/{{ configure_study.id }}" method="POST">{{ csrf_input() }}
                             <input type="hidden" name="token" value="{{ token }}">
                             <input type="hidden" name="field_key" value="{{ fk }}">
                             <div class="form-group" style="margin-bottom:4px;">
@@ -3145,7 +3174,7 @@
                                     types.forEach(function(t) {
                                         var cls = (t.key === rec.type) ? 'btn btn-success' : 'btn btn-secondary';
                                         var suffix = (t.key === rec.type) ? ' (recommended)' : '';
-                                        btnsHtml += '<form action="/set-mark-recommendation/' + rec.study_id + '" method="POST" style="display:inline;">'
+                                        btnsHtml += '<form action="/set-mark-recommendation/' + rec.study_id + '" method="POST" style="display:inline;">{{ csrf_input() }}'
                                             + '<input type="hidden" name="token" value="' + escHtml(token) + '">'
                                             + '<input type="hidden" name="study_type" value="' + t.key + '">'
                                             + '<button type="submit" class="' + cls + '">' + escHtml(t.label + suffix) + '</button>'
@@ -3285,7 +3314,7 @@
                             tr.setAttribute('data-persona-id', data.persona_id);
                             tr.innerHTML = '<td>' + escHtml(data.persona_name || data.persona_id) + '</td>'
                                 + '<td><code style="font-size:12px;background:#f0f0f0;padding:2px 6px;border-radius:3px;">' + escHtml(data.persona_id) + '</code></td>'
-                                + '<td><form class="detach-form" action="/detach-persona/' + studyId + '" method="POST" style="display:inline;">'
+                                + '<td><form class="detach-form" action="/detach-persona/' + studyId + '" method="POST" style="display:inline;">{{ csrf_input() }}'
                                 + '<input type="hidden" name="token" value="' + escHtml(token) + '">'
                                 + '<input type="hidden" name="persona_instance_id" value="' + escHtml(data.persona_id) + '">'
                                 + '<button type="submit" class="btn btn-danger btn-small">Remove</button></form>'
@@ -3339,7 +3368,7 @@
                                 sel.appendChild(opt);
                             } else if (attachArea) {
                                 var name = row ? row.querySelector('td').textContent : pid;
-                                attachArea.innerHTML = '<form id="attach-form" action="/attach-persona/' + studyId + '" method="POST" style="display:flex;gap:8px;align-items:flex-end;">'
+                                attachArea.innerHTML = '<form id="attach-form" action="/attach-persona/' + studyId + '" method="POST" style="display:flex;gap:8px;align-items:flex-end;">{{ csrf_input() }}'
                                     + '<input type="hidden" name="token" value="' + escHtml(token) + '">'
                                     + '<div style="flex:1;">'
                                     + '<label style="font-size:13px;font-weight:500;color:#555;display:block;margin-bottom:4px;">Select persona to attach</label>'
@@ -3802,7 +3831,7 @@
             <p style="font-size: 13px; color: #999; margin-bottom: 20px;">
                 Surveys do not use inspectable personas. Configure respondent/question counts, fill in the survey brief, and enter your questions.
             </p>
-            <form action="/create-study" method="POST">
+            <form action="/create-study" method="POST">{{ csrf_input() }}
                 <input type="hidden" name="token" value="{{ token }}">
                 <input type="hidden" name="title" value="{{ request.args.get('nr_title', '') }}">
                 <input type="hidden" name="study_type" value="synthetic_survey">
@@ -3910,7 +3939,7 @@
                 Focus Group uses 4–6 personas. Lisa will create personas automatically, or you can attach existing personas for reuse.
                 {% endif %}
             </p>
-            <form action="/create-study" method="POST">
+            <form action="/create-study" method="POST">{{ csrf_input() }}
                 <input type="hidden" name="token" value="{{ token }}">
                 <input type="hidden" name="title" value="{{ request.args.get('nr_title', '') }}">
                 <input type="hidden" name="study_type" value="{{ new_research_type }}">
@@ -3992,7 +4021,7 @@
 
             <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin-bottom:20px;">
                 <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 10px;">Compose Message</h3>
-                <form action="/send-message" method="POST" id="dm-compose-form">
+                <form action="/send-message" method="POST" id="dm-compose-form">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <div style="margin-bottom:8px;">
                         <label style="font-size:12px;color:#555;font-weight:600;">To:</label>
@@ -4209,7 +4238,7 @@
                         <td style="font-size:12px;color:#777;white-space:nowrap;">{{ p.created_at[:10] if p.created_at else '—' }}</td>
                         <td style="white-space:nowrap;">
                             <button type="button" class="btn btn-primary btn-small persona-view-btn" data-pid="{{ p.persona_instance_id }}">View</button>
-                            <form action="/delete-persona/{{ p.persona_instance_id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this persona?');">
+                            <form action="/delete-persona/{{ p.persona_instance_id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this persona?');">{{ csrf_input() }}
                                 <input type="hidden" name="token" value="{{ token }}">
                                 <button type="submit" class="btn btn-danger btn-small">Delete</button>
                             </form>
@@ -4428,7 +4457,7 @@
                             + '<td style="font-size:12px;color:#555;">' + (escHtml(p.target_audience) || '—') + '</td>'
                             + '<td style="font-size:12px;color:#777;white-space:nowrap;">' + escHtml(createdShort) + '</td>'
                             + '<td style="white-space:nowrap;"><button type="button" class="btn btn-primary btn-small persona-view-btn" data-pid="' + escHtml(p.persona_instance_id) + '">View</button>'
-                            + ' <form action="/delete-persona/' + encodeURIComponent(p.persona_instance_id) + '" method="POST" style="display:inline;" onsubmit="return confirm(\'Delete this persona?\');">'
+                            + ' <form action="/delete-persona/' + encodeURIComponent(p.persona_instance_id) + '" method="POST" style="display:inline;" onsubmit="return confirm(\'Delete this persona?\');">{{ csrf_input() }}'
                             + '<input type="hidden" name="token" value="' + escHtml(_pToken) + '">'
                             + '<button type="submit" class="btn btn-danger btn-small">Delete</button></form>'
                             + '</td></tr>';
@@ -4541,7 +4570,7 @@
                     <a href="/?token={{ token }}{% if docs_sort %}&docs_sort={{ docs_sort }}&docs_dir={{ docs_dir }}{% endif %}" class="btn btn-secondary btn-small" style="height: 34px; line-height: 20px;">Clear</a>
                     {% endif %}
                 </form>
-                <form action="/upload-user-doc" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
+                <form action="/upload-user-doc" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="file" name="file" required style="font-size: 13px;">
                     <button type="submit" class="btn btn-success btn-small" style="height: 34px;">Upload</button>
@@ -4583,7 +4612,7 @@
                         </td>
                         <td style="white-space:nowrap;">
                             {% if doc.status == 'active' %}
-                            <form action="/delete-user-doc/{{ doc.id }}" method="POST" style="display: inline;">
+                            <form action="/delete-user-doc/{{ doc.id }}" method="POST" style="display: inline;">{{ csrf_input() }}
                                 <input type="hidden" name="token" value="{{ token }}">
                                 <button type="submit" class="btn btn-danger btn-small" onclick="return confirm('Deleting removes this document from future use. Past studies may still reference it for audit. Continue?');">Delete</button>
                             </form>
@@ -4769,7 +4798,7 @@
                 </div>
                 <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin-bottom:20px;">
                     <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 10px;">Send Message to User</h3>
-                    <form action="/send-message" method="POST" id="admin-compose-form">
+                    <form action="/send-message" method="POST" id="admin-compose-form">{{ csrf_input() }}
                         <input type="hidden" name="token" value="{{ token }}">
                         <div style="margin-bottom:8px;">
                             <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">To (select user):</label>
@@ -4874,14 +4903,14 @@
                             <td>{{ u.created_at }}</td>
                             <td>
                                 {% if u.state == 'pending' %}
-                                <form action="/admin/approve/{{ u.id }}" method="POST" style="display:inline;">
+                                <form action="/admin/approve/{{ u.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-success btn-small">Approve</button>
                                 </form>
                                 {% else %}
                                 <span style="font-size:12px;color:#888;">Awaiting email verification</span>
                                 {% endif %}
-                                <form action="/admin/delete-user/{{ u.id }}" method="POST" style="display:inline; margin-left: 4px;" onsubmit="return confirm('Permanently delete {{ u.email }}? This cannot be undone.');">
+                                <form action="/admin/delete-user/{{ u.id }}" method="POST" style="display:inline; margin-left: 4px;" onsubmit="return confirm('Permanently delete {{ u.email }}? This cannot be undone.');">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-small" style="background:#c0392b;color:#fff;">Delete</button>
                                 </form>
@@ -4924,19 +4953,19 @@
                             <td>{{ u.created_at }}</td>
                             <td>
                                 {% if u.state == 'pending' %}
-                                <form action="/admin/approve/{{ u.id }}" method="POST" style="display:inline;">
+                                <form action="/admin/approve/{{ u.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-success btn-small">Approve</button>
                                 </form>
                                 {% endif %}
                                 {% if u.state not in ('disabled', 'unverified') %}
-                                <form action="/admin/disable/{{ u.id }}" method="POST" style="display:inline;">
+                                <form action="/admin/disable/{{ u.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-danger btn-small">Disable</button>
                                 </form>
                                 {% endif %}
                                 {% if u.state in ('pending', 'unverified') %}
-                                <form action="/admin/delete-user/{{ u.id }}" method="POST" style="display:inline; margin-left: 2px;" onsubmit="return confirm('Permanently delete {{ u.email }}? This cannot be undone.');">
+                                <form action="/admin/delete-user/{{ u.id }}" method="POST" style="display:inline; margin-left: 2px;" onsubmit="return confirm('Permanently delete {{ u.email }}? This cannot be undone.');">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-small" style="background:#c0392b;color:#fff;">Delete</button>
                                 </form>
@@ -4958,7 +4987,7 @@
                 <span class="admin-acc-arrow" id="acc-quotas-body-arrow">&#9654;</span>
             </div>
             <div class="admin-acc-body" id="acc-quotas-body">
-                <form action="/admin/update-quota" method="POST" style="margin-bottom:18px;">
+                <form action="/admin/update-quota" method="POST" style="margin-bottom:18px;">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;">
                         <div>
@@ -5017,13 +5046,13 @@
                                 <span class="badge badge-{{ 'active' if src.status == 'active' else 'disabled' }}">{{ src.status }}</span>
                             </td>
                             <td>
-                                <form action="/admin/toggle-source/{{ src.id }}" method="POST" style="display:inline;">
+                                <form action="/admin/toggle-source/{{ src.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-primary btn-small">
                                         {{ 'Disable' if src.status == 'active' else 'Enable' }}
                                     </button>
                                 </form>
-                                <form action="/admin/delete-source/{{ src.id }}" method="POST" style="display:inline;">
+                                <form action="/admin/delete-source/{{ src.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-danger btn-small">Delete</button>
                                 </form>
@@ -5036,7 +5065,7 @@
                 <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No web sources configured.</p>
                 {% endif %}
                 <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add New Source</h3>
-                <form action="/admin/add-source" method="POST">
+                <form action="/admin/add-source" method="POST">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
                         <div>
@@ -5097,13 +5126,13 @@
                                 <span class="badge badge-{{ 'active' if au.status == 'active' else 'disabled' }}">{{ au.status }}</span>
                             </td>
                             <td>
-                                <form action="/admin/toggle-upload/{{ au.id }}" method="POST" style="display: inline;">
+                                <form action="/admin/toggle-upload/{{ au.id }}" method="POST" style="display: inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-primary btn-small">
                                         {{ 'Disable' if au.status == 'active' else 'Enable' }}
                                     </button>
                                 </form>
-                                <form action="/admin/delete-upload/{{ au.id }}" method="POST" style="display: inline;">
+                                <form action="/admin/delete-upload/{{ au.id }}" method="POST" style="display: inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-danger btn-small" data-confirm="Delete this upload?">Delete</button>
                                 </form>
@@ -5116,7 +5145,7 @@
                 <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No global documents uploaded yet.</p>
                 {% endif %}
                 <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Upload New Document</h3>
-                <form action="/admin/upload-document" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">
+                <form action="/admin/upload-document" method="POST" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: flex-end;">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <input type="file" name="file" required style="font-size: 13px;">
                     <button type="submit" class="btn btn-success">Upload</button>
@@ -5133,7 +5162,7 @@
                 <p style="font-size: 13px; color: #777; margin-bottom: 16px;">
                     Set which model each agent uses. Only active models from the Allowed Models list can be selected.
                 </p>
-                <form action="/admin/set-model-config" method="POST">
+                <form action="/admin/set-model-config" method="POST">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
                         <div>
@@ -5221,11 +5250,11 @@
                             <td><span class="badge badge-{{ 'active' if pm.status == 'active' else 'disabled' }}">{{ pm.status }}</span></td>
                             <td style="font-size: 12px;">{{ pm.added_at }}</td>
                             <td>
-                                <form action="/admin/toggle-pool-model/{{ pm.id }}" method="POST" style="display: inline;">
+                                <form action="/admin/toggle-pool-model/{{ pm.id }}" method="POST" style="display: inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-primary btn-small">{{ 'Disable' if pm.status == 'active' else 'Enable' }}</button>
                                 </form>
-                                <form action="/admin/remove-pool-model/{{ pm.id }}" method="POST" style="display: inline;">
+                                <form action="/admin/remove-pool-model/{{ pm.id }}" method="POST" style="display: inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-danger btn-small">Remove</button>
                                 </form>
@@ -5238,7 +5267,7 @@
                 <p style="color: #f59e0b; font-size: 13px; margin-bottom: 16px;">&#9888; No models in persona pool. Users cannot create personas until at least one active model is added.</p>
                 {% endif %}
                 <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add Model to Pool</h3>
-                <form action="/admin/add-pool-model" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">
+                <form action="/admin/add-pool-model" method="POST" style="display: flex; gap: 8px; align-items: flex-end;">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <div style="flex: 1;">
                         <label class="form-label">Select Active Model</label>
@@ -5361,7 +5390,7 @@
                 </table>
                 {% endif %}
                 <div style="display: flex; gap: 12px; align-items: center;">
-                    <form action="/admin/model-health/run" method="POST" style="display: inline;">
+                    <form action="/admin/model-health/run" method="POST" style="display: inline;">{{ csrf_input() }}
                         <input type="hidden" name="token" value="{{ token }}">
                         <button type="submit" class="btn btn-primary">Run Health Check Now</button>
                     </form>
@@ -5410,11 +5439,11 @@
                             <td><span class="badge badge-{{ 'active' if am.status == 'active' else 'disabled' }}">{{ am.status }}</span></td>
                             <td style="font-size: 12px;">{{ am.added_at }}</td>
                             <td>
-                                <form action="/admin/toggle-allowed-model/{{ am.id }}" method="POST" style="display: inline;">
+                                <form action="/admin/toggle-allowed-model/{{ am.id }}" method="POST" style="display: inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-primary btn-small">{{ 'Disable' if am.status == 'active' else 'Enable' }}</button>
                                 </form>
-                                <form action="/admin/delete-allowed-model/{{ am.id }}" method="POST" style="display: inline;">
+                                <form action="/admin/delete-allowed-model/{{ am.id }}" method="POST" style="display: inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn btn-danger btn-small" data-confirm="Remove this model?">Remove</button>
                                 </form>
@@ -5427,7 +5456,7 @@
                 <p style="color: #999; font-size: 13px; margin-bottom: 16px;">No allowed models configured.</p>
                 {% endif %}
                 <h3 style="font-size: 15px; color: #1a1a2e; margin-bottom: 12px;">Add New Model</h3>
-                <form action="/admin/add-allowed-model" method="POST" style="display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px;">
+                <form action="/admin/add-allowed-model" method="POST" style="display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px;">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <div style="flex: 1;">
                         <label class="form-label">Model ID</label>
@@ -5439,7 +5468,7 @@
                     </div>
                     <button type="submit" class="btn btn-success">Add Model</button>
                 </form>
-                <form action="/admin/import-openrouter-models" method="POST" style="display: inline;">
+                <form action="/admin/import-openrouter-models" method="POST" style="display: inline;">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <button type="submit" class="btn btn-primary btn-small">Import from OpenRouter API</button>
                 </form>
@@ -5575,7 +5604,7 @@
                     Editing post #<span id="blog-edit-id"></span>: <strong id="blog-edit-title-label"></strong>
                     <button type="button" onclick="blogCancelEdit()" style="margin-left:12px;padding:3px 10px;font-size:12px;border:1px solid #0369a1;border-radius:4px;background:#fff;color:#0369a1;cursor:pointer;">Cancel Edit</button>
                 </div>
-                <form id="blog-form" action="/admin/create-blog-post" method="POST" enctype="multipart/form-data" onsubmit="var e=document.getElementById('blog-editor'),h=document.getElementById('blog-body');if(e&&h){h.value=e.innerHTML;}">
+                <form id="blog-form" action="/admin/create-blog-post" method="POST" enctype="multipart/form-data" onsubmit="var e=document.getElementById('blog-editor'),h=document.getElementById('blog-body');if(e&&h){h.value=e.innerHTML;}">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
                     <div class="form-group">
                         <label for="blog-title">Post Title</label>
@@ -5663,7 +5692,7 @@
                             <td>{% if bp.is_pinned %}&#128204; #{{ bp.pinned_rank }}{% else %}—{% endif %}</td>
                             <td>{{ bp.created_at[:16] }}</td>
                             <td>
-                                <form action="/admin/toggle-pin/{{ bp.id }}" method="POST" style="display:inline;">
+                                <form action="/admin/toggle-pin/{{ bp.id }}" method="POST" style="display:inline;">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     {% if bp.is_pinned %}
                                     <input type="hidden" name="pin_action" value="unpin">
@@ -5682,7 +5711,7 @@
                                     {% endif %}
                                 </form>
                                 <button type="button" class="btn" style="padding: 4px 10px; font-size: 12px; background: #2563eb; color: #fff; margin-right: 6px;" onclick="blogStartEdit({{ bp.id }})">Edit</button>
-                                <form action="/admin/delete-blog-post/{{ bp.id }}" method="POST" style="display:inline; margin-left: 6px;" data-confirm="Are you sure? This will permanently delete the post.">
+                                <form action="/admin/delete-blog-post/{{ bp.id }}" method="POST" style="display:inline; margin-left: 6px;" data-confirm="Are you sure? This will permanently delete the post.">{{ csrf_input() }}
                                     <input type="hidden" name="token" value="{{ token }}">
                                     <button type="submit" class="btn" style="padding: 4px 10px; font-size: 12px; background: #c0392b; color: #fff;">Delete</button>
                                 </form>
@@ -5704,7 +5733,7 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
                     <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
                         <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Change Admin Password</h3>
-                        <form action="/admin/change-password" method="POST">
+                        <form action="/admin/change-password" method="POST">{{ csrf_input() }}
                             <input type="hidden" name="token" value="{{ token }}">
                             <div style="margin-bottom:8px;">
                                 <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Current Password</label>
@@ -5724,7 +5753,7 @@
                     <div style="background:#f8f9fa;border-radius:8px;padding:16px;">
                         <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 12px;">Admin Email</h3>
                         <p style="font-size:12px;color:#777;margin-bottom:10px;">Set an email address for system messages and authentication.</p>
-                        <form action="/admin/set-email" method="POST">
+                        <form action="/admin/set-email" method="POST">{{ csrf_input() }}
                             <input type="hidden" name="token" value="{{ token }}">
                             <div style="margin-bottom:10px;">
                                 <label style="font-size:12px;color:#555;display:block;margin-bottom:2px;">Email Address</label>

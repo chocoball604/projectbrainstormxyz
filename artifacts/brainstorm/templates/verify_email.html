@@ -148,7 +148,7 @@
         <div class="error-msg">{{ error }}</div>
         {% endif %}
 
-        <form action="/verify-email?token={{ token }}" method="POST">
+        <form action="/verify-email?token={{ token }}" method="POST">{{ csrf_input() }}
             <input type="hidden" name="token" value="{{ token }}">
             <div class="form-group">
                 <label for="code">Enter the 6-digit code</label>

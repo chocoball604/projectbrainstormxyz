@@ -163,7 +163,7 @@
 
     <div class="card">
         <h2>Profile Information</h2>
-        <form action="/account?token={{ token }}" method="POST">
+        <form action="/account?token={{ token }}" method="POST">{{ csrf_input() }}
             <input type="hidden" name="token" value="{{ token }}">
             <div class="form-group">
                 <label>Email</label>
@@ -203,7 +203,7 @@
 
     <div class="card">
         <h2>Change Password</h2>
-        <form action="/change-password?token={{ token }}" method="POST">
+        <form action="/change-password?token={{ token }}" method="POST">{{ csrf_input() }}
             <input type="hidden" name="token" value="{{ token }}">
             <div class="form-group">
                 <label for="current_password">Current Password</label>

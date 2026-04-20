@@ -45,6 +45,7 @@ from step1_telemetry import (
 
 from flask import (
     Flask,
+    g,
     jsonify,
     make_response,
     redirect,
@@ -55,6 +56,7 @@ from flask import (
     url_for,
 )
 from fpdf import FPDF
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 FLASK_ENV = os.environ.get("FLASK_ENV", "production").strip().lower()
@@ -84,6 +86,206 @@ if IS_PRODUCTION:
 
 app = Flask(__name__)
 app.secret_key = _FLASK_SECRET_RAW or "dev-fallback-key"
+
+# P1 security hardening (Task #56):
+#  - ProxyFix so X-Forwarded-Proto/For from Replit's proxy are honored.
+#  - Secure session cookie flags (Secure in prod, HttpOnly, SameSite=Lax).
+#  - Request body cap (16 MB) in case a handler forgets its own limit.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.config["SESSION_COOKIE_SECURE"] = IS_PRODUCTION
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config.setdefault("MAX_CONTENT_LENGTH", 16 * 1024 * 1024)
+
+# Cookie names for P1 hardening.
+SESSION_COOKIE_NAME = "pb_session"
+CSRF_COOKIE_NAME = "pb_csrf"
+# Cookies live as long as a typical beta working session.
+_SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+_CSRF_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+
+
+def _cookie_is_secure():
+    # Respect ProxyFix-populated scheme; fall back to config flag.
+    try:
+        if (request.scheme or "").lower() == "https":
+            return True
+    except Exception:
+        pass
+    return bool(app.config.get("SESSION_COOKIE_SECURE"))
+
+
+def set_session_cookie(response, token):
+    """Mirror the session token (already stored in the `sessions` table) into
+    a Secure/HttpOnly/SameSite=Lax cookie. URL-token continues to work as a
+    fallback for one release so existing sessions do not break."""
+    if not response or not token:
+        return response
+    try:
+        response.set_cookie(
+            SESSION_COOKIE_NAME,
+            token,
+            max_age=_SESSION_COOKIE_MAX_AGE,
+            secure=_cookie_is_secure(),
+            httponly=True,
+            samesite="Lax",
+            path="/",
+        )
+    except Exception:
+        pass
+    return response
+
+
+def clear_session_cookie(response):
+    if not response:
+        return response
+    try:
+        response.set_cookie(
+            SESSION_COOKIE_NAME,
+            "",
+            max_age=0,
+            expires=0,
+            secure=_cookie_is_secure(),
+            httponly=True,
+            samesite="Lax",
+            path="/",
+        )
+    except Exception:
+        pass
+    return response
+
+
+def _new_csrf_token():
+    return secrets.token_urlsafe(32)
+
+
+# Routes allowlisted from CSRF. Every state-changing POST form in the
+# app renders via a GET first, which sets the `pb_csrf` cookie, so the
+# login/signup/admin-login forms do get a token — we enforce CSRF there
+# too. The only exemption is the internal health check.
+CSRF_EXEMPT_ENDPOINTS = {
+    "__health",
+}
+
+
+@app.before_request
+def _p1_security_before_request():
+    # Per-request CSP nonce (kept for future tightening; safe to include
+    # in `nonce-...` directive even while `'unsafe-inline'` is also present).
+    g.csp_nonce = secrets.token_urlsafe(16)
+
+    # Maintain a per-browser CSRF token in `pb_csrf` cookie. We flag new
+    # tokens here and let the after_request hook actually write the cookie.
+    existing = request.cookies.get(CSRF_COOKIE_NAME, "")
+    if existing and len(existing) >= 16:
+        g.csrf_token = existing
+        g._csrf_new = False
+    else:
+        g.csrf_token = _new_csrf_token()
+        g._csrf_new = True
+
+    method = (request.method or "GET").upper()
+    if method in ("POST", "PUT", "PATCH", "DELETE"):
+        endpoint = request.endpoint or ""
+        if endpoint in CSRF_EXEMPT_ENDPOINTS:
+            return None
+        if request.path.startswith("/static/"):
+            return None
+        # Brand-new browsers do not yet have a CSRF cookie on first POST —
+        # this only matters for CSRF-exempt bootstrap routes above; every
+        # other state-changing POST is rendered from a template that
+        # received the token on its GET.
+        if not existing:
+            return _csrf_reject("missing_csrf_cookie")
+        submitted = (
+            request.headers.get("X-CSRF-Token")
+            or (request.form.get("csrf_token") if request.form else None)
+            or ""
+        )
+        if not submitted or not secrets.compare_digest(submitted, existing):
+            return _csrf_reject("csrf_token_mismatch")
+    return None
+
+
+def _csrf_reject(reason):
+    try:
+        print(
+            f"CSRF_REJECT reason={reason} path={request.path} method={request.method} "
+            f"ip={request.remote_addr} endpoint={request.endpoint}",
+            flush=True,
+        )
+    except Exception:
+        pass
+    if request.path.startswith("/api/") or "application/json" in (request.headers.get("Accept") or ""):
+        return jsonify({"ok": False, "error": "CSRF token missing or invalid."}), 403
+    return ("CSRF token missing or invalid. Please reload the page and try again.", 403)
+
+
+@app.context_processor
+def _p1_inject_csrf():
+    def csrf_input():
+        tok = getattr(g, "csrf_token", "") or ""
+        return Markup(f'<input type="hidden" name="csrf_token" value="{tok}">')
+
+    return {
+        "csrf_input": csrf_input,
+        "csrf_token": getattr(g, "csrf_token", "") or "",
+        "csp_nonce": getattr(g, "csp_nonce", "") or "",
+    }
+
+
+@app.after_request
+def _p1_security_after_request(response):
+    # Refresh/set the CSRF cookie if we just minted a new one, or if the
+    # existing one is close to its normal lifetime (we always extend).
+    try:
+        tok = getattr(g, "csrf_token", "") or ""
+        if tok:
+            response.set_cookie(
+                CSRF_COOKIE_NAME,
+                tok,
+                max_age=_CSRF_COOKIE_MAX_AGE,
+                secure=_cookie_is_secure(),
+                httponly=False,  # JS needs to read for X-CSRF-Token header
+                samesite="Lax",
+                path="/",
+            )
+    except Exception:
+        pass
+
+    nonce = getattr(g, "csp_nonce", "") or ""
+    # Keep CSP pragmatic: the templates have ~60 inline event handlers and
+    # many inline <script> blocks. We set a nonce-aware policy for future
+    # tightening but keep 'unsafe-inline' for backwards compatibility so
+    # the app doesn't break. `object-src`, `base-uri`, `frame-ancestors`,
+    # and `form-action` still provide real defense-in-depth.
+    csp = (
+        "default-src 'self'; "
+        f"script-src 'self' 'nonce-{nonce}' 'unsafe-inline' 'unsafe-eval'; "
+        "script-src-attr 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+    response.headers.setdefault("Content-Security-Policy", csp)
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    )
+    if IS_PRODUCTION:
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
+    return response
 
 import re as _re_mod
 from markupsafe import Markup
@@ -230,13 +432,10 @@ AUTH_RATE_LIMITS = {
 
 
 def _client_ip():
-    # SECURITY: do NOT trust X-Forwarded-For until ProxyFix is wired
-    # (Task #55 follow-up batch). Until then, key the limiter on the
-    # direct peer address so attackers can't spoof headers to escape
-    # their own lockouts. This makes lockouts effectively per-instance
-    # behind the proxy, which is acceptable for the V1A beta (single
-    # low-traffic instance); ProxyFix + trusted-proxy config will
-    # restore per-client granularity in the next batch.
+    # ProxyFix(x_for=1, x_proto=1, x_host=1) is wired on `app.wsgi_app`,
+    # so `request.remote_addr` now reflects the real client IP (the last
+    # hop in X-Forwarded-For), not the Replit proxy's address. That means
+    # rate-limiter lockouts apply per-client again instead of per-instance.
     return request.remote_addr or "unknown"
 
 
@@ -2687,6 +2886,12 @@ def delete_session(token):
 
 
 def get_token():
+    # Prefer the Secure/HttpOnly session cookie set at login/signup. Fall
+    # back to the URL/form `token` parameter so sessions created before
+    # the P1 cookie rollout continue to work for one release.
+    cookie_tok = request.cookies.get(SESSION_COOKIE_NAME, "") if request else ""
+    if cookie_tok:
+        return cookie_tok
     return request.args.get("token") or request.form.get("token") or ""
 
 
@@ -3757,7 +3962,10 @@ def signup():
 
     clear_auth_failures("signup", identity_key=email)
     token = create_session(user_id=user_row["id"])
-    return redirect(url_for("index", token=token))
+    # Session travels in the Secure/HttpOnly pb_session cookie; we no
+    # longer expose it in the URL on fresh logins (see Task #56).
+    resp = redirect(url_for("index"))
+    return set_session_cookie(resp, token)
 
 
 @app.route("/verify-signup", methods=["GET"])
@@ -3787,7 +3995,8 @@ def verify_signup():
     conn.commit()
     token = create_session(user_id=user_row["id"])
     conn.close()
-    return redirect(url_for("index", token=token, _verified="1"))
+    resp = redirect(url_for("index", _verified="1"))
+    return set_session_cookie(resp, token)
 
 
 @app.route("/resend-verification", methods=["POST"])
@@ -3862,7 +4071,8 @@ def login():
 
     clear_auth_failures("login", identity_key=email)
     token = create_session(user_id=user["id"])
-    return redirect(url_for("index", token=token))
+    resp = redirect(url_for("index"))
+    return set_session_cookie(resp, token)
 
 
 @app.route("/portal")
@@ -3895,13 +4105,15 @@ def admin_login():
 
     clear_auth_failures("admin_login", identity_key="admin")
     token = create_session(is_admin=True)
-    return redirect(url_for("index", token=token))
+    resp = redirect(url_for("index"))
+    return set_session_cookie(resp, token)
 
 
 @app.route("/logout", methods=["POST"])
 def logout():
     delete_session(get_token())
-    return redirect(url_for("index"))
+    resp = redirect(url_for("index"))
+    return clear_session_cookie(resp)
 
 
 @app.route("/landing")
