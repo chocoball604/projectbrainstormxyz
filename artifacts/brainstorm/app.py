@@ -5089,6 +5089,9 @@ def send_message():
     msgs = _load_dm_messages()
 
     # Reply with empty category inherits from parent thread (Task #59 bug 1).
+    # New (non-reply) messages still require a category server-side, even if
+    # the client form omits the `required` attribute.
+    parent_found = False
     if not category:
         norm = _normalize_subject(subject).lower()
         if norm:
@@ -5098,6 +5101,7 @@ def send_message():
                     continue
                 if is_admin:
                     if prev.get("recipient_type") == "admin" or prev.get("sender_type") == "admin":
+                        parent_found = True
                         if prev.get("category"):
                             category = prev["category"]
                             break
@@ -5106,9 +5110,16 @@ def send_message():
                         (prev.get("recipient_user_id") == user["id"] and prev.get("recipient_type") == "user")
                         or (prev.get("sender_type") == "user" and prev.get("sender_id") == user["id"])
                     )
-                    if same_user and prev.get("category"):
-                        category = prev["category"]
-                        break
+                    if same_user:
+                        parent_found = True
+                        if prev.get("category"):
+                            category = prev["category"]
+                            break
+        if not category and not parent_found:
+            err = "Category is required for new messages."
+            if ajax:
+                return jsonify({"ok": False, "error": err}), 400
+            return render_error(err)
 
     new_msg = {
         "id": secrets.token_hex(8),

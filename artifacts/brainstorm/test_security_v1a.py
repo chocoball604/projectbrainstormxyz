@@ -1017,6 +1017,39 @@ class Task59MiscBugsTests(unittest.TestCase):
         finally:
             self._restore_messages(path, snap)
 
+    def test_send_new_message_without_category_is_rejected(self):
+        # New (non-reply) messages must require a category. Server-side
+        # guard: even if the client form omits `required`, /send-message
+        # returns 400 when no parent thread exists for the subject.
+        import json
+        path, snap = self._seed_messages([])
+        try:
+            s, csrf = self._login_test_user()
+            r = s.post(
+                f"{self.base}/send-message",
+                data={
+                    "subject": f"task59-newmsg-{uuid.uuid4().hex[:6]}",
+                    "body": "first message in a brand-new thread",
+                    "category": "",
+                    "csrf_token": csrf,
+                },
+                headers={
+                    "X-CSRF-Token": csrf,
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                allow_redirects=False,
+                timeout=15,
+            )
+            self.assertEqual(r.status_code, 400,
+                             f"new message w/o category must 400, got {r.status_code}")
+            self.assertIn("category", r.text.lower())
+            with open(path, "r") as f:
+                msgs = json.load(f)
+            self.assertEqual(msgs, [],
+                             "rejected message must NOT be persisted")
+        finally:
+            self._restore_messages(path, snap)
+
     # ---- Task #57 P2 e2e regressions ------------------------------------
 
     def test_upload_user_doc_rejects_magic_mismatch(self):
