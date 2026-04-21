@@ -3961,6 +3961,7 @@
                 <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 10px;">Compose Message</h3>
                 <form action="/send-message" method="POST" id="dm-compose-form">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
+                    <div id="dm-compose-error" style="display:none;background:#f8d7da;border:1px solid #f5c6cb;border-radius:6px;padding:8px 12px;margin-bottom:10px;color:#721c24;font-size:13px;"></div>
                     <div style="margin-bottom:8px;">
                         <label style="font-size:12px;color:#555;font-weight:600;">To:</label>
                         <span style="font-size:13px;color:#1a1a2e;font-weight:600;margin-left:4px;">Admin</span>
@@ -5974,16 +5975,64 @@
             composeForm.addEventListener('submit', function(e) {
                 var subj = composeForm.querySelector('[name="subject"]');
                 var body = composeForm.querySelector('[name="body"]');
+                var errBox = document.getElementById('dm-compose-error');
+                function showErr(msg) {
+                    if (errBox) {
+                        errBox.textContent = msg;
+                        errBox.style.display = 'block';
+                    } else {
+                        alert(msg);
+                    }
+                }
+                function clearErr() {
+                    if (errBox) { errBox.textContent = ''; errBox.style.display = 'none'; }
+                }
                 if (subj && subj.value.length > 30) {
                     e.preventDefault();
-                    alert('Subject must be 30 characters or less.');
+                    showErr('Subject must be 30 characters or less.');
                     return;
                 }
                 if (body && body.value.length > 300) {
                     e.preventDefault();
-                    alert('Message must be 300 characters or less.');
+                    showErr('Message must be 300 characters or less.');
                     return;
                 }
+                e.preventDefault();
+                clearErr();
+                var btn = composeForm.querySelector('button[type="submit"]');
+                var origHTML = btn ? btn.innerHTML : '';
+                if (btn) { btn.disabled = true; btn.innerHTML = '&#8987; Sending...'; }
+                var fd = new FormData(composeForm);
+                var csrf = (composeForm.querySelector('[name="csrf_token"]') || {}).value || '';
+                fetch(composeForm.action, {
+                    method: 'POST',
+                    body: fd,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-Token': csrf
+                    },
+                    redirect: 'follow'
+                })
+                .then(function(resp) {
+                    return resp.json().then(function(data) { return { ok: resp.ok, data: data }; })
+                        .catch(function() { return { ok: resp.ok, data: { ok: resp.ok } }; });
+                })
+                .then(function(r) {
+                    if (r.ok && r.data && r.data.ok) {
+                        var url = new URL(window.location.href);
+                        url.searchParams.set('view', 'messages');
+                        url.searchParams.set('msg_sent', '1');
+                        window.location.href = url.toString();
+                        return;
+                    }
+                    if (btn) { btn.disabled = false; btn.innerHTML = origHTML; }
+                    var msg = (r.data && r.data.error) || 'Could not send message. Please try again.';
+                    showErr(msg);
+                })
+                .catch(function() {
+                    if (btn) { btn.disabled = false; btn.innerHTML = origHTML; }
+                    showErr('Network error. Please try again.');
+                });
             });
         }
     })();
