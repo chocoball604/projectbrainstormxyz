@@ -868,15 +868,18 @@ class Task59MiscBugsTests(unittest.TestCase):
             self.skipTest("seeded test user is missing")
         return int(row[0])
 
-    def test_send_message_inherits_parent_category_when_blank(self):
+    def test_user_reply_inherits_parent_category_when_blank(self):
+        # Behavioral regression for Task #59 bug 1 (user→admin reply path):
+        # admin seeded a categorized thread; the user's empty-category reply
+        # must persist with the parent's category, observed via messages.json.
         import json
         uid = self._test_user_id()
-        subject = f"task59-thread-{uuid.uuid4().hex[:6]}"
+        subject = f"task59-uthread-{uuid.uuid4().hex[:6]}"
         seed = [{
             "id": "seed-" + uuid.uuid4().hex[:8],
             "timestamp": "2026-01-01 00:00:00",
             "subject": subject,
-            "body": "seeded by Task59MiscBugsTests",
+            "body": "seeded by Task60 user-reply test",
             "category": "support",
             "read": True,
             "sender_type": "admin",
@@ -884,7 +887,6 @@ class Task59MiscBugsTests(unittest.TestCase):
             "recipient_type": "user",
             "recipient_user_id": uid,
         }]
-        path = os.path.join(HERE, "data", "messages.json")
         path, snap = self._seed_messages(seed)
         try:
             s, csrf = self._login_test_user()
@@ -892,7 +894,7 @@ class Task59MiscBugsTests(unittest.TestCase):
                 f"{self.base}/send-message",
                 data={
                     "subject": "Re: " + subject,
-                    "body": "behavior-test reply",
+                    "body": "behavior-test user reply",
                     "category": "",
                     "csrf_token": csrf,
                 },
@@ -907,9 +909,68 @@ class Task59MiscBugsTests(unittest.TestCase):
             replies = [m for m in msgs
                        if m.get("subject", "").lower() == ("re: " + subject).lower()]
             self.assertEqual(len(replies), 1,
-                             "exactly one reply should have been persisted")
-            self.assertEqual(replies[0].get("category"), "support",
-                             "empty-category reply must inherit parent's category")
+                             "exactly one user→admin reply should have been persisted")
+            reply = replies[0]
+            self.assertEqual(reply.get("sender_type"), "user",
+                             "reply must be from the user")
+            self.assertEqual(reply.get("sender_id"), uid)
+            self.assertEqual(reply.get("recipient_type"), "admin")
+            self.assertEqual(reply.get("category"), "support",
+                             "empty-category user reply must inherit parent's category")
+        finally:
+            self._restore_messages(path, snap)
+
+    def test_admin_reply_inherits_parent_category_when_blank(self):
+        # Behavioral regression for Task #59 bug 1 (admin→user reply path):
+        # the user opened a categorized thread; the admin's empty-category
+        # reply must persist with the parent's category.
+        import json
+        uid = self._test_user_id()
+        subject = f"task59-athread-{uuid.uuid4().hex[:6]}"
+        seed = [{
+            "id": "seed-" + uuid.uuid4().hex[:8],
+            "timestamp": "2026-01-01 00:00:00",
+            "subject": subject,
+            "body": "seeded by Task60 admin-reply test",
+            "category": "billing",
+            "read": True,
+            "sender_type": "user",
+            "sender_id": uid,
+            "sender_name": "test-user",
+            "recipient_type": "admin",
+            "recipient_user_id": None,
+        }]
+        path, snap = self._seed_messages(seed)
+        try:
+            s, csrf = self._login_admin()
+            r = s.post(
+                f"{self.base}/send-message",
+                data={
+                    "subject": "Re: " + subject,
+                    "body": "behavior-test admin reply",
+                    "category": "",
+                    "recipient_user_id": str(uid),
+                    "csrf_token": csrf,
+                },
+                headers={"X-CSRF-Token": csrf},
+                allow_redirects=False,
+                timeout=15,
+            )
+            self.assertIn(r.status_code, (200, 302),
+                          f"/send-message returned {r.status_code}")
+            with open(path, "r") as f:
+                msgs = json.load(f)
+            replies = [m for m in msgs
+                       if m.get("subject", "").lower() == ("re: " + subject).lower()]
+            self.assertEqual(len(replies), 1,
+                             "exactly one admin→user reply should have been persisted")
+            reply = replies[0]
+            self.assertEqual(reply.get("sender_type"), "admin",
+                             "reply must be from the admin")
+            self.assertEqual(reply.get("recipient_type"), "user")
+            self.assertEqual(reply.get("recipient_user_id"), uid)
+            self.assertEqual(reply.get("category"), "billing",
+                             "empty-category admin reply must inherit parent's category")
         finally:
             self._restore_messages(path, snap)
 
