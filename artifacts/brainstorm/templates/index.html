@@ -3807,7 +3807,15 @@
                         form.action = '/create-study-tbd';
                         var t = document.createElement('input'); t.type='hidden'; t.name='token'; t.value='{{ token }}';
                         var ti = document.createElement('input'); ti.type='hidden'; ti.name='title'; ti.value=title;
-                        form.appendChild(t); form.appendChild(ti);
+                        // CSRF: dynamically-constructed forms are submitted by the
+                        // browser as a normal form POST (not fetch), so the global
+                        // fetch wrapper that auto-attaches X-CSRF-Token does NOT
+                        // apply here. We must include a csrf_token field that the
+                        // server's CSRF middleware will accept.
+                        var c = document.createElement('input');
+                        c.type = 'hidden'; c.name = 'csrf_token';
+                        c.value = (window.__csrfToken || '{{ csrf_token }}');
+                        form.appendChild(t); form.appendChild(ti); form.appendChild(c);
                         document.body.appendChild(form);
                         form.submit();
                     } else {

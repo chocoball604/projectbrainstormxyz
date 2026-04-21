@@ -266,6 +266,26 @@ class HttpSecurityTests(unittest.TestCase):
                 )
                 break
 
+    def test_dynamic_create_study_tbd_form_includes_csrf(self):
+        # Regression guard for the "Continue" button on Step 1 of new
+        # study creation. When the user picks "mark recommends" mode,
+        # the page builds a POST form to /create-study-tbd in JS. That
+        # form must include a csrf_token hidden input — the global fetch
+        # wrapper does NOT cover browser form submissions, only fetch().
+        with open(os.path.join(HERE, "templates", "index.html"), "r",
+                  encoding="utf-8") as f:
+            tpl = f.read()
+        # Locate the "/create-study-tbd" dynamic form block and confirm
+        # it appends a csrf_token input.
+        idx = tpl.find("'/create-study-tbd'")
+        self.assertGreater(idx, 0, "/create-study-tbd JS form not found")
+        block = tpl[idx:idx + 1500]
+        self.assertIn("csrf_token", block,
+                      "/create-study-tbd dynamic form must include csrf_token")
+        self.assertIn("__csrfToken", block,
+                      "/create-study-tbd form should source csrf_token from "
+                      "window.__csrfToken so the live cookie value is used")
+
     def test_landing_inline_script_is_not_blocked_evidence(self):
         # The landing page contains an inline <script> that defines
         # openAuthModal() — a regression in the CSP would mean it's
