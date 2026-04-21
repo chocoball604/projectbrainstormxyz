@@ -241,6 +241,55 @@ class HttpSecurityTests(unittest.TestCase):
         self.assertIn("Referrer-Policy", r.headers)
         self.assertIn("Permissions-Policy", r.headers)
 
+    def test_csp_does_not_combine_nonce_with_unsafe_inline(self):
+        # Regression guard: per CSP2/CSP3, when a nonce is present in
+        # script-src, browsers IGNORE 'unsafe-inline'. The templates
+        # currently rely on 'unsafe-inline' for openAuthModal(), the
+        # language selector, and admin /portal handlers — combining the
+        # two silently breaks login, signup, /portal, and the language
+        # picker. If you ever add a nonce to script-src, you MUST also
+        # remove 'unsafe-inline' AND add nonce="..." to every inline
+        # <script> in the templates.
+        r = requests.get(f"{self.base}/", timeout=10)
+        csp = r.headers.get("Content-Security-Policy", "")
+        self.assertIn("script-src", csp, "script-src directive missing")
+        # Find the script-src directive
+        for part in csp.split(";"):
+            part = part.strip()
+            if part.startswith("script-src ") and not part.startswith("script-src-"):
+                has_nonce = "'nonce-" in part
+                has_unsafe_inline = "'unsafe-inline'" in part
+                self.assertFalse(
+                    has_nonce and has_unsafe_inline,
+                    f"script-src must not combine a nonce with 'unsafe-inline' "
+                    f"(browsers ignore 'unsafe-inline' when nonce present): {part!r}",
+                )
+                break
+
+    def test_landing_inline_script_is_not_blocked_evidence(self):
+        # The landing page contains an inline <script> that defines
+        # openAuthModal() — a regression in the CSP would mean it's
+        # silently dropped by the browser, breaking login/signup. We
+        # can't run JS from a test, but we can prove the response
+        # headers permit inline scripts.
+        r = requests.get(f"{self.base}/", timeout=10)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(b"openAuthModal", r.content,
+                      "Landing page should ship the openAuthModal inline script")
+        csp = r.headers.get("Content-Security-Policy", "")
+        # script-src must permit inline either via 'unsafe-inline'
+        # (without a competing nonce) or via a hash. Today we use
+        # 'unsafe-inline'.
+        for part in csp.split(";"):
+            part = part.strip()
+            if part.startswith("script-src ") and not part.startswith("script-src-"):
+                self.assertIn(
+                    "'unsafe-inline'", part,
+                    "script-src must allow inline scripts until templates "
+                    "are migrated to use nonces explicitly",
+                )
+                break
+
     def test_landing_sets_pb_csrf_cookie(self):
         s = requests.Session()
         r = s.get(f"{self.base}/landing", timeout=10)

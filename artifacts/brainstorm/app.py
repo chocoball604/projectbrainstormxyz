@@ -257,15 +257,18 @@ def _p1_security_after_request(response):
     except Exception:
         pass
 
-    nonce = getattr(g, "csp_nonce", "") or ""
-    # Keep CSP pragmatic: the templates have ~60 inline event handlers and
-    # many inline <script> blocks. We set a nonce-aware policy for future
-    # tightening but keep 'unsafe-inline' for backwards compatibility so
-    # the app doesn't break. `object-src`, `base-uri`, `frame-ancestors`,
-    # and `form-action` still provide real defense-in-depth.
+    # CRITICAL: do NOT include a nonce in script-src while 'unsafe-inline'
+    # is the policy we actually depend on. Per CSP2/CSP3, when a nonce is
+    # present in script-src, browsers IGNORE 'unsafe-inline' — which
+    # silently breaks every inline <script> in the templates (including
+    # openAuthModal(), the language selector, and the admin /portal form
+    # handlers). Until templates are migrated to use the nonce explicitly,
+    # we keep CSP pragmatic with 'unsafe-inline'. `object-src`, `base-uri`,
+    # `frame-ancestors`, and `form-action` still provide real
+    # defense-in-depth.
     csp = (
         "default-src 'self'; "
-        f"script-src 'self' 'nonce-{nonce}' 'unsafe-inline' 'unsafe-eval'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
         "script-src-attr 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob:; "
