@@ -5815,11 +5815,6 @@
     }
 
     function _decrementUnreadBadge(n) {
-        // Bug-fix V1A: keep the top-nav "Messages (N)" badge in sync with
-        // newly-read messages without requiring a page reload. Reads/writes
-        // a single source-of-truth element keyed by id="dm-unread-badge"
-        // and its data-count attribute (rendered server-side from
-        // dm_unread_count). When the count hits 0, hide the badge.
         if (!n || n <= 0) return;
         var badge = document.getElementById('dm-unread-badge');
         if (!badge) return;
@@ -5837,22 +5832,25 @@
         body.style.display = opening ? 'block' : 'none';
         if (opening) {
             var unreadRows = body.querySelectorAll('.dm-msg-row[data-read="false"]');
-            var marked = 0;
             unreadRows.forEach(function(row) {
                 var recipType = row.dataset.recipientType;
                 var isAdminView = !!headerEl.closest('.admin-acc-body');
                 var shouldMark = (isAdminView && recipType === 'admin') || (!isAdminView && recipType === 'user');
-                if (shouldMark) {
-                    var msgId = row.dataset.msgId;
-                    var fd = new FormData();
-                    fd.append('msg_id', msgId);
-                    fd.append('token', _adminToken);
-                    fetch('/mark-message-read', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd });
-                    row.dataset.read = 'true';
-                    marked += 1;
-                }
+                if (!shouldMark) return;
+                var msgId = row.dataset.msgId;
+                var fd = new FormData();
+                fd.append('msg_id', msgId);
+                fd.append('token', _adminToken);
+                fetch('/mark-message-read', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
+                    .then(function(r) { return r.ok ? r.json() : null; })
+                    .then(function(j) {
+                        if (j && j.ok) {
+                            row.dataset.read = 'true';
+                            _decrementUnreadBadge(1);
+                        }
+                    })
+                    .catch(function() { /* leave row as unread on failure */ });
             });
-            if (marked > 0) _decrementUnreadBadge(marked);
             var dot = headerEl.querySelector('.thread-dot');
             if (dot) { dot.innerHTML = '&#9675;'; dot.style.color = '#ccc'; }
             headerEl.style.fontWeight = '400';

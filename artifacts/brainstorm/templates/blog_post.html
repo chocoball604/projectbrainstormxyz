@@ -149,9 +149,9 @@
     <div class="blog-header-right">
         <a href="/blog{% if token %}?token={{ token }}{% endif %}">&larr; Blog Index</a>
         {% if logged_in %}
-        <a href="/?token={{ token }}">Dashboard</a>
+        <a href="/?token={{ token }}">&larr; Dashboard</a>
         {% else %}
-        <a href="/">Home</a>
+        <a href="/">&larr; Home</a>
         {% endif %}
         <select class="lang-selector" aria-label="Language" id="lang-selector">
             <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>

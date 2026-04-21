@@ -634,20 +634,7 @@ class P2HelpersTest(unittest.TestCase):
 
 
 class Task59MiscBugsTests(unittest.TestCase):
-    """Regression tests for Task #59 (misc bug batch).
-
-    Locks in the user-facing fixes shipped under Task #59 so they
-    cannot regress silently:
-
-      * Bug 1: Replying to a message with an empty category inherits
-        the parent thread's category at the server level (template
-        already drops the ``required`` attr).
-      * Bug 5: ``/change-password`` returns the rendered Account page
-        with a clear success message on the happy path, and with a
-        clear "Current password is incorrect." message on failure.
-      * Bug 6: ``/admin/set-email`` persists the value to the
-        ``app_settings`` table (so it survives a workflow restart).
-    """
+    """Regression tests for Task #59 misc bug batch."""
 
     @classmethod
     def setUpClass(cls):
@@ -664,11 +651,6 @@ class Task59MiscBugsTests(unittest.TestCase):
     # ---- helpers ---------------------------------------------------------
 
     def _login_test_user(self):
-        """Log the seeded test user (test@admin.local / test123) in.
-
-        Returns (session, csrf_token). Skips the test if the seeded
-        account is missing or login is rate-limited.
-        """
         s = requests.Session()
         csrf = _bootstrap_csrf(s, self.base)
         r = s.post(
@@ -691,8 +673,6 @@ class Task59MiscBugsTests(unittest.TestCase):
         return s, csrf
 
     def _login_admin(self):
-        """Log in as admin via /admin-login. Skips if rate-limited or
-        ADMIN_PASSWORD doesn't match the dev default."""
         s = requests.Session()
         csrf = _bootstrap_csrf(s, self.base)
         admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
@@ -709,9 +689,6 @@ class Task59MiscBugsTests(unittest.TestCase):
             raise unittest.SkipTest(
                 f"admin-login returned {r.status_code} {r.headers.get('Location')!r}"
             )
-        # /admin-login on success redirects to "/" and sets the
-        # session cookie. A redirect back to "/portal?error=..."
-        # signals an auth failure (e.g. ADMIN_PASSWORD mismatch).
         loc = r.headers.get("Location") or ""
         if "/portal" in loc and "error" in loc:
             raise unittest.SkipTest(
@@ -723,10 +700,6 @@ class Task59MiscBugsTests(unittest.TestCase):
 
     def test_change_password_success_then_restore(self):
         s, csrf = self._login_test_user()
-        # State-safety: always restore the seeded password in `finally`,
-        # even if the success assertion later fails. Otherwise a partial
-        # failure would permanently lock subsequent runs (and other
-        # tests using the seeded credentials) out of the test account.
         changed = False
         try:
             r = s.post(
@@ -784,9 +757,6 @@ class Task59MiscBugsTests(unittest.TestCase):
         db_path = os.path.join(HERE, "brainstorm.db")
         if not os.path.exists(db_path):
             self.skipTest(f"brainstorm.db not found at {db_path}")
-        # State-safety: capture the prior value so we can restore it
-        # even if the assertion fails. Otherwise this test would
-        # permanently overwrite the admin's real forwarding email.
         conn = sqlite3.connect(db_path)
         try:
             row = conn.execute(
@@ -820,8 +790,6 @@ class Task59MiscBugsTests(unittest.TestCase):
             self.assertEqual(row[0], marker,
                              "admin_email value did not persist to app_settings")
         finally:
-            # Restore prior value so subsequent runs and the admin's
-            # real forwarding-email setting are not corrupted.
             try:
                 requests.post(
                     f"{self.base}/admin/set-email",
@@ -835,10 +803,7 @@ class Task59MiscBugsTests(unittest.TestCase):
                 pass
 
     def test_change_password_without_session_renders_error(self):
-        # Bug-fix V1A: previously the route silently 302'd to "/" when
-        # no/expired session was present, which the user could perceive
-        # as "there's no way to change my password." Now we render a
-        # clear error instead.
+        # Regresses Task #59 bug 5: route must NOT silently 302 when unauthed.
         s = requests.Session()
         csrf = _bootstrap_csrf(s, self.base)
         r = s.post(
@@ -861,38 +826,135 @@ class Task59MiscBugsTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("session has expired", r.text.lower())
 
-    # ---- Bug 1: reply category inheritance ------------------------------
+    # ---- Bug 1: reply category inheritance (real behavior test) ---------
+
+    def _seed_messages(self, replacement):
+        """Snapshot data/messages.json, write `replacement`, return path."""
+        import json
+        path = os.path.join(HERE, "data", "messages.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        snapshot = None
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                snapshot = f.read()
+        with open(path, "w") as f:
+            json.dump(replacement, f, indent=2)
+        return path, snapshot
+
+    def _restore_messages(self, path, snapshot):
+        if snapshot is None:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        else:
+            with open(path, "w") as f:
+                f.write(snapshot)
+
+    def _test_user_id(self):
+        import sqlite3
+        db_path = os.path.join(HERE, "brainstorm.db")
+        if not os.path.exists(db_path):
+            self.skipTest(f"brainstorm.db not found at {db_path}")
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute(
+                "SELECT id FROM users WHERE email = ?",
+                ("test@admin.local",),
+            ).fetchone()
+        finally:
+            conn.close()
+        if not row:
+            self.skipTest("seeded test user is missing")
+        return int(row[0])
 
     def test_send_message_inherits_parent_category_when_blank(self):
-        # Server-level guard: even if the form omits the category (which
-        # the reply-mode template now does), the route must inherit
-        # from the parent thread instead of writing NULL/empty. We
-        # exercise the helper directly via the app module to avoid
-        # the deeper /create-thread + recipient-routing setup.
+        import json
+        uid = self._test_user_id()
+        subject = f"task59-thread-{uuid.uuid4().hex[:6]}"
+        seed = [{
+            "id": "seed-" + uuid.uuid4().hex[:8],
+            "timestamp": "2026-01-01 00:00:00",
+            "subject": subject,
+            "body": "seeded by Task59MiscBugsTests",
+            "category": "support",
+            "read": True,
+            "sender_type": "admin",
+            "sender_id": None,
+            "recipient_type": "user",
+            "recipient_user_id": uid,
+        }]
+        path = os.path.join(HERE, "data", "messages.json")
+        path, snap = self._seed_messages(seed)
         try:
-            sys.path.insert(0, HERE)
-            os.environ.setdefault("FLASK_ENV", "development")
-            os.environ.setdefault("FLASK_SECRET", "dev-secret-for-tests")
-            os.environ.setdefault("ADMIN_PASSWORD", "admin123")
-            import app as app_mod
-        except Exception as exc:
-            self.skipTest(f"cannot import app for inheritance check: {exc}")
-        # The fix lives in the send_message route: when ``category``
-        # is empty, the server normalizes the subject and walks the
-        # existing thread to copy the prior category onto the new
-        # message. We assert the fix is present by inspecting source
-        # so a future refactor doesn't silently delete it.
-        import inspect
-        src = inspect.getsource(app_mod.send_message)
-        self.assertIn("if not category:", src,
-                      "send_message must branch on empty category for inheritance")
-        self.assertIn("_normalize_subject", src,
-                      "send_message must look up parent thread by normalized subject")
-        self.assertRegex(
-            src,
-            r"category\s*=\s*prev\[\"category\"\]",
-            "send_message must copy prev['category'] onto the new reply",
-        )
+            s, csrf = self._login_test_user()
+            r = s.post(
+                f"{self.base}/send-message",
+                data={
+                    "subject": "Re: " + subject,
+                    "body": "behavior-test reply",
+                    "category": "",
+                    "csrf_token": csrf,
+                },
+                headers={"X-CSRF-Token": csrf},
+                allow_redirects=False,
+                timeout=15,
+            )
+            self.assertIn(r.status_code, (200, 302),
+                          f"/send-message returned {r.status_code}")
+            with open(path, "r") as f:
+                msgs = json.load(f)
+            replies = [m for m in msgs
+                       if m.get("subject", "").lower() == ("re: " + subject).lower()]
+            self.assertEqual(len(replies), 1,
+                             "exactly one reply should have been persisted")
+            self.assertEqual(replies[0].get("category"), "support",
+                             "empty-category reply must inherit parent's category")
+        finally:
+            self._restore_messages(path, snap)
+
+    # ---- Bug 4: /mark-message-read persistence --------------------------
+
+    def test_mark_message_read_persists(self):
+        import json
+        uid = self._test_user_id()
+        msg_id = "seed-" + uuid.uuid4().hex[:8]
+        seed = [{
+            "id": msg_id,
+            "timestamp": "2026-01-01 00:00:00",
+            "subject": f"task59-mread-{uuid.uuid4().hex[:6]}",
+            "body": "seeded for mark-read test",
+            "category": "support",
+            "read": False,
+            "sender_type": "admin",
+            "sender_id": None,
+            "recipient_type": "user",
+            "recipient_user_id": uid,
+        }]
+        path, snap = self._seed_messages(seed)
+        try:
+            s, csrf = self._login_test_user()
+            r = s.post(
+                f"{self.base}/mark-message-read",
+                data={"msg_id": msg_id, "csrf_token": csrf},
+                headers={
+                    "X-CSRF-Token": csrf,
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                allow_redirects=False,
+                timeout=15,
+            )
+            self.assertEqual(r.status_code, 200,
+                             f"/mark-message-read returned {r.status_code}")
+            self.assertEqual(r.json().get("ok"), True)
+            with open(path, "r") as f:
+                msgs = json.load(f)
+            target = next((m for m in msgs if m.get("id") == msg_id), None)
+            self.assertIsNotNone(target, "seeded message disappeared")
+            self.assertTrue(target.get("read"),
+                            "/mark-message-read did not persist read=True")
+        finally:
+            self._restore_messages(path, snap)
 
 
 if __name__ == "__main__":

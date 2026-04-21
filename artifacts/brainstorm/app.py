@@ -2868,8 +2868,7 @@ def init_db():
             print(f"SETTINGS_LOAD: monthly_study_limit = {FREE_TIER_MONTHLY_LIMIT}", flush=True)
         except (ValueError, TypeError):
             pass
-    # Bug-fix V1A: load persisted admin forwarding email so it survives
-    # workflow restarts (previously only kept in os.environ + global).
+    # Load persisted admin forwarding email (Task #59 bug 6).
     _saved_admin_email = conn.execute(
         "SELECT value FROM app_settings WHERE key = 'admin_email'"
     ).fetchone()
@@ -5086,12 +5085,7 @@ def send_message():
 
     msgs = _load_dm_messages()
 
-    # Bug-fix V1A: when the user is replying within an existing thread
-    # (subject starts with "Re:" or matches an existing thread after
-    # normalization) and they did NOT pick a category, inherit it from
-    # the original thread so users no longer have to re-select a
-    # category just to reply. The user-facing form's "category" select
-    # is also no longer marked required (templates/index.html).
+    # Reply with empty category inherits from parent thread (Task #59 bug 1).
     if not category:
         norm = _normalize_subject(subject).lower()
         if norm:
@@ -5260,10 +5254,7 @@ def admin_set_email():
         return render_error("Admin access required.")
 
     email = (request.form.get("admin_email") or "").strip()
-    # Bug-fix V1A: persist to the app_settings table so the value
-    # survives a workflow restart. Previously we only mutated the
-    # global + os.environ, both of which are wiped on restart, so the
-    # admin's "forwarding email" silently reverted to "" on every boot.
+    # Persist to app_settings so the value survives workflow restarts (Task #59 bug 6).
     ADMIN_EMAIL = email
     os.environ["ADMIN_EMAIL"] = email
     conn = get_db()
@@ -12358,10 +12349,7 @@ def change_password():
     token = get_token()
     user, is_admin = get_session_data(token)
     if not user or user["state"] != "active":
-        # Bug-fix V1A: previously this silently redirected to "/", which
-        # could look like "no way to change the password" if a user ever
-        # hit the route with an expired/missing session. Now we surface
-        # a clear error instead of vanishing.
+        # Surface a clear error instead of silently redirecting (Task #59 bug 5).
         return render_error(
             "Your session has expired. Please log in again to change your password."
         )
