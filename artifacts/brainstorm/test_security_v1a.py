@@ -956,6 +956,89 @@ class Task59MiscBugsTests(unittest.TestCase):
         finally:
             self._restore_messages(path, snap)
 
+    # ---- Task #57 P2 e2e regressions ------------------------------------
+
+    def test_upload_user_doc_rejects_magic_mismatch(self):
+        # Regresses Task #57 P2: a .pdf upload whose body is not a PDF
+        # must be rejected at the HTTP layer (sniff_file_type runs in
+        # the route, not just the helper).
+        s, csrf = self._login_test_user()
+        files = {"file": ("hoax.pdf", b"not a real pdf, just text", "application/pdf")}
+        r = s.post(
+            f"{self.base}/upload-user-doc",
+            files=files,
+            data={"csrf_token": csrf},
+            headers={"X-CSRF-Token": csrf},
+            allow_redirects=False,
+            timeout=20,
+        )
+        self.assertNotIn(r.status_code, (302, 303),
+                         "rejected upload must NOT redirect like a success")
+        self.assertIn("does not match", r.text.lower())
+
+    def test_run_study_parallel_returns_409_on_loser(self):
+        # Regresses Task #57 P2 (T4): two concurrent /run-study POSTs
+        # for the same draft must result in exactly one winner; the
+        # loser must get 409 (idempotency), not silently double-run.
+        import sqlite3
+        import threading
+        db_path = os.path.join(HERE, "brainstorm.db")
+        if not os.path.exists(db_path):
+            self.skipTest(f"brainstorm.db not found at {db_path}")
+        s, csrf = self._login_test_user()
+        uid = self._test_user_id()
+        conn = sqlite3.connect(db_path)
+        try:
+            cur = conn.execute(
+                "INSERT INTO studies (user_id, title, study_type, status, "
+                "qa_status, created_at) VALUES (?, ?, ?, 'draft', "
+                "'precheck_passed', datetime('now'))",
+                (uid, "task57-race-" + uuid.uuid4().hex[:6], "qual"),
+            )
+            study_id = cur.lastrowid
+            conn.commit()
+        finally:
+            conn.close()
+        try:
+            results = []
+            lock = threading.Lock()
+            barrier = threading.Barrier(2)
+
+            def _fire():
+                barrier.wait()
+                try:
+                    rr = s.post(
+                        f"{self.base}/run-study/{study_id}",
+                        data={"csrf_token": csrf},
+                        headers={
+                            "X-CSRF-Token": csrf,
+                            "X-Requested-With": "XMLHttpRequest",
+                        },
+                        allow_redirects=False,
+                        timeout=30,
+                    )
+                    with lock:
+                        results.append(rr.status_code)
+                except Exception as exc:
+                    with lock:
+                        results.append(f"err:{exc}")
+
+            t1 = threading.Thread(target=_fire)
+            t2 = threading.Thread(target=_fire)
+            t1.start(); t2.start()
+            t1.join(timeout=45); t2.join(timeout=45)
+            self.assertEqual(len(results), 2,
+                             f"both /run-study threads must complete: {results}")
+            self.assertIn(409, results,
+                          f"one of the parallel /run-study calls must return 409: {results}")
+        finally:
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.execute("DELETE FROM studies WHERE id = ?", (study_id,))
+                conn.commit()
+            finally:
+                conn.close()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
