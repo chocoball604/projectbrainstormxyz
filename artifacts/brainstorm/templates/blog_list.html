@@ -61,7 +61,7 @@
         .blog-header-right a {
             color: var(--pb-text);
             text-decoration: none;
-            font-size: var(--font-small);
+            font-size: 13px;
             font-weight: 500;
             opacity: 0.8;
             transition: opacity 0.2s;
@@ -73,7 +73,7 @@
             padding: 7px 16px;
             border-radius: 6px;
             font-weight: 600;
-            font-size: var(--font-small);
+            font-size: 13px;
             text-decoration: none;
             opacity: 1;
         }
@@ -201,11 +201,9 @@
     </div>
     <div class="blog-header-right">
         {% if logged_in %}
-        <a href="/?token={{ token }}">Dashboard</a>
-        <a href="/blog{% if token %}?token={{ token }}{% endif %}">Blog / News</a>
+        <a href="/?token={{ token }}">&larr; Dashboard</a>
         {% else %}
-        <a href="/">Home</a>
-        <a href="/blog">Blog / News</a>
+        <a href="/">&larr; Home</a>
         {% endif %}
         <select class="lang-selector" aria-label="Language" id="lang-selector">
             <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
@@ -220,11 +218,6 @@
 </div>
 
 <div class="container">
-    {% if logged_in %}
-    <a href="/?token={{ token }}" class="back-link">&larr; Back to Dashboard</a>
-    {% else %}
-    <a href="/" class="back-link">&larr; Back</a>
-    {% endif %}
     <h1 class="page-title">Blog / News</h1>
 
     {% if error %}

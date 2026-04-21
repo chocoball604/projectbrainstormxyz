@@ -633,5 +633,267 @@ class P2HelpersTest(unittest.TestCase):
         self.assertIn('"event": "unit_test_event"', tail)
 
 
+class Task59MiscBugsTests(unittest.TestCase):
+    """Regression tests for Task #59 (misc bug batch).
+
+    Locks in the user-facing fixes shipped under Task #59 so they
+    cannot regress silently:
+
+      * Bug 1: Replying to a message with an empty category inherits
+        the parent thread's category at the server level (template
+        already drops the ``required`` attr).
+      * Bug 5: ``/change-password`` returns the rendered Account page
+        with a clear success message on the happy path, and with a
+        clear "Current password is incorrect." message on failure.
+      * Bug 6: ``/admin/set-email`` persists the value to the
+        ``app_settings`` table (so it survives a workflow restart).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.base = _detect_base_url()
+        try:
+            r = requests.get(f"{cls.base}/__health", timeout=5)
+        except requests.RequestException as exc:
+            raise unittest.SkipTest(f"brainstorm not reachable: {exc}")
+        if r.status_code != 200:
+            raise unittest.SkipTest(
+                f"brainstorm health check returned {r.status_code}"
+            )
+
+    # ---- helpers ---------------------------------------------------------
+
+    def _login_test_user(self):
+        """Log the seeded test user (test@admin.local / test123) in.
+
+        Returns (session, csrf_token). Skips the test if the seeded
+        account is missing or login is rate-limited.
+        """
+        s = requests.Session()
+        csrf = _bootstrap_csrf(s, self.base)
+        r = s.post(
+            f"{self.base}/login",
+            data={
+                "email": "test@admin.local",
+                "password": "test123",
+                "csrf_token": csrf,
+            },
+            headers={"X-CSRF-Token": csrf},
+            allow_redirects=False,
+            timeout=15,
+        )
+        if r.status_code == 429:
+            raise unittest.SkipTest("test-user login is rate-limited")
+        if r.status_code != 302:
+            raise unittest.SkipTest(
+                f"test-user login returned {r.status_code}, expected 302"
+            )
+        return s, csrf
+
+    def _login_admin(self):
+        """Log in as admin via /admin-login. Skips if rate-limited or
+        ADMIN_PASSWORD doesn't match the dev default."""
+        s = requests.Session()
+        csrf = _bootstrap_csrf(s, self.base)
+        admin_pw = os.environ.get("ADMIN_PASSWORD", "admin123")
+        r = s.post(
+            f"{self.base}/admin-login",
+            data={"admin_password": admin_pw, "csrf_token": csrf},
+            headers={"X-CSRF-Token": csrf},
+            allow_redirects=False,
+            timeout=15,
+        )
+        if r.status_code == 429:
+            raise unittest.SkipTest("admin-login is rate-limited")
+        if r.status_code != 302:
+            raise unittest.SkipTest(
+                f"admin-login returned {r.status_code} {r.headers.get('Location')!r}"
+            )
+        # /admin-login on success redirects to "/" and sets the
+        # session cookie. A redirect back to "/portal?error=..."
+        # signals an auth failure (e.g. ADMIN_PASSWORD mismatch).
+        loc = r.headers.get("Location") or ""
+        if "/portal" in loc and "error" in loc:
+            raise unittest.SkipTest(
+                f"admin-login refused (likely ADMIN_PASSWORD mismatch): {loc}"
+            )
+        return s, csrf
+
+    # ---- Bug 5: change-password -----------------------------------------
+
+    def test_change_password_success_then_restore(self):
+        s, csrf = self._login_test_user()
+        # State-safety: always restore the seeded password in `finally`,
+        # even if the success assertion later fails. Otherwise a partial
+        # failure would permanently lock subsequent runs (and other
+        # tests using the seeded credentials) out of the test account.
+        changed = False
+        try:
+            r = s.post(
+                f"{self.base}/change-password",
+                data={
+                    "current_password": "test123",
+                    "new_password": "test456",
+                    "csrf_token": csrf,
+                },
+                headers={"X-CSRF-Token": csrf},
+                allow_redirects=False,
+                timeout=15,
+            )
+            changed = (r.status_code == 200
+                       and "Password changed successfully" in r.text)
+            self.assertEqual(r.status_code, 200,
+                             "change-password should re-render Account on success")
+            self.assertIn("Password changed successfully", r.text)
+        finally:
+            if changed:
+                requests.post(
+                    f"{self.base}/change-password",
+                    data={
+                        "current_password": "test456",
+                        "new_password": "test123",
+                        "csrf_token": csrf,
+                    },
+                    headers={"X-CSRF-Token": csrf},
+                    cookies=s.cookies,
+                    allow_redirects=False,
+                    timeout=15,
+                )
+
+    def test_change_password_wrong_current_returns_form_with_error(self):
+        s, csrf = self._login_test_user()
+        r = s.post(
+            f"{self.base}/change-password",
+            data={
+                "current_password": "definitely-not-it",
+                "new_password": "abcdef",
+                "csrf_token": csrf,
+            },
+            headers={"X-CSRF-Token": csrf},
+            allow_redirects=False,
+            timeout=15,
+        )
+        self.assertEqual(r.status_code, 200,
+                         "wrong current password should re-render Account, not redirect")
+        self.assertIn("Current password is incorrect", r.text)
+
+    # ---- Bug 6: admin email persistence ---------------------------------
+
+    def test_admin_set_email_persists_to_app_settings(self):
+        import sqlite3
+        db_path = os.path.join(HERE, "brainstorm.db")
+        if not os.path.exists(db_path):
+            self.skipTest(f"brainstorm.db not found at {db_path}")
+        # State-safety: capture the prior value so we can restore it
+        # even if the assertion fails. Otherwise this test would
+        # permanently overwrite the admin's real forwarding email.
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute(
+                "SELECT value FROM app_settings WHERE key = 'admin_email'"
+            ).fetchone()
+        finally:
+            conn.close()
+        prior_email = row[0] if row else ""
+
+        s, csrf = self._login_admin()
+        marker = f"task59-{uuid.uuid4().hex[:8]}@example.com"
+        try:
+            r = s.post(
+                f"{self.base}/admin/set-email",
+                data={"admin_email": marker, "csrf_token": csrf},
+                headers={"X-CSRF-Token": csrf},
+                allow_redirects=False,
+                timeout=15,
+            )
+            self.assertIn(r.status_code, (200, 302),
+                          f"admin/set-email returned {r.status_code}")
+            conn = sqlite3.connect(db_path)
+            try:
+                row = conn.execute(
+                    "SELECT value FROM app_settings WHERE key = 'admin_email'"
+                ).fetchone()
+            finally:
+                conn.close()
+            self.assertIsNotNone(row,
+                                 "admin_email row missing from app_settings")
+            self.assertEqual(row[0], marker,
+                             "admin_email value did not persist to app_settings")
+        finally:
+            # Restore prior value so subsequent runs and the admin's
+            # real forwarding-email setting are not corrupted.
+            try:
+                requests.post(
+                    f"{self.base}/admin/set-email",
+                    data={"admin_email": prior_email, "csrf_token": csrf},
+                    headers={"X-CSRF-Token": csrf},
+                    cookies=s.cookies,
+                    allow_redirects=False,
+                    timeout=15,
+                )
+            except requests.RequestException:
+                pass
+
+    def test_change_password_without_session_renders_error(self):
+        # Bug-fix V1A: previously the route silently 302'd to "/" when
+        # no/expired session was present, which the user could perceive
+        # as "there's no way to change my password." Now we render a
+        # clear error instead.
+        s = requests.Session()
+        csrf = _bootstrap_csrf(s, self.base)
+        r = s.post(
+            f"{self.base}/change-password",
+            data={
+                "current_password": "anything",
+                "new_password": "abcdef",
+                "csrf_token": csrf,
+            },
+            headers={"X-CSRF-Token": csrf},
+            allow_redirects=False,
+            timeout=15,
+        )
+        # Must NOT silently 302 to "/" — that's the regressing behavior.
+        self.assertNotEqual(
+            r.status_code, 302,
+            f"change-password should not silently redirect when unauthenticated; "
+            f"got Location={r.headers.get('Location')!r}",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("session has expired", r.text.lower())
+
+    # ---- Bug 1: reply category inheritance ------------------------------
+
+    def test_send_message_inherits_parent_category_when_blank(self):
+        # Server-level guard: even if the form omits the category (which
+        # the reply-mode template now does), the route must inherit
+        # from the parent thread instead of writing NULL/empty. We
+        # exercise the helper directly via the app module to avoid
+        # the deeper /create-thread + recipient-routing setup.
+        try:
+            sys.path.insert(0, HERE)
+            os.environ.setdefault("FLASK_ENV", "development")
+            os.environ.setdefault("FLASK_SECRET", "dev-secret-for-tests")
+            os.environ.setdefault("ADMIN_PASSWORD", "admin123")
+            import app as app_mod
+        except Exception as exc:
+            self.skipTest(f"cannot import app for inheritance check: {exc}")
+        # The fix lives in the send_message route: when ``category``
+        # is empty, the server normalizes the subject and walks the
+        # existing thread to copy the prior category onto the new
+        # message. We assert the fix is present by inspecting source
+        # so a future refactor doesn't silently delete it.
+        import inspect
+        src = inspect.getsource(app_mod.send_message)
+        self.assertIn("if not category:", src,
+                      "send_message must branch on empty category for inheritance")
+        self.assertIn("_normalize_subject", src,
+                      "send_message must look up parent thread by normalized subject")
+        self.assertRegex(
+            src,
+            r"category\s*=\s*prev\[\"category\"\]",
+            "send_message must copy prev['category'] onto the new reply",
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

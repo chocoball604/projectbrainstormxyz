@@ -61,7 +61,7 @@
         .blog-header-right a {
             color: var(--pb-text);
             text-decoration: none;
-            font-size: var(--font-small);
+            font-size: 13px;
             font-weight: 500;
             opacity: 0.8;
             transition: opacity 0.2s;
@@ -73,7 +73,7 @@
             padding: 7px 16px;
             border-radius: 6px;
             font-weight: 600;
-            font-size: var(--font-small);
+            font-size: 13px;
             text-decoration: none;
             opacity: 1;
         }
@@ -147,12 +147,11 @@
         <span class="brand-wordmark"><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思計劃</span></span>
     </div>
     <div class="blog-header-right">
+        <a href="/blog{% if token %}?token={{ token }}{% endif %}">&larr; Blog Index</a>
         {% if logged_in %}
         <a href="/?token={{ token }}">Dashboard</a>
-        <a href="/blog{% if token %}?token={{ token }}{% endif %}">Blog / News</a>
         {% else %}
         <a href="/">Home</a>
-        <a href="/blog">Blog / News</a>
         {% endif %}
         <select class="lang-selector" aria-label="Language" id="lang-selector">
             <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
@@ -167,7 +166,6 @@
 </div>
 
 <div class="container">
-    <a href="/blog{% if token %}?token={{ token }}{% endif %}" class="back-link">&larr; Back to Blog Index</a>
     <article class="post-article">
         <h1>{{ post.title }}</h1>
         <div class="post-date">{{ post.created_at }}</div>
