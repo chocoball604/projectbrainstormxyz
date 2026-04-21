@@ -34,60 +34,6 @@
         html[data-lang="zh-Hans"] body { font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
         html[data-lang="zh-Hant"] body { font-family: "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif; }
         h1,h2,h3,h4,h5 { font-size: var(--font-heading); font-weight: 600; line-height: var(--line-heading); }
-        .brand-lockup {
-            display: flex; align-items: center; gap: 10px; color: inherit;
-        }
-        .brand-lockup img { height: 36px; width: 36px; object-fit: contain; }
-        .brand-wordmark { font-size: var(--font-brand); font-weight: 700; white-space: nowrap; letter-spacing: -0.3px; }
-        .brand-cn {
-            font-size: 1.05em; margin-left: 0.35em; font-weight: 700; letter-spacing: 0.02em;
-            font-family: 'PingFang TC','Microsoft JhengHei UI','Microsoft JhengHei',sans-serif;
-        }
-        .blog-header {
-            background: var(--pb-white);
-            color: var(--pb-text);
-            padding: 12px 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            border-bottom: 1px solid var(--pb-lightgrey);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.06);
-        }
-        .blog-header .brand-wordmark { color: var(--pb-text); }
-        .blog-header-right { display: flex; align-items: center; gap: 14px; }
-        .blog-header-right a {
-            color: var(--pb-text);
-            text-decoration: none;
-            font-size: 13px;
-            font-weight: 500;
-            opacity: 0.8;
-            transition: opacity 0.2s;
-        }
-        .blog-header-right a:hover { opacity: 1; }
-        .blog-header-right .btn-header {
-            background: var(--pb-grey);
-            color: #fff;
-            padding: 7px 16px;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 13px;
-            text-decoration: none;
-            opacity: 1;
-        }
-        .blog-header-right .btn-header:hover { background: #8a8a8a; }
-        .lang-selector {
-            background: transparent;
-            color: var(--pb-text);
-            border: 1px solid var(--pb-lightgrey);
-            border-radius: 4px;
-            padding: 3px 6px;
-            font-size: var(--font-small);
-            cursor: pointer;
-        }
-        .lang-selector option { color: #333; background: #fff; }
         .container {
             max-width: 800px;
             margin: 32px auto;
@@ -194,28 +140,7 @@
 </head>
 <body>
 
-<div class="blog-header">
-    <div class="brand-lockup">
-        <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
-        <span class="brand-wordmark"><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思計劃</span></span>
-    </div>
-    <div class="blog-header-right">
-        {% if logged_in %}
-        <a href="/?token={{ token }}">&larr; Dashboard</a>
-        {% else %}
-        <a href="/">&larr; Home</a>
-        {% endif %}
-        <select class="lang-selector" aria-label="Language" id="lang-selector">
-            <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
-            <option value="zh-Hans"{% if lang == 'zh-Hans' %} selected{% endif %}>CN-Simplified简</option>
-            <option value="zh-Hant"{% if lang == 'zh-Hant' %} selected{% endif %}>CN-Traditional繁</option>
-        </select>
-        {% if not logged_in %}
-        <a href="/?show_auth_tab=login">Login</a>
-        <a href="/?show_auth_tab=signup" class="btn-header">Sign Up</a>
-        {% endif %}
-    </div>
-</div>
+{% with current_section='blog_list', dm_unread_count=(dm_unread_count if dm_unread_count is defined else 0) %}{% include '_app_header.html' %}{% endwith %}
 
 <div class="container">
     <h1 class="page-title">Blog / News</h1>

@@ -1,0 +1,155 @@
+{#
+  Shared application header partial.
+
+  Parameters (passed via {% with %} or available in caller context):
+    logged_in        : bool — true for any authenticated user (admin or regular)
+    token            : str  — session token (may be empty for anonymous visitors)
+    dm_unread_count  : int  — unread direct-message count for the badge
+    current_section  : str  — one of:
+                              'app'       (main dashboard / index)
+                              'account'   (account settings page)
+                              'blog_list' (blog index)
+                              'blog_post' (single blog post)
+
+  Optional context vars consumed when relevant:
+    'app'   : is_admin, user, view_study_output, view_persona,
+              new_research_step, configure_study, dm_view, show_new_persona
+    'blog_*': lang
+#}
+<style>
+    .brand-lockup {
+        display: flex; align-items: center; gap: 10px;
+        text-decoration: none; color: inherit;
+    }
+    .brand-lockup img { height: 36px; width: 36px; object-fit: contain; }
+    .brand-wordmark {
+        font-size: var(--font-brand, 18px);
+        font-weight: 700;
+        letter-spacing: -0.3px;
+        white-space: nowrap;
+    }
+    .brand-cn {
+        font-size: 1.05em; margin-left: 0.35em; font-weight: 700;
+        letter-spacing: 0.02em;
+        font-family: 'PingFang TC','Microsoft JhengHei UI','Microsoft JhengHei',sans-serif;
+    }
+    .header {
+        background: var(--pb-white);
+        color: var(--pb-text);
+        padding: 12px 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        border-bottom: 1px solid var(--pb-lightgrey);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .header .brand-lockup { color: var(--pb-text); }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .header-right span { font-size: 13px; opacity: 0.5; }
+    .header-right a {
+        color: var(--pb-text);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 500;
+        opacity: 0.8;
+        transition: opacity 0.2s;
+    }
+    .header-right a:hover { opacity: 1; }
+    .header-right .btn-header {
+        background: var(--pb-grey);
+        color: #fff;
+        padding: 7px 16px;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 13px;
+        text-decoration: none;
+        opacity: 1;
+    }
+    .header-right .btn-header:hover { background: #8a8a8a; }
+    .header .lang-selector {
+        background: transparent;
+        color: var(--pb-text);
+        border: 1px solid var(--pb-lightgrey);
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-size: var(--font-small);
+        cursor: pointer;
+    }
+    .header .lang-selector option { color: #333; background: #fff; }
+</style>
+
+<div class="header">
+    <div class="brand-lockup">
+        <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
+        <span class="brand-wordmark"{% if current_section == 'app' %} id="brand-wordmark"{% endif %}><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思計劃</span></span>
+    </div>
+    <div class="header-right">
+        {% if current_section == 'app' %}
+            {% if is_admin %}
+                <a href="#acc-messages" onclick="toggleAdminAcc('acc-messages-body');document.getElementById('acc-messages').scrollIntoView({behavior:'smooth'});return false;" style="position: relative; cursor:pointer;">
+                    &#9993; Messages
+                    <span id="dm-unread-badge" data-count="{{ dm_unread_count }}" style="position:absolute;top:-6px;right:-12px;background:#dc3545;color:#fff;font-size:10px;font-weight:700;border-radius:50%;min-width:16px;height:16px;align-items:center;justify-content:center;padding:0 4px;display:{% if dm_unread_count > 0 %}inline-flex{% else %}none{% endif %};">{{ dm_unread_count }}</span>
+                </a>
+                <span>|</span>
+                <span>Admin Panel</span>
+                <form action="/logout" method="POST" class="logout-form">{{ csrf_input() }}
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <button type="submit" class="btn btn-secondary btn-small">Logout</button>
+                </form>
+            {% elif user %}
+                {% if view_study_output or view_persona or new_research_step or configure_study or dm_view == 'messages' or show_new_persona %}
+                <a href="/?token={{ token }}">&larr; Dashboard</a>
+                <span>|</span>
+                {% endif %}
+                <a href="/blog?token={{ token }}">Blog / News</a>
+                <span>|</span>
+                <a href="/?token={{ token }}&view=messages" style="position: relative;">
+                    &#9993; Messages
+                    <span id="dm-unread-badge" data-count="{{ dm_unread_count }}" style="position:absolute;top:-6px;right:-12px;background:#dc3545;color:#fff;font-size:10px;font-weight:700;border-radius:50%;min-width:16px;height:16px;align-items:center;justify-content:center;padding:0 4px;display:{% if dm_unread_count > 0 %}inline-flex{% else %}none{% endif %};">{{ dm_unread_count }}</span>
+                </a>
+                <span>|</span>
+                <a href="/account?token={{ token }}">Account</a>
+                <form action="/logout" method="POST" class="logout-form">{{ csrf_input() }}
+                    <input type="hidden" name="token" value="{{ token }}">
+                    <button type="submit" class="btn btn-secondary btn-small">Logout</button>
+                </form>
+            {% endif %}
+        {% elif current_section == 'account' %}
+            <a href="/?token={{ token }}">&larr; Dashboard</a>
+        {% elif current_section == 'blog_list' %}
+            {% if logged_in %}
+            <a href="/?token={{ token }}">&larr; Dashboard</a>
+            {% else %}
+            <a href="/">&larr; Home</a>
+            {% endif %}
+            <select class="lang-selector" aria-label="Language" id="lang-selector">
+                <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
+                <option value="zh-Hans"{% if lang == 'zh-Hans' %} selected{% endif %}>CN-Simplified简</option>
+                <option value="zh-Hant"{% if lang == 'zh-Hant' %} selected{% endif %}>CN-Traditional繁</option>
+            </select>
+            {% if not logged_in %}
+            <a href="/?show_auth_tab=login">Login</a>
+            <a href="/?show_auth_tab=signup" class="btn-header">Sign Up</a>
+            {% endif %}
+        {% elif current_section == 'blog_post' %}
+            <a href="/blog{% if token %}?token={{ token }}{% endif %}">&larr; Blog Index</a>
+            {% if logged_in %}
+            <a href="/?token={{ token }}">&larr; Dashboard</a>
+            {% else %}
+            <a href="/">&larr; Home</a>
+            {% endif %}
+            <select class="lang-selector" aria-label="Language" id="lang-selector">
+                <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
+                <option value="zh-Hans"{% if lang == 'zh-Hans' %} selected{% endif %}>CN-Simplified简</option>
+                <option value="zh-Hant"{% if lang == 'zh-Hant' %} selected{% endif %}>CN-Traditional繁</option>
+            </select>
+            {% if not logged_in %}
+            <a href="/?show_auth_tab=login">Login</a>
+            <a href="/?show_auth_tab=signup" class="btn-header">Sign Up</a>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
