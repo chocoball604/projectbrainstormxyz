@@ -2860,7 +2860,7 @@ def init_db():
             (SEED_ALLOWED_MODELS[2],),
         )
     migrate_db(conn)
-    global FREE_TIER_MONTHLY_LIMIT
+    global FREE_TIER_MONTHLY_LIMIT, ADMIN_EMAIL
     _saved_limit = conn.execute("SELECT value FROM app_settings WHERE key = 'monthly_study_limit'").fetchone()
     if _saved_limit:
         try:
@@ -2868,6 +2868,15 @@ def init_db():
             print(f"SETTINGS_LOAD: monthly_study_limit = {FREE_TIER_MONTHLY_LIMIT}", flush=True)
         except (ValueError, TypeError):
             pass
+    # Bug-fix V1A: load persisted admin forwarding email so it survives
+    # workflow restarts (previously only kept in os.environ + global).
+    _saved_admin_email = conn.execute(
+        "SELECT value FROM app_settings WHERE key = 'admin_email'"
+    ).fetchone()
+    if _saved_admin_email and _saved_admin_email["value"]:
+        ADMIN_EMAIL = _saved_admin_email["value"].strip()
+        os.environ["ADMIN_EMAIL"] = ADMIN_EMAIL
+        print(f"SETTINGS_LOAD: admin_email = {ADMIN_EMAIL!r}", flush=True)
     test_row = conn.execute("SELECT id FROM users WHERE email = ?", (TEST_USER_EMAIL,)).fetchone()
     if not test_row:
         from werkzeug.security import generate_password_hash as _gph
@@ -5076,6 +5085,34 @@ def send_message():
         return render_error(err)
 
     msgs = _load_dm_messages()
+
+    # Bug-fix V1A: when the user is replying within an existing thread
+    # (subject starts with "Re:" or matches an existing thread after
+    # normalization) and they did NOT pick a category, inherit it from
+    # the original thread so users no longer have to re-select a
+    # category just to reply. The user-facing form's "category" select
+    # is also no longer marked required (templates/index.html).
+    if not category:
+        norm = _normalize_subject(subject).lower()
+        if norm:
+            for prev in msgs:
+                prev_norm = _normalize_subject(prev.get("subject", "")).lower()
+                if prev_norm != norm:
+                    continue
+                if is_admin:
+                    if prev.get("recipient_type") == "admin" or prev.get("sender_type") == "admin":
+                        if prev.get("category"):
+                            category = prev["category"]
+                            break
+                elif user:
+                    same_user = (
+                        (prev.get("recipient_user_id") == user["id"] and prev.get("recipient_type") == "user")
+                        or (prev.get("sender_type") == "user" and prev.get("sender_id") == user["id"])
+                    )
+                    if same_user and prev.get("category"):
+                        category = prev["category"]
+                        break
+
     new_msg = {
         "id": secrets.token_hex(8),
         "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
@@ -5223,8 +5260,22 @@ def admin_set_email():
         return render_error("Admin access required.")
 
     email = (request.form.get("admin_email") or "").strip()
+    # Bug-fix V1A: persist to the app_settings table so the value
+    # survives a workflow restart. Previously we only mutated the
+    # global + os.environ, both of which are wiped on restart, so the
+    # admin's "forwarding email" silently reverted to "" on every boot.
     ADMIN_EMAIL = email
     os.environ["ADMIN_EMAIL"] = email
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('admin_email', ?)",
+            (email,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    print(f"SETTINGS_UPDATE: admin_email = {email!r}", flush=True)
     return redirect(url_for("index", token=token))
 
 
@@ -12307,7 +12358,13 @@ def change_password():
     token = get_token()
     user, is_admin = get_session_data(token)
     if not user or user["state"] != "active":
-        return redirect(url_for("index"))
+        # Bug-fix V1A: previously this silently redirected to "/", which
+        # could look like "no way to change the password" if a user ever
+        # hit the route with an expired/missing session. Now we surface
+        # a clear error instead of vanishing.
+        return render_error(
+            "Your session has expired. Please log in again to change your password."
+        )
 
     current_pw = request.form.get("current_password") or ""
     new_pw = request.form.get("new_password") or ""
@@ -12326,7 +12383,7 @@ def change_password():
             token=token,
             user=user,
             success=None,
-            error="New password must be 6–10 characters.",
+            error="New password must be 6 to 10 characters long.",
         )
 
     conn = get_db()

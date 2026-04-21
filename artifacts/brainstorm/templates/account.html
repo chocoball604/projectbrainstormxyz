@@ -203,15 +203,16 @@
 
     <div class="card">
         <h2>Change Password</h2>
-        <form action="/change-password?token={{ token }}" method="POST">{{ csrf_input() }}
+        <form action="/change-password" method="POST">{{ csrf_input() }}
             <input type="hidden" name="token" value="{{ token }}">
             <div class="form-group">
                 <label for="current_password">Current Password</label>
-                <input type="password" id="current_password" name="current_password" required>
+                <input type="password" id="current_password" name="current_password" autocomplete="current-password" required>
             </div>
             <div class="form-group">
-                <label for="new_password">New Password (6–10 characters)</label>
-                <input type="password" id="new_password" name="new_password" minlength="6" maxlength="10" required>
+                <label for="new_password">New Password</label>
+                <input type="password" id="new_password" name="new_password" minlength="6" maxlength="10" autocomplete="new-password" required>
+                <p class="info-text">Must be 6 to 10 characters long.</p>
             </div>
             <button type="submit" class="btn-primary">Change Password</button>
         </form>
