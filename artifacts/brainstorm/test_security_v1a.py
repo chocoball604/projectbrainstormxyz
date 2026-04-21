@@ -402,12 +402,13 @@ class HttpSecurityTests(unittest.TestCase):
     # ---- /admin-login lockout -------------------------------------------
 
     def test_admin_login_locks_out_after_5_failures(self):
-        # NOTE: admin_login is keyed by identity_key="admin" globally, so
-        # this test will lock out the real admin path on this IP for the
-        # configured 30-minute window. That's intentional — the test
-        # asserts the lockout actually fires. If you re-run the suite
-        # within 30 minutes, this test will be skipped because the bucket
-        # is still locked. Restart the workflow to clear in-memory state.
+        # As of the per-fingerprint lockout fix, lockouts are scoped to
+        # the (client_fingerprint, identity) pair. Each requests.Session
+        # gets its own pb_csrf cookie → its own fingerprint → its own
+        # lockout bucket, so re-running the suite no longer "leaks"
+        # lockout state into a fresh browser session. The pre-flight
+        # skip below is therefore mostly defensive — it would only kick
+        # in if a previous run somehow re-used this exact session.
         s = requests.Session()
         tok = _bootstrap_csrf(s, self.base)
         headers = {"X-CSRF-Token": tok}
@@ -477,6 +478,86 @@ class P2HelpersTest(unittest.TestCase):
         sys.path.insert(0, HERE)
         import importlib
         cls.app_mod = importlib.import_module("app")
+
+    def test_per_fingerprint_lockout_isolates_browsers(self):
+        # Regression test for the /portal "Too many attempts" false-positive
+        # bug. Before the fix, lockouts were keyed by request.remote_addr,
+        # which collapses to 127.0.0.1 for every browser behind Replit's
+        # dev proxy — so one browser's failed-login lockout would lock
+        # out EVERY other browser on the instance. The fix adds a
+        # per-browser fingerprint (IP + pb_csrf cookie hash). Two test
+        # clients with different csrf cookies must have isolated buckets.
+        app_mod = self.app_mod
+        with app_mod.app.test_request_context(
+            "/admin-login",
+            method="POST",
+            environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            headers={"Cookie": "pb_csrf=AAAA-browser-one-AAAA"},
+        ):
+            fp_a = app_mod._client_fingerprint()
+            # Burn 5 failures for browser A
+            for _ in range(6):
+                app_mod.record_auth_failure("admin_login", identity_key="admin")
+            allowed_a, _, reason_a = app_mod.check_auth_rate_limit(
+                "admin_login", identity_key="admin"
+            )
+        with app_mod.app.test_request_context(
+            "/admin-login",
+            method="POST",
+            environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            headers={"Cookie": "pb_csrf=BBBB-browser-two-BBBB"},
+        ):
+            fp_b = app_mod._client_fingerprint()
+            allowed_b, _, reason_b = app_mod.check_auth_rate_limit(
+                "admin_login", identity_key="admin"
+            )
+
+        self.assertNotEqual(fp_a, fp_b,
+                            "different pb_csrf cookies must produce "
+                            "different fingerprints")
+        self.assertFalse(allowed_a,
+                         "browser A should be locked out after 6 wrong "
+                         f"attempts (reason={reason_a!r})")
+        self.assertTrue(allowed_b,
+                        "browser B must NOT be locked out by browser A's "
+                        f"failures (reason={reason_b!r})")
+        # Cleanup: clear browser A's lockout so this test doesn't leak
+        # state into other tests.
+        with app_mod.app.test_request_context(
+            "/admin-login", method="POST",
+            headers={"Cookie": "pb_csrf=AAAA-browser-one-AAAA"},
+        ):
+            app_mod.clear_auth_failures("admin_login", identity_key="admin")
+
+    def test_global_per_identity_lockout_backstop(self):
+        # Defense-in-depth: even if an attacker rotates cookies (each
+        # rotation = fresh fingerprint = fresh per-fingerprint bucket),
+        # the global per-identity counter must eventually fire at
+        # max_fails * 4 = 20 fails for admin.
+        app_mod = self.app_mod
+        for i in range(20):
+            with app_mod.app.test_request_context(
+                "/admin-login", method="POST",
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+                headers={"Cookie": f"pb_csrf=rotating-cookie-{i:04d}"},
+            ):
+                app_mod.record_auth_failure("admin_login", identity_key="admin")
+        # Now a fresh, never-seen browser must ALSO be globally locked
+        # because it's the same identity ("admin") under attack.
+        with app_mod.app.test_request_context(
+            "/admin-login", method="POST",
+            environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            headers={"Cookie": "pb_csrf=fresh-untouched-cookie"},
+        ):
+            allowed, _, reason = app_mod.check_auth_rate_limit(
+                "admin_login", identity_key="admin"
+            )
+            self.assertFalse(allowed,
+                             "global per-identity backstop should lock "
+                             f"out fresh clients (reason={reason!r})")
+            self.assertEqual(reason, "globally_locked_out")
+            # Cleanup
+            app_mod.clear_auth_failures("admin_login", identity_key="admin")
 
     def test_safe_json_loads_depth_rejected(self):
         # Build a JSON value nested 50 levels deep — must be rejected by

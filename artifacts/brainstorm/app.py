@@ -440,10 +440,52 @@ AUTH_RATE_LIMITS = {
 
 def _client_ip():
     # ProxyFix(x_for=1, x_proto=1, x_host=1) is wired on `app.wsgi_app`,
-    # so `request.remote_addr` now reflects the real client IP (the last
-    # hop in X-Forwarded-For), not the Replit proxy's address. That means
-    # rate-limiter lockouts apply per-client again instead of per-instance.
+    # but Replit's local dev proxy terminates TLS to the loopback without
+    # always threading X-Forwarded-For. In that case `request.remote_addr`
+    # collapses to 127.0.0.1 for every browser. We prefer the first hop in
+    # `request.access_route` (which is XFF[0] when present, else
+    # `remote_addr`) and avoid loopback values when a non-loopback hop
+    # exists further down the chain. Used for AUDIT LOGGING ONLY.
+    try:
+        ar = list(request.access_route or [])
+    except Exception:
+        ar = []
+    for hop in ar:
+        if hop and hop not in ("127.0.0.1", "::1"):
+            return hop
     return request.remote_addr or "unknown"
+
+
+def _client_fingerprint():
+    """Stable per-browser identifier used as the rate-limit/lockout key.
+
+    BUG FIX (admin lockout false-positive on /portal): the previous code
+    keyed lockouts by `_client_ip()`. Behind Replit's dev proxy every
+    browser shares the loopback address (127.0.0.1), so once any single
+    browser/test session triggered the 5-wrong-passwords admin lockout,
+    EVERY browser on the instance saw "Too many admin login attempts.
+    Try again in 30 minute(s)." on its very first /portal POST. After the
+    30-minute window expired (or after a workflow restart), login worked
+    again "regardless of error message" — exactly the symptom reported.
+
+    We isolate clients by combining the IP with the per-browser `pb_csrf`
+    cookie. That cookie is set on the very first GET to any page (see
+    `_p1_security_before_request`) and persisted with `max_age =
+    _CSRF_COOKIE_MAX_AGE`, so legitimate browsers have a stable
+    fingerprint for the whole session. The combination is hashed so the
+    cookie value never lands in log files or in-memory dict keys. If no
+    cookie is present yet (first-ever request, or attacker stripping
+    cookies) we fall back to IP only — but the global CSRF middleware
+    will then reject the POST anyway because there is no cookie to
+    compare against (`missing_csrf_cookie`).
+    """
+    ip = _client_ip()
+    try:
+        csrf = request.cookies.get(CSRF_COOKIE_NAME) or ""
+    except Exception:
+        csrf = ""
+    blob = f"{ip}|{csrf}".encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()[:16]
 
 
 def check_auth_rate_limit(action, identity_key=""):
@@ -451,18 +493,29 @@ def check_auth_rate_limit(action, identity_key=""):
     cfg = AUTH_RATE_LIMITS.get(action)
     if not cfg:
         return True, None, ""
-    ip = _client_ip()
+    fp = _client_fingerprint()
     now = time.time()
-    rate_key = f"{action}:ip:{ip}"
-    lock_key = f"{action}:lock:{ip}:{identity_key.lower()}"
+    rate_key = f"{action}:fp:{fp}"
+    lock_key = f"{action}:lock:{fp}:{identity_key.lower()}"
+    # Defense-in-depth: identity-only lockout that catches attackers who
+    # rotate cookies/browsers to evade the per-fingerprint lockout. Tuned
+    # 4x looser than the per-fingerprint threshold so legit shared-IP
+    # users (multiple admins, kiosk machines) aren't trivially DoS'd.
+    global_lock_key = f"{action}:globlock:{identity_key.lower()}"
     with _RATE_LIMIT_LOCK:
-        # Lockout check
+        # Per-(client, identity) lockout
         unlock_at = _RATE_LIMIT_LOCKOUTS.get(lock_key)
         if unlock_at and unlock_at > now:
             return False, int(unlock_at - now), "locked_out"
         if unlock_at and unlock_at <= now:
             _RATE_LIMIT_LOCKOUTS.pop(lock_key, None)
-        # Per-IP window
+        # Global per-identity lockout
+        gunlock_at = _RATE_LIMIT_LOCKOUTS.get(global_lock_key)
+        if gunlock_at and gunlock_at > now:
+            return False, int(gunlock_at - now), "globally_locked_out"
+        if gunlock_at and gunlock_at <= now:
+            _RATE_LIMIT_LOCKOUTS.pop(global_lock_key, None)
+        # Per-fingerprint window (transient burst protection)
         hits = [t for t in _RATE_LIMIT_HITS.get(rate_key, []) if t > now - cfg["window_seconds"]]
         if len(hits) >= cfg["max_hits"]:
             retry = int(hits[0] + cfg["window_seconds"] - now) + 1
@@ -476,35 +529,65 @@ def record_auth_failure(action, identity_key=""):
     cfg = AUTH_RATE_LIMITS.get(action)
     if not cfg:
         return
-    ip = _client_ip()
+    fp = _client_fingerprint()
+    ip = _client_ip()  # for audit log only
     now = time.time()
-    fail_key = f"{action}:fail:{ip}:{identity_key.lower()}"
-    lock_key = f"{action}:lock:{ip}:{identity_key.lower()}"
+    fail_key = f"{action}:fail:{fp}:{identity_key.lower()}"
+    lock_key = f"{action}:lock:{fp}:{identity_key.lower()}"
+    global_fail_key = f"{action}:globfail:{identity_key.lower()}"
+    global_lock_key = f"{action}:globlock:{identity_key.lower()}"
     with _RATE_LIMIT_LOCK:
+        # Per-(client, identity) failure counter -> per-(client, identity) lockout
         fails = [t for t in _RATE_LIMIT_HITS.get(fail_key, []) if t > now - cfg["fail_window"]]
         fails.append(now)
         _RATE_LIMIT_HITS[fail_key] = fails
         if len(fails) >= cfg["max_fails"]:
             _RATE_LIMIT_LOCKOUTS[lock_key] = now + cfg["lockout"]
             print(
-                f"AUTH_LOCKOUT action={action} ip={ip} identity={identity_key} "
+                f"AUTH_LOCKOUT action={action} fp={fp} ip={ip} identity={identity_key} "
                 f"fails={len(fails)} lockout_seconds={cfg['lockout']}",
                 flush=True,
             )
             try:
                 audit_log("auth_lockout", action=action, identity=identity_key,
+                          ip=ip, fingerprint=fp,
                           fails=len(fails), lockout_seconds=cfg["lockout"])
+            except Exception:
+                pass
+        # Global per-identity failure counter -> global per-identity lockout
+        # (4x threshold, 2x duration). Catches credential-stuffing where the
+        # attacker rotates cookies/IPs to bypass per-fingerprint lockouts.
+        gfails = [t for t in _RATE_LIMIT_HITS.get(global_fail_key, []) if t > now - cfg["fail_window"]]
+        gfails.append(now)
+        _RATE_LIMIT_HITS[global_fail_key] = gfails
+        if len(gfails) >= cfg["max_fails"] * 4:
+            _RATE_LIMIT_LOCKOUTS[global_lock_key] = now + cfg["lockout"] * 2
+            print(
+                f"AUTH_GLOBAL_LOCKOUT action={action} identity={identity_key} "
+                f"fails={len(gfails)} lockout_seconds={cfg['lockout'] * 2}",
+                flush=True,
+            )
+            try:
+                audit_log("auth_global_lockout", action=action,
+                          identity=identity_key, fails=len(gfails),
+                          lockout_seconds=cfg["lockout"] * 2)
             except Exception:
                 pass
 
 
 def clear_auth_failures(action, identity_key=""):
-    ip = _client_ip()
-    fail_key = f"{action}:fail:{ip}:{identity_key.lower()}"
-    lock_key = f"{action}:lock:{ip}:{identity_key.lower()}"
+    fp = _client_fingerprint()
+    fail_key = f"{action}:fail:{fp}:{identity_key.lower()}"
+    lock_key = f"{action}:lock:{fp}:{identity_key.lower()}"
+    global_fail_key = f"{action}:globfail:{identity_key.lower()}"
+    global_lock_key = f"{action}:globlock:{identity_key.lower()}"
     with _RATE_LIMIT_LOCK:
         _RATE_LIMIT_HITS.pop(fail_key, None)
         _RATE_LIMIT_LOCKOUTS.pop(lock_key, None)
+        # On successful auth, also clear the global per-identity counters
+        # so a legitimate login resets the credential-stuffing backstop.
+        _RATE_LIMIT_HITS.pop(global_fail_key, None)
+        _RATE_LIMIT_LOCKOUTS.pop(global_lock_key, None)
 
 
 # ---------------------------------------------------------------------------
