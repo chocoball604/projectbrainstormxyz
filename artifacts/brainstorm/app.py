@@ -2868,12 +2868,15 @@ def init_db():
             print(f"SETTINGS_LOAD: monthly_study_limit = {FREE_TIER_MONTHLY_LIMIT}", flush=True)
         except (ValueError, TypeError):
             pass
-    # Load persisted admin forwarding email (Task #59 bug 6).
+    # Load persisted admin forwarding email (Task #59 bug 6). When the
+    # admin has explicitly cleared the value, the row exists with "",
+    # and we honor that by clearing the runtime global + env so the
+    # ADMIN_EMAIL env fallback can't silently re-populate on restart.
     _saved_admin_email = conn.execute(
         "SELECT value FROM app_settings WHERE key = 'admin_email'"
     ).fetchone()
-    if _saved_admin_email and _saved_admin_email["value"]:
-        ADMIN_EMAIL = _saved_admin_email["value"].strip()
+    if _saved_admin_email is not None:
+        ADMIN_EMAIL = (_saved_admin_email["value"] or "").strip()
         os.environ["ADMIN_EMAIL"] = ADMIN_EMAIL
         print(f"SETTINGS_LOAD: admin_email = {ADMIN_EMAIL!r}", flush=True)
     test_row = conn.execute("SELECT id FROM users WHERE email = ?", (TEST_USER_EMAIL,)).fetchone()
