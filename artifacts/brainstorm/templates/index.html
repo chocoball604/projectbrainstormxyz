@@ -5573,7 +5573,7 @@
                         <label for="blog-body">Post Body</label>
                         <div style="border:1px solid #ccc;border-radius:6px;overflow:hidden;">
                             <div id="blog-toolbar" style="display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;background:#f0f0f0;border-bottom:1px solid #ccc;align-items:center;">
-                                <select onchange="blogSetFontSize(this.value);this.selectedIndex=0;" style="padding:2px 4px;font-size:12px;border:1px solid #bbb;border-radius:3px;cursor:pointer;" title="Font size">
+                                <select onmousedown="blogSaveSelection()" onchange="blogSetFontSize(this.value);this.selectedIndex=0;" style="padding:2px 4px;font-size:12px;border:1px solid #bbb;border-radius:3px;cursor:pointer;" title="Font size">
                                     <option value="">Size</option>
                                     <option value="10">10</option>
                                     <option value="11">11</option>
@@ -5587,15 +5587,15 @@
                                     <option value="19">19</option>
                                     <option value="20">20</option>
                                 </select>
-                                <button type="button" onclick="blogExec('bold')" style="padding:2px 8px;font-weight:bold;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Bold"><b>B</b></button>
-                                <button type="button" onclick="blogExec('italic')" style="padding:2px 8px;font-style:italic;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Italic"><i>I</i></button>
-                                <button type="button" onclick="blogExec('underline')" style="padding:2px 8px;text-decoration:underline;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Underline"><u>U</u></button>
-                                <button type="button" onclick="blogExec('strikeThrough')" style="padding:2px 8px;text-decoration:line-through;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Strikethrough"><s>S</s></button>
-                                <label style="padding:2px 4px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;display:flex;align-items:center;gap:3px;" title="Text colour">A<input type="color" value="#000000" onchange="blogExec('foreColor',this.value)" style="width:18px;height:18px;border:none;padding:0;cursor:pointer;"></label>
-                                <label style="padding:2px 4px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;display:flex;align-items:center;gap:3px;" title="Highlight">&#9608;<input type="color" value="#ffff00" onchange="blogExec('hiliteColor',this.value)" style="width:18px;height:18px;border:none;padding:0;cursor:pointer;"></label>
-                                <button type="button" onclick="blogExec('insertUnorderedList')" style="padding:2px 8px;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Bullet list">&#8226;</button>
-                                <button type="button" onclick="blogExec('insertOrderedList')" style="padding:2px 8px;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Numbered list">1.</button>
-                                <button type="button" onclick="blogExec('removeFormat')" style="padding:2px 8px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Clear formatting">&#10006;</button>
+                                <button type="button" onmousedown="event.preventDefault()" onclick="blogExec('bold')" style="padding:2px 8px;font-weight:bold;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Bold"><b>B</b></button>
+                                <button type="button" onmousedown="event.preventDefault()" onclick="blogExec('italic')" style="padding:2px 8px;font-style:italic;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Italic"><i>I</i></button>
+                                <button type="button" onmousedown="event.preventDefault()" onclick="blogExec('underline')" style="padding:2px 8px;text-decoration:underline;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Underline"><u>U</u></button>
+                                <button type="button" onmousedown="event.preventDefault()" onclick="blogExec('strikeThrough')" style="padding:2px 8px;text-decoration:line-through;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Strikethrough"><s>S</s></button>
+                                <label onmousedown="blogSaveSelection()" style="padding:2px 4px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;display:flex;align-items:center;gap:3px;" title="Text colour">A<input type="color" value="#000000" onchange="blogExec('foreColor',this.value)" style="width:18px;height:18px;border:none;padding:0;cursor:pointer;"></label>
+                                <label onmousedown="blogSaveSelection()" style="padding:2px 4px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;display:flex;align-items:center;gap:3px;" title="Highlight">&#9608;<input type="color" value="#ffff00" onchange="blogExec('hiliteColor',this.value)" style="width:18px;height:18px;border:none;padding:0;cursor:pointer;"></label>
+                                <button type="button" onmousedown="event.preventDefault()" onclick="blogExec('insertUnorderedList')" style="padding:2px 8px;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Bullet list">&#8226;</button>
+                                <button type="button" onmousedown="event.preventDefault()" onclick="blogExec('insertOrderedList')" style="padding:2px 8px;font-size:14px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Numbered list">1.</button>
+                                <button type="button" onmousedown="event.preventDefault()" onclick="blogExec('removeFormat')" style="padding:2px 8px;font-size:12px;cursor:pointer;border:1px solid #bbb;border-radius:3px;background:#fff;" title="Clear formatting">&#10006;</button>
                             </div>
                             <div id="blog-editor" contenteditable="true" style="min-height:160px;padding:10px 14px;font-family:inherit;font-size:14px;outline:none;overflow-y:auto;max-height:400px;list-style-position:inside;">{{ blog_draft.get('blog_body', '') }}</div>
                         </div>
@@ -6214,25 +6214,65 @@
     })();
     {% endif %}
 
+    var _blogSavedRange = null;
+    function blogSaveSelection() {
+        var sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+            var r = sel.getRangeAt(0);
+            var editor = document.getElementById('blog-editor');
+            if (editor && editor.contains(r.commonAncestorContainer)) {
+                _blogSavedRange = r.cloneRange();
+            }
+        }
+    }
+    function blogRestoreSelection() {
+        var editor = document.getElementById('blog-editor');
+        if (!editor) return false;
+        editor.focus();
+        if (!_blogSavedRange) return false;
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(_blogSavedRange);
+        return true;
+    }
     function blogExec(cmd, val) {
         var editor = document.getElementById('blog-editor');
-        if (editor) editor.focus();
+        if (!editor) return;
+        // For color commands invoked via native color picker, the selection
+        // is gone by onchange — restore it from what we saved on mousedown.
+        if (cmd === 'foreColor' || cmd === 'hiliteColor') {
+            blogRestoreSelection();
+        } else {
+            editor.focus();
+        }
         document.execCommand(cmd, false, val || null);
     }
 
     function blogSetFontSize(size) {
         if (!size) return;
-        var editor = document.getElementById('blog-editor');
-        if (editor) editor.focus();
+        // Selection was saved on the <select>'s mousedown before the dropdown
+        // stole focus. Restore it here.
+        if (!blogRestoreSelection()) return;
         var sel = window.getSelection();
         if (!sel.rangeCount) return;
         var range = sel.getRangeAt(0);
         if (range.collapsed) return;
         var span = document.createElement('span');
         span.style.fontSize = size + 'px';
-        range.surroundContents(span);
+        try {
+            range.surroundContents(span);
+        } catch (e) {
+            // surroundContents fails when the selection crosses element
+            // boundaries — fall back to extract+wrap.
+            var frag = range.extractContents();
+            span.appendChild(frag);
+            range.insertNode(span);
+        }
         sel.removeAllRanges();
-        sel.addRange(range);
+        var newRange = document.createRange();
+        newRange.selectNodeContents(span);
+        sel.addRange(newRange);
+        _blogSavedRange = newRange.cloneRange();
     }
 
     var _blogEditId = null;
