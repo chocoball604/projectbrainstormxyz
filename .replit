@@ -63,3 +63,6 @@ FLASK_SECRET = "brainstorm-dev-secret-key"
 
 [userenv.development]
 ADMIN_PASSWORD = "admin123"
+
+[userenv.production]
+ADMIN_PASSWORD = "admin#12345%"
