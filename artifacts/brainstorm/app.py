@@ -1054,6 +1054,21 @@ def run_model_health_check(run_type="manual"):
         started_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         integration_mode = "placeholder_not_connected"
 
+        # Diagnostic: surface whether the LLM integration env vars are
+        # actually present at health-check time. This is the #1 source of
+        # preview-vs-prod divergence: workspace secrets are not auto-
+        # copied to deployments. We log presence (booleans), never values.
+        _base_url_present = bool(os.environ.get("AI_INTEGRATIONS_OPENROUTER_BASE_URL"))
+        _api_key_present = bool(os.environ.get("AI_INTEGRATIONS_OPENROUTER_API_KEY"))
+        print(
+            f"HEALTH_CHECK_ENV run_id={run_id} "
+            f"openrouter_base_url_present={_base_url_present} "
+            f"openrouter_api_key_present={_api_key_present}",
+            flush=True,
+        )
+
+        probe_error_type = ""
+        probe_error_msg = ""
         try:
             call_llm(
                 "_probe_",
@@ -1061,10 +1076,19 @@ def run_model_health_check(run_type="manual"):
                 purpose="integration_probe",
             )
             integration_mode = "live_calls_enabled"
-        except NotImplementedError:
+        except NotImplementedError as _probe_exc:
             integration_mode = "placeholder_not_connected"
-        except Exception:
+            probe_error_type = type(_probe_exc).__name__
+            probe_error_msg = str(_probe_exc)[:300]
+        except Exception as _probe_exc:
             integration_mode = "error_probe_failed"
+            probe_error_type = type(_probe_exc).__name__
+            probe_error_msg = str(_probe_exc)[:300]
+        print(
+            f"HEALTH_CHECK_PROBE run_id={run_id} mode={integration_mode} "
+            f"err_type={probe_error_type} err_msg={probe_error_msg!r}",
+            flush=True,
+        )
 
         conn = get_db()
         mc = {
@@ -1200,6 +1224,24 @@ def run_model_health_check(run_type="manual"):
         )
         conn.commit()
         conn.close()
+        # Per-model diagnostics. Without this we cannot tell from logs
+        # whether a production FAIL is a missing API key, a 401, a 429,
+        # a network refusal, or a per-model unsupported-region error.
+        _status_counts = {}
+        for _info in per_model.values():
+            _status_counts[_info["status"]] = _status_counts.get(_info["status"], 0) + 1
+        print(
+            f"HEALTH_CHECK_SUMMARY run_id={run_id} integration_mode={integration_mode} "
+            f"counts={_status_counts} config_errors={config_errors}",
+            flush=True,
+        )
+        for _mid, _info in per_model.items():
+            if _info["status"] != "pass":
+                print(
+                    f"HEALTH_CHECK_MODEL run_id={run_id} model={_mid} "
+                    f"status={_info['status']} error={(_info.get('error') or '')[:300]!r}",
+                    flush=True,
+                )
         print(f"HEALTH_CHECK_RUN={run_id} status={summary_status} started={started_at} finished={finished_at}", flush=True)
         return {
             "run_id": run_id,
