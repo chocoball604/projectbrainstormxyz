@@ -59,5 +59,7 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
-ADMIN_PASSWORD = "admin123"
 FLASK_SECRET = "brainstorm-dev-secret-key"
+
+[userenv.development]
+ADMIN_PASSWORD = "admin123"
