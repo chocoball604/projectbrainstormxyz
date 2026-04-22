@@ -4942,8 +4942,8 @@
                     <h3 style="font-size:14px;color:#1a1a2e;margin-bottom:8px;">Test Account (No Limits)</h3>
                     <p style="font-size:13px;color:#555;margin-bottom:4px;">A pre-created test user with unlimited studies for admin testing.</p>
                     <table style="font-size:13px;">
-                        <tr><td style="padding:3px 12px 3px 0;color:#777;">Email:</td><td><code>{{ test_user_email }}</code></td></tr>
-                        <tr><td style="padding:3px 12px 3px 0;color:#777;">Password:</td><td><code>{{ test_user_password }}</code></td></tr>
+                        <tr><td style="padding:3px 12px 3px 0;color:#777;">Email:</td><td><code id="test-account-email-cell">{{ test_user_email }}</code></td></tr>
+                        <tr><td style="padding:3px 12px 3px 0;color:#777;">Password:</td><td><code id="test-account-password-cell">{{ test_user_password }}</code></td></tr>
                     </table>
                     <p style="font-size:11px;color:#999;margin-top:6px;">Log in with these credentials in a separate session to test without hitting usage limits.</p>
                     <form id="reset-test-pw-form" action="/admin/reset-test-password" method="POST" data-ajax-bound="1" style="margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;">{{ csrf_input() }}
@@ -6109,7 +6109,7 @@
                 if (res.body && res.body.ok) {
                     _show('ok', 'Test account password updated. New password: ' + (res.body.new_password || ''));
                     form.reset();
-                    var pwCell = form.parentNode.querySelector('table code:last-of-type');
+                    var pwCell = document.getElementById('test-account-password-cell');
                     if (pwCell && res.body.new_password) pwCell.textContent = res.body.new_password;
                 } else {
                     var errText = (res.body && res.body.error) || ('Request failed (' + res.status + ').');
