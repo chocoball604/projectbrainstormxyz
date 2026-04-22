@@ -5801,15 +5801,27 @@
                 var fd = new FormData();
                 fd.append('msg_id', msgId);
                 fd.append('token', _adminToken);
-                fetch('/mark-message-read', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': _csrfToken }, body: fd })
-                    .then(function(r) { return r.ok ? r.json() : null; })
-                    .then(function(j) {
+                console.log('[BADGE] toggleThread mark-read POST msg_id=' + msgId + ' isAdminView=' + isAdminView + ' recipType=' + recipType);
+                fetch('/mark-message-read', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
+                    .then(function(r) {
+                        console.log('[BADGE] response status=' + r.status + ' ok=' + r.ok + ' content-type=' + r.headers.get('content-type'));
+                        return r.text().then(function(t) { return { status: r.status, ok: r.ok, text: t }; });
+                    })
+                    .then(function(res) {
+                        var j = null;
+                        try { j = JSON.parse(res.text); } catch (e) { console.warn('[BADGE] response not JSON, body=', res.text.substring(0, 200)); }
                         if (j && j.ok) {
                             row.dataset.read = 'true';
+                            var before = document.getElementById('dm-unread-badge');
+                            console.log('[BADGE] decrementing. badge before:', before ? before.getAttribute('data-count') : 'NO BADGE EL');
                             _decrementUnreadBadge(1);
+                            var after = document.getElementById('dm-unread-badge');
+                            console.log('[BADGE] decrement done. badge after:', after ? after.getAttribute('data-count') : 'NO BADGE EL');
+                        } else {
+                            console.warn('[BADGE] not decrementing. j=', j, 'res.ok=', res.ok);
                         }
                     })
-                    .catch(function() { /* leave row as unread on failure */ });
+                    .catch(function(err) { console.error('[BADGE] fetch error', err); });
             });
             var dot = headerEl.querySelector('.thread-dot');
             if (dot) { dot.innerHTML = '&#9675;'; dot.style.color = '#ccc'; }
