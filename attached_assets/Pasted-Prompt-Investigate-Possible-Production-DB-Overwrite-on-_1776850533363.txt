@@ -1,0 +1,146 @@
+Prompt — Investigate Possible Production DB Overwrite on Publish (Replit)
+Context
+We suspect that each time we publish changes to the live app, the database state from the preview / workspace environment may be overwriting the live (production) database.
+Observed symptom:
+
+Data that exists in the live app appears to revert after publishing updates, consistent with preview DB state being copied over.
+
+This is a high‑risk issue and must be investigated cautiously.
+
+Objective
+
+Verify whether production data is actually being overwritten on publish.
+Identify the mechanism causing this behavior (if confirmed).
+Implement a fix so that:
+
+Preview/dev database changes do NOT overwrite production data on publish.
+Production data persists across publishes.
+
+
+Do not risk further production data loss during investigation.
+
+
+Ground rules (non‑negotiable)
+
+❌ Do NOT intentionally modify, reset, re‑seed, or delete production data.
+❌ Do NOT run migrations or destructive scripts automatically.
+✅ Investigation must be read‑only until root cause is confirmed.
+✅ Keep all security hardening intact (cookies, CSRF, headers, auth).
+✅ No schema changes unless strictly required—and justify if needed.
+
+If any step risks mutating production data, stop and report first.
+
+Investigation checklist (must follow in order)
+1. Identify which database is used in each environment
+Confirm explicitly:
+
+What database file / connection string is used in:
+
+Preview / workspace
+Published app (production)
+
+
+Whether both environments point to:
+
+The same SQLite file (very likely in V1A), or
+Different DB instances
+
+
+
+Log:
+
+Absolute DB file paths
+Environment variables controlling DB location
+Any publish‑time copy or initialization logic
+
+
+2. Inspect publish lifecycle behavior
+Determine:
+
+Whether Replit publish:
+
+Copies workspace filesystem snapshot into production
+Replaces the production container entirely on each publish
+
+
+Whether database files inside the project directory are:
+
+Included in the snapshot
+Recreated/reset on each publish
+
+
+
+This is critical: SQLite files inside the repo are often overwritten on publish unless explicitly isolated.
+
+3. Look for DB initialization / seeding logic
+Search for any logic that runs on app start that:
+
+Creates tables
+Inserts default rows
+Seeds admin/test data
+Copies a “baseline” DB if one does not exist
+
+Confirm whether this logic:
+
+Runs every startup
+Runs on production publish
+Does not distinguish preview vs production
+
+Document findings without changing behavior yet.
+
+Fix strategy (choose only after confirmation)
+If preview DB is overwriting production DB, propose one of the following safe fixes:
+Option A — Separate database paths per environment (preferred)
+
+Use different DB locations for:
+
+preview/dev
+production
+
+
+Controlled via environment variable (DEPLOYMENT_ENV / FLASK_ENV)
+Production DB path must not live inside the versioned project snapshot.
+
+Option B — Externalize production DB
+
+Move production DB to:
+
+Replit Production Database
+Replit SQL Database (Postgres)
+
+
+Preview continues to use local SQLite.
+This cleanly prevents overwrite by design.
+
+Option C — Guard DB initialization logic
+
+Ensure any seeding or DB creation only runs:
+
+if DB does not already exist
+AND only in preview/dev
+
+
+Add explicit production safeguards.
+
+Do NOT implement any of these until you clearly confirm the root cause.
+
+Required output (must include)
+
+Confirmation: Is production DB being overwritten on publish? (Yes / No / Unclear)
+Evidence:
+
+file paths
+logs
+lifecycle explanation
+
+
+Root cause analysis
+Proposed fix (with rationale)
+Risk assessment (what data could be affected)
+Exact files touched (if/when fix is applied)
+How to validate safely (non‑destructive checks)
+
+
+Important reminder
+Replit explicitly treats published apps as fresh snapshots unless state is externalized. Databases stored inside the project directory are not safe for production persistence across publishes. [docs.replit.com], [shipai.dev]
+Treat this as a production‑data incident investigation, not a routine bug fix.
