@@ -1476,16 +1476,19 @@ def _safe_parse_persona_json(raw, study_id, model_id):
         cleaned = cleaned.strip()
 
     try:
-        return json.loads(cleaned)
+        return safe_json_loads(cleaned)
     except json.JSONDecodeError:
         pass
+    # safe_json_loads structural-cap rejection (depth/keys/byte cap) raises
+    # ValueError; let it propagate so the persona is rejected outright rather
+    # than silently falling through to subset/repair retries that won't help.
 
     first_brace = cleaned.find("{")
     last_brace = cleaned.rfind("}")
     if first_brace != -1 and last_brace > first_brace:
         subset = cleaned[first_brace:last_brace + 1]
         try:
-            return json.loads(subset)
+            return safe_json_loads(subset)
         except json.JSONDecodeError:
             pass
 
@@ -1493,7 +1496,7 @@ def _safe_parse_persona_json(raw, study_id, model_id):
         repaired = re.sub(r',\s*([\]}])', r'\1', subset)
         repaired = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', repaired)
         try:
-            return json.loads(repaired)
+            return safe_json_loads(repaired)
         except json.JSONDecodeError as e:
             excerpt = subset[:200] if len(subset) > 200 else subset
             print(
@@ -2251,7 +2254,7 @@ def _check_and_fix_name_plausibility(personas, study_dict, lisa_model_id):
         cleaned = (check_result or "").strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-        parsed = json.loads(cleaned)
+        parsed = safe_json_loads(cleaned)
         results = parsed.get("results", [])
         if not isinstance(results, list) or len(results) != len(personas):
             print(f"NAME_PLAUSIBILITY_PARSE_MISMATCH study={study_id} expected={len(personas)} got={len(results)}", flush=True)
@@ -2272,7 +2275,7 @@ def _check_and_fix_name_plausibility(personas, study_dict, lisa_model_id):
                     )
         if not any_fixed:
             print(f"NAME_PLAUSIBILITY_ALL_OK study={study_id} count={len(personas)}", flush=True)
-    except (json.JSONDecodeError, TypeError, KeyError) as e:
+    except (json.JSONDecodeError, TypeError, KeyError, ValueError) as e:
         print(f"NAME_PLAUSIBILITY_PARSE_FAIL study={study_id} err={e}", flush=True)
 
     return personas
@@ -2321,8 +2324,8 @@ _JSON_FIELD_LABELS = {
 
 def _json_to_prose(json_str):
     try:
-        obj = json.loads(json_str)
-    except (json.JSONDecodeError, TypeError):
+        obj = safe_json_loads(json_str)
+    except (json.JSONDecodeError, TypeError, ValueError):
         return None
     if not isinstance(obj, dict):
         return None
@@ -7635,9 +7638,9 @@ def run_ben_qa(study_dict):
     if "SIMULATED PLACEHOLDER" in output:
         if study_type == "synthetic_survey":
             try:
-                parsed = json.loads(output)
+                parsed = safe_json_loads(output)
                 n_insights = len(parsed.get("questions", []))
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError, ValueError):
                 n_insights = 3
             print(
                 f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision=DOWNGRADE"
@@ -7666,9 +7669,9 @@ def run_ben_qa(study_dict):
 
     if study_type == "synthetic_survey":
         try:
-            parsed = json.loads(output)
+            parsed = safe_json_loads(output)
             n_insights = len(parsed.get("questions", []))
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError, ValueError):
             n_insights = 3
         print(
             f"QA_DEBUG survey study={study_id_debug} question_count={q_count} questions_len={len(sq)} decision=PASS"
@@ -10184,7 +10187,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             if last_brace >= 0 and last_brace < len(cleaned) - 1:
                 cleaned = cleaned[: last_brace + 1]
 
-            parsed = json.loads(cleaned)
+            parsed = safe_json_loads(cleaned)
             output = json.dumps(parsed, indent=2)
             app.logger.info(f"Lisa LLM survey output generated for study {study_id}")
         except Exception as e:
