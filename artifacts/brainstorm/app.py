@@ -9639,7 +9639,14 @@ def run_study(study_id):
     #       automatically at COMMIT/ROLLBACK.
     try:
         conn.execute("BEGIN IMMEDIATE")
-        conn.execute("SELECT pg_advisory_xact_lock(?)", (int(user["id"]),))
+        # Two-key advisory lock isolates this lock domain from any other
+        # advisory-lock callers in the DB. Key1 = 57 (Task #57, the
+        # run-study idempotency domain); Key2 = user_id. The lock is
+        # transaction-scoped so it auto-releases on COMMIT/ROLLBACK.
+        conn.execute(
+            "SELECT pg_advisory_xact_lock(?, ?)",
+            (57, int(user["id"])),
+        )
         running_count = conn.execute(
             "SELECT COUNT(*) FROM studies WHERE user_id = ? AND status = 'running'",
             (user["id"],),
