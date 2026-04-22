@@ -71,11 +71,23 @@ _TABLES_WITH_ID = frozenset({
 # --------------------------------------------------------------------------
 
 def _translate_placeholders(sql: str) -> str:
-    """Replace ``?`` with ``%s`` outside of string literals.
+    """Translate SQLite-style SQL to a psycopg-safe parameter template.
 
-    Also escapes any literal ``%`` outside string literals to ``%%`` so
-    psycopg's parameter substitution doesn't misinterpret them.
+    Two passes:
+      1. Double every literal ``%`` (anywhere, including inside string
+         literals like ``'%foo%'``). psycopg parses ``%`` as a parameter
+         marker and will raise ``ProgrammingError`` on stray percents
+         even inside quoted literals -- so they must be escaped.
+      2. Replace ``?`` with ``%s`` *outside* of string literals (so
+         that ``WHERE name = '?'`` is left intact).
+
+    The doubled ``%%`` is collapsed back to ``%`` by psycopg before the
+    SQL is sent to the server, so ``LIKE '%foo%'`` round-trips correctly.
     """
+    # Pass 1: escape every % so psycopg won't parse it.
+    sql = sql.replace('%', '%%')
+
+    # Pass 2: replace ? with %s outside string literals.
     out: list[str] = []
     i = 0
     n = len(sql)
@@ -100,11 +112,6 @@ def _translate_placeholders(sql: str) -> str:
             continue
         if c == '?':
             out.append('%s')
-            i += 1
-            continue
-        if c == '%':
-            # Escape stray % so psycopg's %s/%(name)s parser ignores it.
-            out.append('%%')
             i += 1
             continue
         out.append(c)
@@ -321,6 +328,11 @@ class _PgConnection:
         # connection. Used to emulate ``cursor.lastrowid`` and the
         # ``SELECT last_insert_rowid()`` query.
         self._last_rowid: int | None = None
+        # Per-connection cache of which tables have an ``id`` column.
+        # Seeded from the static whitelist (fast path, zero round-trips
+        # for known tables) and grown lazily for any other table the
+        # caller INSERTs into.
+        self._has_id: dict[str, bool] = {t: True for t in _TABLES_WITH_ID}
 
     # -- statement classification ------------------------------------------
 
@@ -383,17 +395,46 @@ class _PgConnection:
         translated = _translate(s)
 
         # Auto-append RETURNING id for INSERTs into id-bearing tables so
-        # cursor.lastrowid works without changing call sites.
-        added_returning = False
+        # cursor.lastrowid works without changing call sites. Tables not
+        # in the static whitelist are probed lazily via a savepoint (so a
+        # missing column doesn't poison the outer transaction) and the
+        # result is cached for the rest of the connection's life.
+        params_tuple = tuple(params) if params else ()
         target = self._insert_target_table(translated)
-        if (
-            target in _TABLES_WITH_ID
+        wants_returning = (
+            target is not None
             and "RETURNING" not in translated.upper()
-        ):
+        )
+
+        if wants_returning and self._has_id.get(target, None) is None:
+            # Unknown table: probe via savepoint so a failure here can be
+            # rolled back without poisoning the caller's transaction.
+            probe_sql = translated.rstrip().rstrip(';') + " RETURNING id"
+            sp = self._raw.cursor()
+            sp.execute("SAVEPOINT _compat_probe")
+            try:
+                sp.execute(probe_sql, params_tuple)
+                try:
+                    row = sp.fetchone()
+                except Exception:
+                    row = None
+                sp.execute("RELEASE SAVEPOINT _compat_probe")
+                self._has_id[target] = True
+                if row is not None:
+                    self._last_rowid = row[0]
+                    return _PgCursor(sp, lastrowid=row[0])
+                return _PgCursor(sp, lastrowid=None)
+            except Exception:
+                self._has_id[target] = False
+                sp.execute("ROLLBACK TO SAVEPOINT _compat_probe")
+                sp.close()
+                # Fall through to the no-RETURNING execute below.
+
+        added_returning = False
+        if wants_returning and self._has_id.get(target):
             translated = translated.rstrip().rstrip(';') + " RETURNING id"
             added_returning = True
 
-        params_tuple = tuple(params) if params else ()
         cur = self._raw.cursor()
         cur.execute(translated, params_tuple)
 
