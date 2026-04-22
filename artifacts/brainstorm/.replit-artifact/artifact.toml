@@ -16,11 +16,8 @@ localPort = 24634
 [services.development]
 run = "FLASK_ENV=development python /home/runner/workspace/artifacts/brainstorm/app.py"
 
-[services.production.run]
-args = ["python", "artifacts/brainstorm/app.py"]
-
-[services.production.run.env]
-PORT = "24634"
+[services.production]
+run = "python artifacts/brainstorm/app.py"
 
 [services.env]
 PORT = "24634"
