@@ -3,3 +3,15 @@
 
 # No need to store the pnpm store twice.
 .local
+
+# Never ship the local SQLite DB or runtime logs to production. Production
+# uses managed Postgres via DATABASE_URL; including the file would (a) be
+# wasted bytes and (b) risk overwriting prod data on the first request if
+# the env var were ever unset.
+artifacts/brainstorm/brainstorm.db
+artifacts/brainstorm/brainstorm.db-shm
+artifacts/brainstorm/brainstorm.db-wal
+artifacts/brainstorm/audit.log
+artifacts/brainstorm/error.log
+artifacts/brainstorm/worker.log
+artifacts/brainstorm/data/messages.json

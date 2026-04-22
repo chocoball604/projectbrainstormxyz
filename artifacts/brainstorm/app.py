@@ -25,6 +25,7 @@ import os
 import sys
 import secrets
 import sqlite3
+import db_compat
 import time
 import uuid
 from datetime import datetime, timezone
@@ -2612,20 +2613,9 @@ PERSONA_DOSSIER_FIELDS = [
 
 
 def get_db():
-    conn = sqlite3.connect(
-        DB_PATH,
-        timeout=30,
-        check_same_thread=False,
-    )
-    conn.row_factory = sqlite3.Row
-
-    # FIX 3A: SQLite concurrency hardening
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA synchronous = NORMAL")
-    conn.execute("PRAGMA busy_timeout = 30000")
-
-    return conn
+    # Routes through db_compat: Postgres when DATABASE_URL is set, SQLite
+    # otherwise. The SQLite path keeps the original PRAGMA hardening.
+    return db_compat.connect(DB_PATH)
 
 
 def init_db():
@@ -5316,7 +5306,8 @@ def admin_reset_test_password():
             (new_hash, TEST_USER_EMAIL),
         )
         conn.execute(
-            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('test_user_password', ?)",
+            "INSERT INTO app_settings (key, value) VALUES ('test_user_password', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (new_pw,),
         )
         conn.commit()
@@ -5355,7 +5346,8 @@ def admin_update_quota():
     FREE_TIER_MONTHLY_LIMIT = new_limit
     conn = get_db()
     conn.execute(
-        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('monthly_study_limit', ?)",
+        "INSERT INTO app_settings (key, value) VALUES ('monthly_study_limit', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (str(new_limit),),
     )
     conn.commit()
@@ -5381,7 +5373,8 @@ def admin_set_email():
     conn = get_db()
     try:
         conn.execute(
-            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('admin_email', ?)",
+            "INSERT INTO app_settings (key, value) VALUES ('admin_email', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (email,),
         )
         conn.commit()

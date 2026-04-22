@@ -753,11 +753,14 @@ class Task59MiscBugsTests(unittest.TestCase):
     # ---- Bug 6: admin email persistence ---------------------------------
 
     def test_admin_set_email_persists_to_app_settings(self):
-        import sqlite3
+        # Routes through db_compat so the test queries the same backend the
+        # app is using (Postgres when DATABASE_URL is set, SQLite otherwise).
+        sys.path.insert(0, HERE)
+        import db_compat
         db_path = os.path.join(HERE, "brainstorm.db")
-        if not os.path.exists(db_path):
+        if not db_compat.IS_POSTGRES and not os.path.exists(db_path):
             self.skipTest(f"brainstorm.db not found at {db_path}")
-        conn = sqlite3.connect(db_path)
+        conn = db_compat.connect(db_path)
         try:
             row = conn.execute(
                 "SELECT value FROM app_settings WHERE key = 'admin_email'"
@@ -778,7 +781,7 @@ class Task59MiscBugsTests(unittest.TestCase):
             )
             self.assertIn(r.status_code, (200, 302),
                           f"admin/set-email returned {r.status_code}")
-            conn = sqlite3.connect(db_path)
+            conn = db_compat.connect(db_path)
             try:
                 row = conn.execute(
                     "SELECT value FROM app_settings WHERE key = 'admin_email'"
@@ -808,17 +811,18 @@ class Task59MiscBugsTests(unittest.TestCase):
             except requests.RequestException:
                 pass
             try:
-                conn = sqlite3.connect(db_path)
+                conn = db_compat.connect(db_path)
                 try:
                     conn.execute(
-                        "INSERT OR REPLACE INTO app_settings "
-                        "(key, value) VALUES ('admin_email', ?)",
+                        "INSERT INTO app_settings (key, value) "
+                        "VALUES ('admin_email', ?) "
+                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                         (prior_email,),
                     )
                     conn.commit()
                 finally:
                     conn.close()
-            except sqlite3.Error as exc:
+            except Exception as exc:
                 print(
                     f"WARN test_admin_set_email cleanup DB restore failed: {exc}",
                     flush=True,

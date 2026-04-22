@@ -157,10 +157,10 @@ def length_bucket(text):
 
 
 def _open():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 30000")
-    return conn
+    # Routes through db_compat: Postgres when DATABASE_URL is set, SQLite
+    # otherwise. PRAGMAs are no-ops on the PG path.
+    import db_compat
+    return db_compat.connect(DB_PATH)
 
 
 def record_step1_event(
