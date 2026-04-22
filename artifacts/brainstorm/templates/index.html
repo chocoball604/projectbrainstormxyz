@@ -4946,6 +4946,22 @@
                         <tr><td style="padding:3px 12px 3px 0;color:#777;">Password:</td><td><code>{{ test_user_password }}</code></td></tr>
                     </table>
                     <p style="font-size:11px;color:#999;margin-top:6px;">Log in with these credentials in a separate session to test without hitting usage limits.</p>
+                    <form action="/admin/reset-test-password" method="POST" style="margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;">{{ csrf_input() }}
+                        <input type="hidden" name="token" value="{{ token }}">
+                        <p style="font-size:12px;color:#555;margin:0 0 6px;font-weight:600;">Reset Test Account Password</p>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+                            <div>
+                                <label style="font-size:11px;color:#777;display:block;margin-bottom:2px;">New password</label>
+                                <input type="password" name="new_password" required minlength="6" maxlength="128" autocomplete="new-password" style="width:160px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px;color:#777;display:block;margin-bottom:2px;">Confirm new password</label>
+                                <input type="password" name="confirm_password" required minlength="6" maxlength="128" autocomplete="new-password" style="width:160px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-small" style="height:34px;" data-confirm="Reset the test account password? The new password will be displayed above and persisted across restarts.">Save</button>
+                        </div>
+                        <p style="font-size:11px;color:#999;margin-top:6px;">Min 6 characters. Persists across restarts.</p>
+                    </form>
                 </div>
             </div>
         </div>
@@ -4960,16 +4976,17 @@
                     Configure web sources for grounding trace. Active sources set admin_sources_configured and admin_sources_queried to true.
                 </p>
                 {% if admin_web_sources %}
-                <table style="margin-bottom: 20px;">
+                <input type="text" id="websources-search" placeholder="Search sources (name, URL, city, country, language, status)..." style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:8px;">
+                <table id="websources-table" class="pb-sortable-table" style="margin-bottom: 20px;" data-search-input="websources-search">
                     <thead>
                         <tr>
-                            <th>Name</th>
-                            <th>URL</th>
-                            <th>City</th>
-                            <th>Country</th>
-                            <th>Language</th>
-                            <th>Status</th>
-                            <th>Action</th>
+                            <th data-sort="string" style="cursor:pointer;user-select:none;">Name <span class="sort-ind"></span></th>
+                            <th data-sort="string" style="cursor:pointer;user-select:none;">URL <span class="sort-ind"></span></th>
+                            <th data-sort="string" style="cursor:pointer;user-select:none;">City <span class="sort-ind"></span></th>
+                            <th data-sort="string" style="cursor:pointer;user-select:none;">Country <span class="sort-ind"></span></th>
+                            <th data-sort="string" style="cursor:pointer;user-select:none;">Language <span class="sort-ind"></span></th>
+                            <th data-sort="string" style="cursor:pointer;user-select:none;">Status <span class="sort-ind"></span></th>
+                            <th data-sort="none">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -5044,15 +5061,16 @@
                     Upload global grounding documents. Active documents are included in all study reports. Allowed: {{ upload_allowed_extensions }}. Max {{ upload_max_file_size_mb }}MB per file.
                 </p>
                 {% if admin_uploads_list %}
-                <table style="margin-bottom: 20px; font-size: 13px;">
+                <input type="text" id="globaldocs-search" placeholder="Search documents (filename, type, status)..." style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:8px;">
+                <table id="globaldocs-table" class="pb-sortable-table" style="margin-bottom: 20px; font-size: 13px;" data-search-input="globaldocs-search">
                     <thead>
                         <tr>
-                            <th>Filename</th>
-                            <th>Type</th>
-                            <th>Size</th>
-                            <th>Uploaded</th>
-                            <th>Status</th>
-                            <th>Action</th>
+                            <th data-sort="string" style="cursor:pointer;user-select:none;">Filename <span class="sort-ind"></span></th>
+                            <th data-sort="string" style="cursor:pointer;user-select:none;">Type <span class="sort-ind"></span></th>
+                            <th data-sort="number" style="cursor:pointer;user-select:none;">Size <span class="sort-ind"></span></th>
+                            <th data-sort="string" style="cursor:pointer;user-select:none;">Uploaded <span class="sort-ind"></span></th>
+                            <th data-sort="string" style="cursor:pointer;user-select:none;">Status <span class="sort-ind"></span></th>
+                            <th data-sort="none">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -5060,7 +5078,7 @@
                         <tr>
                             <td>{{ au.filename }}</td>
                             <td><code>{{ au.file_type }}</code></td>
-                            <td>{{ (au.file_size_bytes / 1024)|round(1) }} KB</td>
+                            <td data-sort-value="{{ au.file_size_bytes }}">{{ (au.file_size_bytes / 1024)|round(1) }} KB</td>
                             <td style="font-size: 12px;">{{ au.uploaded_at }}</td>
                             <td>
                                 <span class="badge badge-{{ 'active' if au.status == 'active' else 'disabled' }}">{{ au.status }}</span>
@@ -5740,6 +5758,7 @@
 
 <script>
     var _adminToken = '{{ token }}';
+    var _csrfToken = '{{ csrf_token }}';
 
     function toggleAdminAcc(bodyId) {
         var body = document.getElementById(bodyId);
@@ -5781,7 +5800,7 @@
                 var fd = new FormData();
                 fd.append('msg_id', msgId);
                 fd.append('token', _adminToken);
-                fetch('/mark-message-read', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
+                fetch('/mark-message-read', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': _csrfToken }, body: fd })
                     .then(function(r) { return r.ok ? r.json() : null; })
                     .then(function(j) {
                         if (j && j.ok) {
@@ -5952,9 +5971,11 @@
                         fd.append('token', _adminToken);
                         fetch('/mark-message-read', {
                             method: 'POST',
-                            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': _csrfToken },
                             body: fd
-                        });
+                        }).then(function(r) { return r.ok ? r.json() : null; })
+                          .then(function(j) { if (j && j.ok) _decrementUnreadBadge(1); })
+                          .catch(function() {});
                         row.dataset.read = 'true';
                         row.style.fontWeight = '400';
                         row.style.background = '';
@@ -5966,10 +5987,78 @@
         });
     }
 
+    function _initSortableTable(tableId) {
+        var table = document.getElementById(tableId);
+        if (!table || table.dataset.sortableBound === '1') return;
+        table.dataset.sortableBound = '1';
+        var tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        var headers = table.querySelectorAll('thead th');
+        var sortState = { col: -1, dir: 1 };
+
+        function _cellSortValue(cell, type) {
+            if (cell.dataset.sortValue !== undefined) {
+                return type === 'number' ? parseFloat(cell.dataset.sortValue) || 0 : cell.dataset.sortValue.toLowerCase();
+            }
+            var txt = (cell.textContent || '').trim();
+            if (type === 'number') {
+                var n = parseFloat(txt.replace(/[^0-9.\-eE]/g, ''));
+                return isNaN(n) ? 0 : n;
+            }
+            return txt.toLowerCase();
+        }
+
+        function _applySort(colIdx, type) {
+            if (sortState.col === colIdx) sortState.dir *= -1;
+            else { sortState.col = colIdx; sortState.dir = 1; }
+            var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+            rows.sort(function(a, b) {
+                var av = _cellSortValue(a.cells[colIdx], type);
+                var bv = _cellSortValue(b.cells[colIdx], type);
+                if (av < bv) return -1 * sortState.dir;
+                if (av > bv) return 1 * sortState.dir;
+                return 0;
+            });
+            rows.forEach(function(r) { tbody.appendChild(r); });
+            headers.forEach(function(h, i) {
+                var ind = h.querySelector('.sort-ind');
+                if (ind) ind.textContent = (i === colIdx) ? (sortState.dir === 1 ? '\u25B2' : '\u25BC') : '';
+            });
+        }
+
+        headers.forEach(function(th, idx) {
+            var type = th.dataset.sort;
+            if (!type || type === 'none') return;
+            th.addEventListener('click', function() { _applySort(idx, type); });
+        });
+
+        var searchId = table.dataset.searchInput;
+        if (searchId) {
+            var input = document.getElementById(searchId);
+            if (input) {
+                input.addEventListener('input', function() {
+                    var q = (input.value || '').trim().toLowerCase();
+                    var rows = tbody.querySelectorAll('tr');
+                    rows.forEach(function(r) {
+                        if (!q) { r.style.display = ''; return; }
+                        var cells = r.querySelectorAll('td');
+                        var hit = false;
+                        for (var i = 0; i < cells.length - 1; i++) {
+                            if ((cells[i].textContent || '').toLowerCase().indexOf(q) !== -1) { hit = true; break; }
+                        }
+                        r.style.display = hit ? '' : 'none';
+                    });
+                });
+            }
+        }
+    }
+
     (function() {
         _bindAccForms();
         _bindDmRows();
         _bindAccLinks();
+        _initSortableTable('websources-table');
+        _initSortableTable('globaldocs-table');
 
         var composeForm = document.getElementById('dm-compose-form');
         if (composeForm) {

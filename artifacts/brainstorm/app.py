@@ -2921,6 +2921,13 @@ def init_db():
         ADMIN_EMAIL = (_saved_admin_email["value"] or "").strip()
         os.environ["ADMIN_EMAIL"] = ADMIN_EMAIL
         print(f"SETTINGS_LOAD: admin_email = {ADMIN_EMAIL!r}", flush=True)
+    global TEST_USER_PASSWORD
+    _saved_test_pw = conn.execute(
+        "SELECT value FROM app_settings WHERE key = 'test_user_password'"
+    ).fetchone()
+    if _saved_test_pw and (_saved_test_pw["value"] or "").strip():
+        TEST_USER_PASSWORD = _saved_test_pw["value"]
+        print("SETTINGS_LOAD: test_user_password loaded from app_settings", flush=True)
     test_row = conn.execute("SELECT id FROM users WHERE email = ?", (TEST_USER_EMAIL,)).fetchone()
     if not test_row:
         from werkzeug.security import generate_password_hash as _gph
@@ -5262,6 +5269,52 @@ def admin_change_password():
 
     ADMIN_PASSWORD = new_pw
     os.environ["ADMIN_PASSWORD"] = new_pw
+    return redirect(url_for("index", token=token))
+
+
+@app.route("/admin/reset-test-password", methods=["POST"])
+def admin_reset_test_password():
+    """Admin-only: reset the password of the built-in test account.
+
+    Persists the new password in `app_settings` (key `test_user_password`)
+    so it survives restarts, updates the user row's password_hash so the
+    test account can actually log in, and refreshes the in-memory
+    TEST_USER_PASSWORD global so the admin panel reflects the change.
+    """
+    global TEST_USER_PASSWORD
+    token = get_token()
+    _, is_admin = get_session_data(token)
+    if not is_admin:
+        return render_error("Admin access required.")
+
+    new_pw = (request.form.get("new_password") or "").strip()
+    confirm_pw = (request.form.get("confirm_password") or "").strip()
+
+    if not new_pw or len(new_pw) < 6:
+        return render_error("New password must be at least 6 characters.")
+    if len(new_pw) > 128:
+        return render_error("New password must be 128 characters or fewer.")
+    if new_pw != confirm_pw:
+        return render_error("New passwords do not match.")
+
+    from werkzeug.security import generate_password_hash as _gph
+    new_hash = _gph(new_pw)
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE email = ?",
+            (new_hash, TEST_USER_EMAIL),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('test_user_password', ?)",
+            (new_pw,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    TEST_USER_PASSWORD = new_pw
+    audit_log("test_password_reset", actor="admin")
     return redirect(url_for("index", token=token))
 
 
