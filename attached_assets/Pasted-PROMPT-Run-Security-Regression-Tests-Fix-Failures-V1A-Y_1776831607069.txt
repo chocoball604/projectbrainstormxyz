@@ -1,0 +1,55 @@
+PROMPT — Run Security Regression Tests & Fix Failures (V1A)
+You are working on Project Brainstorm V1A, a single page Flask + SQLite application preparing for beta/public release.
+Your task is to run the V1A security regression test suite and fix any failing tests without changing product behavior.
+What to run (mandatory)
+Run the security regression suite:
+python artifacts/brainstorm/test_security_v1a.py
+This suite encodes security invariants introduced under:
+•	Task #55 (Security Hardening)
+•	Task #56 (P1 batch: CSRF, cookies, headers, ProxyFix)
+•	Any completed follow ups that added tests to this file
+Your responsibilities
+1. Run the full suite
+•	Do not skip or comment out tests.
+•	Assume tests reflect intended behavior, not accidental behavior.
+2. If all tests pass
+•	Report ✅ “All security regression tests pass.”
+•	Do not make any code changes.
+3. If any test fails
+You must:
+•	Identify the root cause (logic bug, missing header, wrong status code, incorrect guard).
+•	Apply the smallest possible fix that restores the invariant.
+•	Prefer fixing shared helpers (e.g. response wrappers) over per route hacks.
+•	Re run the suite until 100% passing.
+Hard non negotiables (do not violate)
+•	❌ Do not change product behavior or UX flows.
+•	❌ Do not loosen security guarantees to “make tests pass”.
+•	❌ Do not change route payload shapes (request or response).
+•	❌ Do not modify Mark / Lisa / Ben logic or prompts.
+•	❌ Do not touch brainstorm_v1_replit_singlepage_pack/.
+•	❌ Do not add DB schema changes unless explicitly required by a test (and justify if you do).
+•	✅ Maintain: “Chat suggests. Fields decide. Users save.”
+•	✅ Maintain: No DB connection open during call_llm(), HTTP, or email.
+What these tests represent (important context)
+These tests are not feature tests. They assert security invariants, including (but not limited to):
+•	Authentication lockouts (429 + Retry After)
+•	CSRF rejection/acceptance
+•	Secure cookies and headers on every response
+•	Fail fast startup on insecure secrets
+•	XSS sanitization behavior
+•	Correct HTTP semantics on security failures
+If a test fails, it means a security guarantee was weakened or broken, even if the UI “looks fine”.
+Output format (required)
+When finished, respond with:
+1.	Test result summary 
+o	Passed / Failed
+2.	Failures fixed (if any) 
+o	Which test
+o	Root cause
+o	Fix applied (1–2 sentences)
+3.	Files changed
+4.	Confirmation 
+o	“Security regression suite passes cleanly.”
+Design intent reminder
+This suite exists to prevent silent security regressions during refactors and feature work.
+Your job is to restore guarantees, not reinterpret or relax them.
