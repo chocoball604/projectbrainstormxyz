@@ -36,26 +36,29 @@ import psycopg
 # session_replication_role=replica, but we still copy parents first to
 # keep the replication-role trick from being load-bearing for ordering.
 TABLES_IN_ORDER = [
+    # Parents (no FK dependencies)
     "users",
     "sessions",
     "app_settings",
     "allowed_models",
     "model_config",
     "admin_web_sources",
+    "admin_uploads",
     "blog_posts",
-    "studies",
-    "study_documents",
-    "personas",
-    "persona_model_pool",
     "chat_messages",
+    "cost_telemetry",
     "followups",
     "grounding_traces",
-    "user_uploads",
-    "cost_telemetry",
-    "step1_telemetry_events",
-    "model_health_status",
     "model_health_checks",
+    "model_health_status",
+    "persona_model_pool",
+    "step1_telemetry_events",
     "weekly_qa_reports",
+    # Children (depend on the above; ordered parents-first within this layer)
+    "personas",        # -> users
+    "studies",         # -> users
+    "user_uploads",    # -> users
+    "study_documents", # -> studies, user_uploads
 ]
 
 
@@ -177,18 +180,24 @@ def main() -> int:
         return 0
 
     # --- copy -----------------------------------------------------------------
+    # Neon (and most managed PG) doesn't grant the
+    # ``session_replication_role`` privilege, so we can't blanket-disable
+    # FK checks. Instead we rely on TABLES_IN_ORDER being topologically
+    # sorted: DELETE in reverse order (children first), INSERT in forward
+    # order (parents first). That keeps every intermediate state FK-valid.
     started = time.time()
-    with tgt.cursor() as tc:
-        tc.execute("SET session_replication_role = 'replica'")  # bypass FKs
+
+    if force:
+        for t in reversed([p[0] for p in plan]):
+            with tgt.cursor() as tc:
+                tc.execute(f"DELETE FROM {_quote_ident(t)}")
+        tgt.commit()
 
     copied_total = 0
     for t, cols, expected in plan:
         if expected == 0:
             print(f"  {t}: 0 rows (skip)")
             continue
-        if force:
-            with tgt.cursor() as tc:
-                tc.execute(f"DELETE FROM {_quote_ident(t)}")
 
         col_list = ", ".join(_quote_ident(c) for c in cols)
         select_sql = f"SELECT {col_list} FROM {_quote_ident(t)}"
@@ -202,12 +211,9 @@ def main() -> int:
                 for row in sc:
                     cp.write_row(row)
                     copied += 1
+        tgt.commit()
         copied_total += copied
         print(f"  {t}: {copied} rows copied")
-
-    with tgt.cursor() as tc:
-        tc.execute("SET session_replication_role = 'origin'")
-    tgt.commit()
 
     print(f"\nBumping sequences on target...")
     _bump_sequences(tgt)
