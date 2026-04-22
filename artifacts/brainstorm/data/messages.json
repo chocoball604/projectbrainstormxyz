@@ -260,5 +260,30 @@
     "sender_name": "TestAdmin",
     "recipient_type": "admin",
     "recipient_user_id": null
+  },
+  {
+    "id": "edd1977b83fb5cf3",
+    "timestamp": "2026-04-22 15:37:51",
+    "subject": "HELP ME",
+    "body": "HELP ME!!!!",
+    "category": "Other",
+    "read": true,
+    "sender_type": "user",
+    "sender_id": 9,
+    "sender_name": "TestAdmin",
+    "recipient_type": "admin",
+    "recipient_user_id": null
+  },
+  {
+    "id": "8c91c266c1ef466c",
+    "timestamp": "2026-04-22 15:39:06",
+    "subject": "Re: HELP ME",
+    "body": "NO sort it out yourself",
+    "category": "Other",
+    "read": false,
+    "sender_type": "admin",
+    "sender_id": null,
+    "recipient_type": "user",
+    "recipient_user_id": 9
   }
 ]
