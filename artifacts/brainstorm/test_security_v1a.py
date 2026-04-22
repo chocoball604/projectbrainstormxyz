@@ -790,6 +790,12 @@ class Task59MiscBugsTests(unittest.TestCase):
             self.assertEqual(row[0], marker,
                              "admin_email value did not persist to app_settings")
         finally:
+            # Direct DB restore — never trust HTTP for cleanup. A silent 302
+            # to /login (auth/csrf drift, autoscale instance churn, etc.)
+            # used to leave the test marker baked into brainstorm.db, and
+            # the next Publish snapshot would ship that test value as the
+            # production admin_email. Belt-and-suspenders: restore via the
+            # HTTP route AND overwrite the row directly on disk.
             try:
                 requests.post(
                     f"{self.base}/admin/set-email",
@@ -801,6 +807,22 @@ class Task59MiscBugsTests(unittest.TestCase):
                 )
             except requests.RequestException:
                 pass
+            try:
+                conn = sqlite3.connect(db_path)
+                try:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO app_settings "
+                        "(key, value) VALUES ('admin_email', ?)",
+                        (prior_email,),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+            except sqlite3.Error as exc:
+                print(
+                    f"WARN test_admin_set_email cleanup DB restore failed: {exc}",
+                    flush=True,
+                )
 
     def test_change_password_without_session_renders_error(self):
         # Regresses Task #59 bug 5: route must NOT silently 302 when unauthed.
