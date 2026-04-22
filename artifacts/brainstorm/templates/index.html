@@ -4946,7 +4946,7 @@
                         <tr><td style="padding:3px 12px 3px 0;color:#777;">Password:</td><td><code>{{ test_user_password }}</code></td></tr>
                     </table>
                     <p style="font-size:11px;color:#999;margin-top:6px;">Log in with these credentials in a separate session to test without hitting usage limits.</p>
-                    <form action="/admin/reset-test-password" method="POST" style="margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;">{{ csrf_input() }}
+                    <form id="reset-test-pw-form" action="/admin/reset-test-password" method="POST" data-ajax-bound="1" style="margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;">{{ csrf_input() }}
                         <input type="hidden" name="token" value="{{ token }}">
                         <p style="font-size:12px;color:#555;margin:0 0 6px;font-weight:600;">Reset Test Account Password</p>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
@@ -4958,8 +4958,9 @@
                                 <label style="font-size:11px;color:#777;display:block;margin-bottom:2px;">Confirm new password</label>
                                 <input type="password" name="confirm_password" required minlength="6" maxlength="128" autocomplete="new-password" style="width:160px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
                             </div>
-                            <button type="submit" class="btn btn-primary btn-small" style="height:34px;" data-confirm="Reset the test account password? The new password will be displayed above and persisted across restarts.">Save</button>
+                            <button type="submit" class="btn btn-primary btn-small" style="height:34px;">Save</button>
                         </div>
+                        <div id="reset-test-pw-msg" role="status" aria-live="polite" style="display:none;margin-top:8px;font-size:12px;padding:6px 10px;border-radius:6px;"></div>
                         <p style="font-size:11px;color:#999;margin-top:6px;">Min 6 characters. Persists across restarts.</p>
                     </form>
                 </div>
@@ -6053,10 +6054,67 @@
         }
     }
 
+    function _bindResetTestPwForm() {
+        var form = document.getElementById('reset-test-pw-form');
+        if (!form || form.dataset.resetPwBound === '1') return;
+        form.dataset.resetPwBound = '1';
+        var msg = document.getElementById('reset-test-pw-msg');
+        function _show(kind, text) {
+            if (!msg) return;
+            msg.textContent = text;
+            msg.style.display = 'block';
+            if (kind === 'error') {
+                msg.style.background = '#fef2f2';
+                msg.style.color = '#dc3545';
+                msg.style.border = '1px solid #fecaca';
+            } else {
+                msg.style.background = '#f0fdf4';
+                msg.style.color = '#15803d';
+                msg.style.border = '1px solid #bbf7d0';
+            }
+        }
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (msg) msg.style.display = 'none';
+            var newPw = (form.querySelector('[name="new_password"]') || {}).value || '';
+            var confirmPw = (form.querySelector('[name="confirm_password"]') || {}).value || '';
+            if (newPw.length < 6) { _show('error', 'New password must be at least 6 characters.'); return; }
+            if (newPw.length > 128) { _show('error', 'New password must be 128 characters or fewer.'); return; }
+            if (newPw !== confirmPw) { _show('error', 'New passwords do not match.'); return; }
+            var btn = form.querySelector('button[type="submit"]');
+            var origHTML = btn ? btn.innerHTML : '';
+            if (btn) { btn.innerHTML = '&#8987;'; btn.disabled = true; }
+            var fd = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': _csrfToken },
+                body: fd
+            }).then(function(r) {
+                return r.json().then(function(j) { return { status: r.status, body: j }; })
+                                .catch(function() { return { status: r.status, body: null }; });
+            }).then(function(res) {
+                if (btn) { btn.innerHTML = origHTML; btn.disabled = false; }
+                if (res.body && res.body.ok) {
+                    _show('ok', 'Test account password updated. New password: ' + (res.body.new_password || ''));
+                    form.reset();
+                    var pwCell = form.parentNode.querySelector('table code:last-of-type');
+                    if (pwCell && res.body.new_password) pwCell.textContent = res.body.new_password;
+                } else {
+                    var errText = (res.body && res.body.error) || ('Request failed (' + res.status + ').');
+                    _show('error', errText);
+                }
+            }).catch(function() {
+                if (btn) { btn.innerHTML = origHTML; btn.disabled = false; }
+                _show('error', 'Network error. Please try again.');
+            });
+        });
+    }
+
     (function() {
         _bindAccForms();
         _bindDmRows();
         _bindAccLinks();
+        _bindResetTestPwForm();
         _initSortableTable('websources-table');
         _initSortableTable('globaldocs-table');
 

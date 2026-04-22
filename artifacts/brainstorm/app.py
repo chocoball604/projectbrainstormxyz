@@ -5284,18 +5284,25 @@ def admin_reset_test_password():
     global TEST_USER_PASSWORD
     token = get_token()
     _, is_admin = get_session_data(token)
+    ajax = _is_ajax(request)
+
+    def _err(msg, status=400):
+        if ajax:
+            return jsonify({"ok": False, "error": msg}), status
+        return render_error(msg)
+
     if not is_admin:
-        return render_error("Admin access required.")
+        return _err("Admin access required.", 403)
 
     new_pw = (request.form.get("new_password") or "").strip()
     confirm_pw = (request.form.get("confirm_password") or "").strip()
 
     if not new_pw or len(new_pw) < 6:
-        return render_error("New password must be at least 6 characters.")
+        return _err("New password must be at least 6 characters.")
     if len(new_pw) > 128:
-        return render_error("New password must be 128 characters or fewer.")
+        return _err("New password must be 128 characters or fewer.")
     if new_pw != confirm_pw:
-        return render_error("New passwords do not match.")
+        return _err("New passwords do not match.")
 
     from werkzeug.security import generate_password_hash as _gph
     new_hash = _gph(new_pw)
@@ -5315,6 +5322,8 @@ def admin_reset_test_password():
 
     TEST_USER_PASSWORD = new_pw
     audit_log("test_password_reset", actor="admin")
+    if ajax:
+        return jsonify({"ok": True, "new_password": new_pw})
     return redirect(url_for("index", token=token))
 
 
