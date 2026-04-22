@@ -1,0 +1,111 @@
+Investigate Health Check FAIL for Models After Publish (Preview OK)
+Context
+After publishing the app live, the Health Check reports multiple models as FAIL, even though all models appear GOOD in the preview / workspace environment.
+Observed production error:
+
+⚠ Warning: 9 models have FAIL status:
+baidu/ernie-4.5-21b-a3b, deepseek/deepseek-chat-v3.1, google/gemini-2.5-flash, mistralai/mistral-small-3.1-24b-instruct, moonshotai/kimi-k2.5, qwen/qwen-plus, x-ai/grok-3-mini, xiaomi/mimo-v2-omni, z-ai/glm-4-32b
+These models will be excluded from persona generation.
+
+This mismatch occurs only after publish, not in preview.
+
+Your Objective
+Identify why models pass health checks in preview but fail in the published environment, and apply the smallest correct fix so production health checks reflect reality.
+Do not mask failures, disable health checks, or remove models to “silence” the warning.
+
+Mandatory Investigation Checklist
+1. Compare runtime environments (critical)
+Compare preview vs published deployment for:
+
+Environment variables / Secrets
+
+API keys (per‑provider)
+Org/project IDs
+Model allowlists / blocklists
+
+
+Deployment settings
+
+Autoscale vs VM vs Static
+Cold‑start vs warm behavior
+
+
+Network access differences
+
+outbound requests
+DNS resolution
+IPv6 / IPv4 differences
+
+
+
+Confirm whether Secrets configured in Workspace are missing in Deployments — Replit does not copy them automatically. Check the Deployments → Secrets panel explicitly.
+
+2. Inspect how “Health Check” is implemented
+Locate the health‑check logic and verify:
+
+What constitutes PASS vs FAIL
+Whether it:
+
+makes a real API call
+performs a dry‑run / metadata check
+times out aggressively
+
+
+Whether failures collapse multiple distinct causes into FAIL (e.g. 401, 403, network timeout, unsupported region)
+
+Explicitly log per‑model failure reasons in production logs.
+
+3. Check publish‑only failure modes (very common)
+Look specifically for:
+
+Missing API keys in production
+Rate limits triggered only in live
+Provider geo / region restrictions
+TLS / proxy differences
+Timeout thresholds too strict for cold start
+Health check running before Secrets load or before network is ready
+
+Verify whether health checks fire during startup (cold container) or after app readiness.
+
+4. Validate model inclusion logic
+Confirm that:
+
+Preview and production read from the same model registry config
+Production isn’t loading a stale snapshot
+Conditional logic (e.g. “exclude if health != OK”) isn’t firing too early due to startup ordering
+
+
+Fix Guidelines (non‑negotiable)
+✅ Apply minimal, principled fixes only
+✅ Preserve all security hardening
+✅ Preserve health checks (do not disable them)
+✅ Do not “assume OK” in production
+✅ Surface real failure reasons clearly
+Acceptable fixes include:
+
+Properly installing missing Secrets in Deployments
+Adjusting health‑check timing or readiness gating
+Differentiating “Not Yet Checked” vs “Fail”
+Logging meaningful provider‑specific error messages
+Aligning timeout thresholds with provider SLAs
+
+Unacceptable fixes:
+
+Blanket PASS in production
+Removing models without understanding cause
+Skipping health checks in publish
+Diverging preview vs production logic permanently
+
+
+Required Output
+When finished, report:
+
+Root cause(s) — why preview passes but production fails
+Evidence — logs, env diffs, or reproducible explanation
+Fix applied — concise description
+Files changed
+How to verify — steps to confirm production health now matches preview
+
+
+Reminder
+This issue is almost always an environmental divergence, not a model failure. Treat preview as a false sense of completeness until production is verified.
