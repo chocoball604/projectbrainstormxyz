@@ -1,0 +1,59 @@
+Option A: Migrate V1A from SQLite-on-disk to the attached Postgres (Production-safe)
+Why we’re doing this
+The app currently stores state in a local SQLite file inside the project directory. In Replit deployments, the published app is built from a snapshot of your workspace filesystem, and autoscale deployments are not compatible with local-disk state as a durable production database. We already have a managed Postgres attached via DATABASE_URL. 
+Goal: move all production persistence to Postgres so publishes don’t overwrite data and production state survives restarts/scaling.
+Scope
+Migrate persistence layer for all user-facing state currently stored in:
+•	SQLite file DB (users, sessions, studies, personas, settings, telemetry if applicable)
+•	Any JSON or file-based state that functions like a database (e.g., message history)
+Hard constraints (non-negotiable)
+•	Preserve all security hardening already shipped: secure cookies (pb_session), CSRF, security headers/CSP, ProxyFix, auth lockouts.
+•	Do not weaken security controls to “make migration easier.”
+•	Do not touch brainstorm_v1_replit_singlepage_pack/ and do not commit any database files.
+•	Keep the “never hold DB connection open during call_llm / HTTP / email” invariant.
+•	Avoid schema changes unless required by the migration; if you must add tables/columns, keep it minimal and justify it.
+•	Keep route payload shapes and page behavior consistent (no UX redesign as part of this task).
+What to implement (high-level, trust-your-judgment)
+1.	Postgres support
+Use DATABASE_URL if present and connect to Postgres; retain SQLite only as a local dev fallback.
+2.	Schema creation / initialization
+Ensure the Postgres schema matches current app needs. It must be safe to run repeatedly (idempotent).
+3.	One-time migration path
+Provide a safe, operator-run mechanism to migrate existing SQLite data into Postgres.
+o	Prefer a script or CLI command over a public route.
+o	It should be safe to re-run (no destructive overwrites without intent).
+o	It should print row counts / simple checks.
+4.	Cutover
+In deployment (where DATABASE_URL exists), the app must use Postgres as the single source of truth.
+5.	Remove reliance on local “state files”
+If any production-critical state is stored in files (e.g., messages), move it to Postgres or make it explicitly non-production.
+Output & reporting requirements (must follow)
+Before coding, output a short “Plan of Attack” with:
+•	What data entities are being migrated (tables / state areas)
+•	Any schema changes required (if any)
+•	How the migration will be run
+•	Rollback strategy (how to revert safely if needed)
+After implementation, output:
+•	Files changed
+•	What changed (brief)
+•	How to run migration (exact command)
+•	How to verify success (step-by-step checklist)
+Acceptance criteria / tests (must pass)
+Data persistence
+•	Create a user, create a study, save anchors, refresh: data persists.
+•	Redeploy/publish: data persists (no overwrite).
+•	Restart instance (or simulate): data persists.
+Security invariants still hold
+•	CSRF still blocks state changes without token.
+•	Cookie auth still works; URL token fallback remains only for legacy links.
+•	Security headers still present.
+Functional smoke tests
+•	Login/signup works.
+•	Portal/dashboard loads.
+•	Create a new study flow works.
+•	Messages still work (and persist).
+If anything breaks, fix it without weakening security.
+ 
+Notes (important)
+•	Replit’s docs explicitly describe production databases as the durable store for published apps; do not rely on filesystem persistence for production data.
+•	Autoscale deployments scale and restart; treat local disk as ephemeral for production persistence.
