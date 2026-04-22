@@ -1100,25 +1100,34 @@ class Task59MiscBugsTests(unittest.TestCase):
         # Regresses Task #57 P2 (T4): two concurrent /run-study POSTs
         # for the same draft must result in exactly one winner; the
         # loser must get 409 (idempotency), not silently double-run.
-        import sqlite3
+        # Also regresses the post-Postgres-cutover bug where
+        # ``BEGIN IMMEDIATE`` raised SyntaxError on PG and made *every*
+        # /run-study call 500 — db_compat now rewrites it to plain
+        # ``BEGIN`` and the per-user concurrency cap is enforced via a
+        # ``pg_advisory_xact_lock`` instead of SQLite's write-lock.
         import threading
-        db_path = os.path.join(HERE, "brainstorm.db")
-        if not os.path.exists(db_path):
-            self.skipTest(f"brainstorm.db not found at {db_path}")
+        try:
+            import psycopg
+        except ImportError:
+            self.skipTest("psycopg not installed; cannot exercise PG path")
+        dsn = os.environ.get("DATABASE_URL")
+        if not dsn:
+            self.skipTest("DATABASE_URL not set; cannot exercise PG path")
         s, csrf = self._login_test_user()
         uid = self._test_user_id()
-        conn = sqlite3.connect(db_path)
-        try:
-            cur = conn.execute(
+
+        # Insert a draft directly into PG so we don't need to drive the
+        # full UI flow just to set status/qa_status.
+        title = "task57-race-" + uuid.uuid4().hex[:6]
+        with psycopg.connect(dsn, autocommit=True) as pgc:
+            row = pgc.execute(
                 "INSERT INTO studies (user_id, title, study_type, status, "
-                "qa_status, created_at) VALUES (?, ?, ?, 'draft', "
-                "'precheck_passed', datetime('now'))",
-                (uid, "task57-race-" + uuid.uuid4().hex[:6], "qual"),
-            )
-            study_id = cur.lastrowid
-            conn.commit()
-        finally:
-            conn.close()
+                "qa_status, created_at) VALUES (%s, %s, %s, 'draft', "
+                "'precheck_passed', NOW()) RETURNING id",
+                (uid, title, "qual"),
+            ).fetchone()
+            study_id = row[0]
+
         try:
             results = []
             lock = threading.Lock()
@@ -1135,7 +1144,7 @@ class Task59MiscBugsTests(unittest.TestCase):
                             "X-Requested-With": "XMLHttpRequest",
                         },
                         allow_redirects=False,
-                        timeout=30,
+                        timeout=60,
                     )
                     with lock:
                         results.append(rr.status_code)
@@ -1146,18 +1155,23 @@ class Task59MiscBugsTests(unittest.TestCase):
             t1 = threading.Thread(target=_fire)
             t2 = threading.Thread(target=_fire)
             t1.start(); t2.start()
-            t1.join(timeout=45); t2.join(timeout=45)
+            t1.join(timeout=90); t2.join(timeout=90)
             self.assertEqual(len(results), 2,
                              f"both /run-study threads must complete: {results}")
+            # Critical assertion: one POST must lose the race and get 409.
+            # The winner may return any status (the actual study run may
+            # fail downstream because this is a synthetic empty draft —
+            # we don't care, we only care that the loser was rejected
+            # without double-running).
             self.assertIn(409, results,
                           f"one of the parallel /run-study calls must return 409: {results}")
+            # And we must NOT have crashed with a 500 from the old
+            # ``BEGIN IMMEDIATE`` SyntaxError on PG.
+            self.assertNotIn(500, results,
+                             f"/run-study must not 500 on PG: {results}")
         finally:
-            conn = sqlite3.connect(db_path)
-            try:
-                conn.execute("DELETE FROM studies WHERE id = ?", (study_id,))
-                conn.commit()
-            finally:
-                conn.close()
+            with psycopg.connect(dsn, autocommit=True) as pgc:
+                pgc.execute("DELETE FROM studies WHERE id = %s", (study_id,))
 
 
 if __name__ == "__main__":

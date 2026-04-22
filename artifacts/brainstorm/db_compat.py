@@ -163,6 +163,23 @@ def _translate_alter_add(sql: str) -> str:
 
 _INSERT_OR_IGNORE_RE = re.compile(r"\bINSERT\s+OR\s+IGNORE\s+INTO\b", re.IGNORECASE)
 
+# SQLite uses ``BEGIN IMMEDIATE`` (and the variant ``BEGIN IMMEDIATE
+# TRANSACTION``) to acquire a write-lock at transaction start. Postgres has
+# no such modifier — every transaction can read freely and acquires row
+# locks as it writes. Translate to plain ``BEGIN`` so legacy call sites
+# don't crash with a SyntaxError; per-row / per-key serialization on PG
+# is the caller's responsibility (e.g. ``SELECT pg_advisory_xact_lock(?)``
+# or ``SELECT ... FOR UPDATE``).
+_BEGIN_IMMEDIATE_RE = re.compile(
+    r"^\s*BEGIN\s+IMMEDIATE(\s+TRANSACTION)?\s*;?\s*$", re.IGNORECASE
+)
+
+
+def _translate_begin_immediate(sql: str) -> str:
+    if _BEGIN_IMMEDIATE_RE.match(sql):
+        return "BEGIN"
+    return sql
+
 
 def _translate_insert_or_ignore(sql: str) -> str:
     if not _INSERT_OR_IGNORE_RE.search(sql):
@@ -185,6 +202,7 @@ def _translate(sql: str) -> str:
     sql = _translate_autoinc(sql)
     sql = _translate_alter_add(sql)
     sql = _translate_insert_or_ignore(sql)
+    sql = _translate_begin_immediate(sql)
     return sql
 
 

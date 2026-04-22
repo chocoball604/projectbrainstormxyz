@@ -9622,12 +9622,24 @@ def run_study(study_id):
             return jsonify({"ok": False, "error": "You must select a study type before running the study."}), 400
         return render_error("You must select a study type before running the study.")
 
-    # Atomic flip draft -> running with concurrency cap. SQLite serializes
-    # writes inside a single BEGIN IMMEDIATE transaction, so two concurrent
-    # /run-study POSTs cannot both succeed on the same draft. The rowcount
-    # check below tells us whether *we* won the race; the loser returns 409.
+    # Atomic flip draft -> running with per-user concurrency cap.
+    #
+    # Two race conditions to defend against:
+    #   (1) Same draft, two clicks: both POSTs read status='draft', both
+    #       try UPDATE. Postgres' row-level lock during UPDATE serializes
+    #       this; the loser's UPDATE matches 0 rows and we return 409
+    #       below from the rowcount check.
+    #   (2) Different drafts, two clicks from same user already at the
+    #       running cap: both POSTs read running_count=N (under PG's
+    #       default READ COMMITTED, neither sees the other's pending
+    #       UPDATE), both pass the cap check, both flip to running.
+    #       Defended by a per-user advisory transaction lock that
+    #       serializes the count + flip section across all of this user's
+    #       concurrent /run-study calls. The lock is released
+    #       automatically at COMMIT/ROLLBACK.
     try:
         conn.execute("BEGIN IMMEDIATE")
+        conn.execute("SELECT pg_advisory_xact_lock(?)", (int(user["id"]),))
         running_count = conn.execute(
             "SELECT COUNT(*) FROM studies WHERE user_id = ? AND status = 'running'",
             (user["id"],),
