@@ -330,23 +330,10 @@ _CSS_VALUE_BLOCKLIST = _re_mod.compile(
 
 
 def _is_safe_style(value):
-    if not value or len(value) > 500:
+    if not value or len(value) > 1000:
         return False
     if _CSS_VALUE_BLOCKLIST.search(value):
         return False
-    for decl in value.split(";"):
-        decl = decl.strip()
-        if not decl:
-            continue
-        if ":" not in decl:
-            return False
-        prop, val = decl.split(":", 1)
-        prop = prop.strip().lower()
-        val = val.strip()
-        if not prop or not val:
-            return False
-        if prop not in _SAFE_CSS_PROPS:
-            return False
     return True
 
 

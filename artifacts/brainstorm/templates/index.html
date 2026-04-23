@@ -6285,9 +6285,14 @@
         var node = null;
         if (sel && sel.rangeCount) node = sel.anchorNode;
         if (!node || !editor.contains(node)) {
-            dd.options[0].textContent = 'Size';
-            dd.selectedIndex = 0;
-            return;
+            // Selection left the editor — keep last shown value rather than
+            // resetting to "Size" placeholder. Try saved range as fallback.
+            if (_blogSavedRange) {
+                node = _blogSavedRange.startContainer;
+                if (!node || !editor.contains(node)) return;
+            } else {
+                return;
+            }
         }
         if (node.nodeType === 3) node = node.parentNode;
         var sizePx = null;
