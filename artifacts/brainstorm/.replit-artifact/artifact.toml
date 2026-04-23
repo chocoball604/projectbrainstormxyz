@@ -25,5 +25,8 @@ args = ["python", "artifacts/brainstorm/app.py"]
 [services.production.run.env]
 PORT = "24634"
 
+[services.production.health.startup]
+path = "/healthz"
+
 [services.env]
 PORT = "24634"

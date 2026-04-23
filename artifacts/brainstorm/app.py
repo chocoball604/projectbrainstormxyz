@@ -422,6 +422,11 @@ def __health():
     return jsonify({"status": "ok", "service": "brainstorm_flask"})
 
 
+@app.route("/healthz")
+def healthz():
+    return jsonify({"status": "ok", "service": "brainstorm_flask"}), 200
+
+
 VALID_LANGS = {"en", "zh-Hans", "zh-Hant", "ja", "ko", "th"}
 
 
