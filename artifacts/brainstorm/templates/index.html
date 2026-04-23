@@ -6255,11 +6255,29 @@
 
     function blogSetFontSize(size) {
         if (!size) return;
-        if (!blogRestoreSelection()) return;
+        var dd = document.getElementById('blog-font-size-select');
+        if (!blogRestoreSelection()) {
+            if (dd) dd.selectedIndex = 0;
+            return;
+        }
         var sel = window.getSelection();
-        if (!sel.rangeCount) return;
+        if (!sel.rangeCount) { if (dd) dd.selectedIndex = 0; return; }
         var range = sel.getRangeAt(0);
-        if (range.collapsed) return;
+        if (range.collapsed) { if (dd) dd.selectedIndex = 0; return; }
+        // Strip any inline font-size on descendants of the range so the new
+        // wrapper isn't shadowed by inner spans setting their own size.
+        var ed = document.getElementById('blog-editor');
+        if (ed) {
+            var inner = ed.querySelectorAll('[style*="font-size"]');
+            for (var k = 0; k < inner.length; k++) {
+                var el = inner[k];
+                if (range.intersectsNode && range.intersectsNode(el) &&
+                    range.commonAncestorContainer.contains(el)) {
+                    el.style.fontSize = '';
+                    if (!el.getAttribute('style')) el.removeAttribute('style');
+                }
+            }
+        }
         var span = document.createElement('span');
         span.style.fontSize = size + 'px';
         try {
@@ -6274,6 +6292,9 @@
         newRange.selectNodeContents(span);
         sel.addRange(newRange);
         _blogSavedRange = newRange.cloneRange();
+        // Reset dropdown to placeholder so picking the SAME size next time
+        // still fires onchange. Indicator will refresh placeholder text.
+        if (dd) dd.selectedIndex = 0;
         blogUpdateFontSizeIndicator();
     }
 
@@ -6295,30 +6316,20 @@
             }
         }
         if (node.nodeType === 3) node = node.parentNode;
+        // Use the computed font-size of the element so unit conversions
+        // (pt -> px, em -> px, %) reflect what the browser ACTUALLY renders.
+        // Inline 'font-size: 12pt' computes to '16px' on a default DPI, etc.
         var sizePx = null;
-        var walk = node;
-        while (walk && walk !== editor && walk.nodeType === 1) {
-            if (walk.style && walk.style.fontSize) {
-                sizePx = walk.style.fontSize;
-                break;
-            }
-            walk = walk.parentNode;
+        if (node && node.nodeType === 1) {
+            try { sizePx = window.getComputedStyle(node).fontSize; } catch (e) {}
         }
-        if (!sizePx) {
-            try { sizePx = window.getComputedStyle(editor).fontSize; } catch (e) { sizePx = '14px'; }
-        }
-        var px = parseInt(sizePx, 10);
-        var matched = -1;
-        for (var i = 1; i < dd.options.length; i++) {
-            if (parseInt(dd.options[i].value, 10) === px) { matched = i; break; }
-        }
-        if (matched >= 0) {
-            dd.options[0].textContent = 'Size';
-            dd.selectedIndex = matched;
-        } else {
-            dd.options[0].textContent = px ? (px + 'px') : 'Size';
-            dd.selectedIndex = 0;
-        }
+        if (!sizePx) sizePx = '14px';
+        var px = Math.round(parseFloat(sizePx));
+        // Always keep the dropdown at index 0 so picking any value (even one
+        // matching the current size) fires onchange. Show current size as the
+        // placeholder text on option[0].
+        dd.options[0].textContent = px ? (px + ' \u25BE') : 'Size';
+        dd.selectedIndex = 0;
     }
 
     (function() {
