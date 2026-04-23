@@ -298,6 +298,7 @@ def _p1_security_after_request(response):
 import re as _re_mod
 from markupsafe import Markup
 import bleach as _bleach
+from bleach.css_sanitizer import CSSSanitizer as _CSSSanitizer
 
 _BLEACH_ALLOWED_TAGS = [
     "p", "br", "h1", "h2", "h3", "h4", "h5", "h6",
@@ -315,6 +316,48 @@ _BLEACH_ALLOWED_ATTRS = {
 }
 _BLEACH_ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
 
+_SAFE_CSS_PROPS = {
+    "font-size", "color", "background-color",
+    "font-weight", "font-style",
+    "text-decoration", "text-decoration-line", "text-decoration-color",
+    "text-align",
+}
+_BLEACH_CSS_SANITIZER = _CSSSanitizer(allowed_css_properties=sorted(_SAFE_CSS_PROPS))
+_SAFE_STYLE_TAGS = {"span", "div", "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "ul", "ol", "blockquote"}
+_CSS_VALUE_BLOCKLIST = _re_mod.compile(
+    r"(url\s*\(|expression\s*\(|javascript:|@import|<|>)", _re_mod.IGNORECASE
+)
+
+
+def _is_safe_style(value):
+    if not value or len(value) > 500:
+        return False
+    if _CSS_VALUE_BLOCKLIST.search(value):
+        return False
+    for decl in value.split(";"):
+        decl = decl.strip()
+        if not decl:
+            continue
+        if ":" not in decl:
+            return False
+        prop, val = decl.split(":", 1)
+        prop = prop.strip().lower()
+        val = val.strip()
+        if not prop or not val:
+            return False
+        if prop not in _SAFE_CSS_PROPS:
+            return False
+    return True
+
+
+def _bleach_attr_filter(tag, name, value):
+    allowed = _BLEACH_ALLOWED_ATTRS.get(tag, [])
+    if name in allowed:
+        return True
+    if name == "style" and tag in _SAFE_STYLE_TAGS:
+        return _is_safe_style(value)
+    return False
+
 
 @app.template_filter("sanitize_html")
 def _sanitize_html(text):
@@ -323,8 +366,9 @@ def _sanitize_html(text):
     return _bleach.clean(
         str(text),
         tags=_BLEACH_ALLOWED_TAGS,
-        attributes=_BLEACH_ALLOWED_ATTRS,
+        attributes=_bleach_attr_filter,
         protocols=_BLEACH_ALLOWED_PROTOCOLS,
+        css_sanitizer=_BLEACH_CSS_SANITIZER,
         strip=True,
     )
 

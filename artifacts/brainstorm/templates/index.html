@@ -5573,7 +5573,7 @@
                         <label for="blog-body">Post Body</label>
                         <div style="border:1px solid #ccc;border-radius:6px;overflow:hidden;">
                             <div id="blog-toolbar" style="display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;background:#f0f0f0;border-bottom:1px solid #ccc;align-items:center;">
-                                <select onmousedown="blogSaveSelection()" onchange="blogSetFontSize(this.value);this.selectedIndex=0;" style="padding:2px 4px;font-size:12px;border:1px solid #bbb;border-radius:3px;cursor:pointer;" title="Font size">
+                                <select id="blog-font-size-select" onmousedown="blogSaveSelection()" onchange="if(this.value){blogSetFontSize(this.value);}" style="padding:2px 4px;font-size:12px;border:1px solid #bbb;border-radius:3px;cursor:pointer;min-width:60px;" title="Font size of the current selection">
                                     <option value="">Size</option>
                                     <option value="10">10</option>
                                     <option value="11">11</option>
@@ -5603,7 +5603,12 @@
                     </div>
                     <div class="form-group">
                         <label for="blog-image">Thumbnail Image (optional, PNG/JPG, max 2MB){% if blog_draft and blog_error %} <span style="color:#c0392b;font-size:12px;">— image not retained, please re-select</span>{% endif %}</label>
-                        <input type="file" id="blog-image" name="blog_image" accept=".png,.jpg,.jpeg">
+                        <input type="file" id="blog-image" name="blog_image" accept=".png,.jpg,.jpeg" onchange="blogPreviewImage(this)">
+                        <div id="blog-image-preview-wrap" style="margin-top:8px;display:none;">
+                            <img id="blog-image-preview" alt="Thumbnail preview" style="max-width:220px;max-height:160px;border:1px solid #ddd;border-radius:6px;display:block;background:#fafafa;">
+                            <div id="blog-image-preview-caption" style="font-size:11px;color:#777;margin-top:4px;"></div>
+                            <button type="button" id="blog-image-clear-btn" onclick="blogClearImagePreview()" style="display:none;margin-top:6px;padding:3px 10px;font-size:11px;border:1px solid #c0392b;color:#c0392b;background:#fff;border-radius:4px;cursor:pointer;">Clear selection</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="blog-status">Status</label>
@@ -6250,8 +6255,6 @@
 
     function blogSetFontSize(size) {
         if (!size) return;
-        // Selection was saved on the <select>'s mousedown before the dropdown
-        // stole focus. Restore it here.
         if (!blogRestoreSelection()) return;
         var sel = window.getSelection();
         if (!sel.rangeCount) return;
@@ -6262,8 +6265,6 @@
         try {
             range.surroundContents(span);
         } catch (e) {
-            // surroundContents fails when the selection crosses element
-            // boundaries — fall back to extract+wrap.
             var frag = range.extractContents();
             span.appendChild(frag);
             range.insertNode(span);
@@ -6273,6 +6274,87 @@
         newRange.selectNodeContents(span);
         sel.addRange(newRange);
         _blogSavedRange = newRange.cloneRange();
+        blogUpdateFontSizeIndicator();
+    }
+
+    function blogUpdateFontSizeIndicator() {
+        var dd = document.getElementById('blog-font-size-select');
+        var editor = document.getElementById('blog-editor');
+        if (!dd || !editor) return;
+        var sel = window.getSelection();
+        var node = null;
+        if (sel && sel.rangeCount) node = sel.anchorNode;
+        if (!node || !editor.contains(node)) {
+            dd.options[0].textContent = 'Size';
+            dd.selectedIndex = 0;
+            return;
+        }
+        if (node.nodeType === 3) node = node.parentNode;
+        var sizePx = null;
+        var walk = node;
+        while (walk && walk !== editor && walk.nodeType === 1) {
+            if (walk.style && walk.style.fontSize) {
+                sizePx = walk.style.fontSize;
+                break;
+            }
+            walk = walk.parentNode;
+        }
+        if (!sizePx) {
+            try { sizePx = window.getComputedStyle(editor).fontSize; } catch (e) { sizePx = '14px'; }
+        }
+        var px = parseInt(sizePx, 10);
+        var matched = -1;
+        for (var i = 1; i < dd.options.length; i++) {
+            if (parseInt(dd.options[i].value, 10) === px) { matched = i; break; }
+        }
+        if (matched >= 0) {
+            dd.options[0].textContent = 'Size';
+            dd.selectedIndex = matched;
+        } else {
+            dd.options[0].textContent = px ? (px + 'px') : 'Size';
+            dd.selectedIndex = 0;
+        }
+    }
+
+    (function() {
+        var editor = document.getElementById('blog-editor');
+        if (!editor) return;
+        editor.addEventListener('keyup', blogUpdateFontSizeIndicator);
+        editor.addEventListener('mouseup', blogUpdateFontSizeIndicator);
+        editor.addEventListener('focus', blogUpdateFontSizeIndicator);
+        document.addEventListener('selectionchange', function() {
+            var s = window.getSelection();
+            if (s && s.rangeCount && editor.contains(s.anchorNode)) {
+                blogUpdateFontSizeIndicator();
+            }
+        });
+    })();
+
+    function blogPreviewImage(input) {
+        var wrap = document.getElementById('blog-image-preview-wrap');
+        var img = document.getElementById('blog-image-preview');
+        var cap = document.getElementById('blog-image-preview-caption');
+        var clr = document.getElementById('blog-image-clear-btn');
+        if (!wrap || !img) return;
+        var f = input.files && input.files[0];
+        if (!f) { wrap.style.display = 'none'; return; }
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            img.src = e.target.result;
+            if (cap) cap.textContent = f.name + ' (' + Math.round(f.size / 1024) + ' KB) — will replace any existing image on save';
+            if (clr) clr.style.display = 'inline-block';
+            wrap.style.display = 'block';
+        };
+        reader.readAsDataURL(f);
+    }
+
+    function blogClearImagePreview() {
+        var input = document.getElementById('blog-image');
+        var wrap = document.getElementById('blog-image-preview-wrap');
+        var clr = document.getElementById('blog-image-clear-btn');
+        if (input) input.value = '';
+        if (wrap) wrap.style.display = 'none';
+        if (clr) clr.style.display = 'none';
     }
 
     var _blogEditId = null;
@@ -6302,6 +6384,21 @@
                 document.getElementById('blog-edit-id').textContent = p.id;
                 document.getElementById('blog-edit-title-label').textContent = p.title;
                 document.getElementById('blog-edit-banner').style.display = 'block';
+                var imgInput = document.getElementById('blog-image');
+                if (imgInput) imgInput.value = '';
+                var wrap = document.getElementById('blog-image-preview-wrap');
+                var imgEl = document.getElementById('blog-image-preview');
+                var capEl = document.getElementById('blog-image-preview-caption');
+                var clrBtn = document.getElementById('blog-image-clear-btn');
+                if (p.image_path && wrap && imgEl) {
+                    imgEl.src = '/static/blog/' + p.image_path;
+                    if (capEl) capEl.textContent = 'Current image — select a new file above to replace it';
+                    if (clrBtn) clrBtn.style.display = 'none';
+                    wrap.style.display = 'block';
+                } else if (wrap) {
+                    wrap.style.display = 'none';
+                }
+                blogUpdateFontSizeIndicator();
                 document.getElementById('blog-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
             })
             .catch(function(err) { alert('Error loading post: ' + err); });
@@ -6318,6 +6415,8 @@
         document.getElementById('blog-pin-checkbox').checked = false;
         document.getElementById('blog-pin-rank-group').style.display = 'none';
         document.getElementById('blog-edit-banner').style.display = 'none';
+        blogClearImagePreview();
+        blogUpdateFontSizeIndicator();
     }
 </script>
 

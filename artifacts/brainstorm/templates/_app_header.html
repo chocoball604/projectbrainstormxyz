@@ -94,6 +94,8 @@
                     <span id="dm-unread-badge" data-count="{{ dm_unread_count }}" style="position:absolute;top:-6px;right:-12px;background:#dc3545;color:#fff;font-size:10px;font-weight:700;border-radius:50%;min-width:16px;height:16px;align-items:center;justify-content:center;padding:0 4px;display:{% if dm_unread_count > 0 %}inline-flex{% else %}none{% endif %};">{{ dm_unread_count }}</span>
                 </a>
                 <span>|</span>
+                <a href="/blog?token={{ token }}">Blog / News</a>
+                <span>|</span>
                 <span>Admin Panel</span>
                 <form action="/logout" method="POST" class="logout-form">{{ csrf_input() }}
                     <input type="hidden" name="token" value="{{ token }}">
