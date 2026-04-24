@@ -129,8 +129,8 @@
             {% endif %}
             <select class="lang-selector" aria-label="Language" id="lang-selector">
                 <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
-                <option value="zh-Hans"{% if lang == 'zh-Hans' %} selected{% endif %}>CN-Simplified简</option>
-                <option value="zh-Hant"{% if lang == 'zh-Hant' %} selected{% endif %}>CN-Traditional繁</option>
+                <option value="zh-Hans" disabled>CN-Simplified简 (coming soon)</option>
+                <option value="zh-Hant" disabled>CN-Traditional繁 (coming soon)</option>
             </select>
             {% if not logged_in %}
             <a href="/?show_auth_tab=login">Login</a>
@@ -145,8 +145,8 @@
             {% endif %}
             <select class="lang-selector" aria-label="Language" id="lang-selector">
                 <option value="en"{% if lang == 'en' %} selected{% endif %}>English</option>
-                <option value="zh-Hans"{% if lang == 'zh-Hans' %} selected{% endif %}>CN-Simplified简</option>
-                <option value="zh-Hant"{% if lang == 'zh-Hant' %} selected{% endif %}>CN-Traditional繁</option>
+                <option value="zh-Hans" disabled>CN-Simplified简 (coming soon)</option>
+                <option value="zh-Hant" disabled>CN-Traditional繁 (coming soon)</option>
             </select>
             {% if not logged_in %}
             <a href="/?show_auth_tab=login">Login</a>

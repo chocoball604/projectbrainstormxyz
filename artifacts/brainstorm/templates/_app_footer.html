@@ -1,0 +1,87 @@
+{% set _ftoken = token if token is defined else None %}
+<style>
+    .site-footer {
+        background: #1a1a2e;
+        color: rgba(255, 255, 255, 0.6);
+        text-align: center;
+        padding: 24px 20px;
+        font-size: 11px;
+        line-height: 1.6;
+        margin-top: 40px;
+    }
+    .site-footer a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+    }
+    .site-footer a:hover { text-decoration: underline; }
+    .site-footer .footer-links {
+        margin-top: 8px;
+    }
+    .site-footer .footer-links a { margin: 0 8px; }
+    .site-footer .footer-disclaimer {
+        margin-top: 10px;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.45);
+        max-width: 700px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .site-footer .footer-liability {
+        margin-top: 8px;
+        font-size: 9px;
+        color: rgba(255, 255, 255, 0.35);
+        max-width: 700px;
+        margin-left: auto;
+        margin-right: auto;
+        text-transform: uppercase;
+    }
+
+    @media (max-width: 720px) {
+        .site-footer {
+            padding: 20px 14px 24px;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-top: 24px;
+        }
+        .site-footer .footer-links {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .site-footer .footer-links a {
+            margin: 0;
+            font-size: 14px;
+            padding: 6px 10px;
+            min-height: 36px;
+            display: inline-flex;
+            align-items: center;
+        }
+        .site-footer .footer-disclaimer {
+            margin-top: 14px;
+            font-size: 12px;
+            line-height: 1.55;
+            padding: 0 4px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        .site-footer .footer-liability {
+            margin-top: 12px;
+            font-size: 10px;
+            line-height: 1.5;
+            padding: 0 4px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+    }
+</style>
+
+<div class="site-footer">
+    &copy; Project Brainstorm 2026. All rights reserved.
+    <div class="footer-links">
+        <a href="{{ url_for('terms_page', token=_ftoken) if _ftoken else url_for('terms_page') }}">Terms of Service</a>
+        <a href="{{ url_for('privacy_page', token=_ftoken) if _ftoken else url_for('privacy_page') }}">Privacy Policy</a>
+        <a href="{{ url_for('disclaimer_page', token=_ftoken) if _ftoken else url_for('disclaimer_page') }}">Disclaimer</a>
+    </div>
+    <div class="footer-disclaimer">Experimental Platform Notice: Project Brainstorm is an experimental AI powered simulation platform. Outputs are synthetic, probabilistic, and provided for informational purposes only. Do not rely on them as professional advice.</div>
+    <div class="footer-liability">TO THE MAXIMUM EXTENT PERMITTED BY LAW, PROJECT BRAINSTORM AND ALL ASSOCIATED PERSONS SHALL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, EXEMPLARY, OR PUNITIVE DAMAGES.</div>
+</div>
