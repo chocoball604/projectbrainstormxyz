@@ -1,0 +1,75 @@
+Context: You are working on Project Brainstorm V1A, a single-page Flask app. The beta site is already live. Your task is front-end layout and responsive behavior only for:
+1.	Landing page (desktop redesign to match new copy + wireframe)
+2.	Landing page + Blog index + Blog post pages (mobile redesign to be readable and disciplined)
+Inputs you will be shown (treat as source of truth):
+•  New landing page copy: landingpage writeup (english) V2
+•  New landing page desktop wireframe: Brainstorm landingpage wireframe 
+•  Workflow diagram asset: Brainstorm workflow (or the final diagram PDF) 
+
+A) Deliverable 1 — Landing page (Desktop)
+Goal: Update the landing page to match the new text and desktop wireframe layout.
+What to accomplish (end state):
+•	Desktop layout follows the wireframe: Above the fold uses a left/right split (approx 60/40) for the copy blocks; Below the fold places the workflow diagram and blog links in the lower section. [landingpag...nglish) V2 | Word]
+•	The above-the-fold copy must use the new wording exactly (from the provided V2 doc) and keep the same headings/sections. [landingpag...nglish) V2 | Word]
+•	The workflow diagram appears below the fold as shown in wireframe; it must remain readable (don’t let it become an illegible thumbnail). [landingpag...nglish) V2 | Word], [Brainstorm...wireframe | PDF]
+•	The header and footer remain in the existing format (do not redesign them). [landingpag...nglish) V2 | Word]
+Critical constraints:
+•	Do not change database code, routes, or server logic.
+•	Do not change any existing button/link destinations or behaviors (Sign Up, Login, Blog index, blog posts, Terms/Privacy, etc.). Preserve all existing URLs and forms.
+•	Styling/layout changes are allowed; behavior changes are not.
+•	Do not remove existing elements; reposition and restyle only.
+B) Deliverable 2 — Responsive Mobile behavior (Landing + Blog)
+Goal: Make the landing page, blog index, and blog post pages work well on mobile screens without breaking existing navigation or templates.
+Landing page (Mobile)
+End state:
+•	Convert the desktop left/right layout into a single-column mobile layout with readable spacing and sensible typography.
+•	Preserve epistemic order on mobile: 
+1.	Headline + short intro
+2.	“What this beta is for”
+3.	“What it is not”
+4.	“Beta V1A intentionally stops…” sentence
+5.	“Typical uses”
+6.	“Why this is a beta”
+7.	“Request beta access” CTA
+8.	Workflow diagram (see below)
+9.	Blog links
+•	The workflow diagram should not render as a tiny illegible image on mobile. Implement an “expand to inspect” pattern: 
+o	Show a small/contained preview + a clear “View workflow diagram” action
+o	Tapping opens an overlay/lightbox/modal for full-size viewing
+o	Must be easy to close and must not break scrolling
+Blog index (Mobile)
+End state:
+•	Mobile blog index becomes a clean single-column list: 
+o	One pinned/top item more prominent (title + short excerpt)
+o	Remaining items as simpler cards/rows
+•	Keep all blog links working exactly as they do now.
+Blog post page (Mobile)
+End state:
+•	Improve mobile readability: 
+o	Comfortable line-height, margins, font sizing
+o	Images scale to screen width
+o	No horizontal scrolling
+•	Do not change post content or URLs.
+C) Non-goals / Don’t touch
+•	Don’t alter authentication flows, sessions, or any forms.
+•	Don’t alter database schema or data.
+•	Don’t add new backend endpoints.
+•	Don’t introduce new external JS frameworks.
+•	Don’t change existing nav structure beyond CSS-driven responsive behavior.
+D) Implementation guidance (lightweight)
+•	Prefer CSS media queries and minimal template changes.
+•	Keep desktop and mobile unified under the same templates where possible.
+•	Ensure performance is not degraded (avoid heavy JS; modal can be simple).
+•	Verify: 
+o	Desktop: looks like the wireframe at typical viewport sizes
+o	Mobile: no overflow, no broken tap targets, no unreadable diagram
+o	All existing buttons/links still work
+o	Security hardening remains in place
+E) Acceptance checklist (you must verify before finishing)
+1.	Desktop landing page matches the wireframe structure and uses the new copy. [landingpag...nglish) V2 | Word], [landingpag...nglish) V2 | Word]
+2.	Mobile landing page is single-column, readable, and preserves section order. [landingpag...nglish) V2 | Word]
+3.	Workflow diagram is inspectable on mobile via lightbox/modal and remains legible. [Brainstorm...wireframe | PDF], [landingpag...nglish) V2 | Word]
+4.	Blog index and blog post pages are mobile-readable without changing URLs or content.
+5.	No database changes; no broken links; no broken login/signup.
+•  Do not rename any routes, templates, ids, or classes that are referenced by existing JS. (You can add classes; don’t break selectors.) 
+•  After changes, manually smoke-test: landing page (desktop+mobile), blog index, one blog post, login, signup, language selector (if present), and footer links.
