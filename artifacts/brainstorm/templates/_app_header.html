@@ -79,6 +79,83 @@
         cursor: pointer;
     }
     .header .lang-selector option { color: #333; background: #fff; }
+
+    /* Hamburger toggle: hidden on desktop, shown on mobile */
+    .header-toggle {
+        display: none;
+        background: transparent;
+        border: 1px solid var(--pb-lightgrey);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 18px;
+        line-height: 1;
+        color: var(--pb-text);
+        cursor: pointer;
+    }
+    .header-toggle:focus-visible {
+        outline: 2px solid var(--pb-grey, #888);
+        outline-offset: 2px;
+    }
+
+    @media (max-width: 720px) {
+        .header {
+            padding: 10px 12px;
+            gap: 8px;
+            position: sticky;
+        }
+        .brand-lockup img { height: 28px; width: 28px; }
+        .brand-wordmark { font-size: 15px; }
+        .brand-cn { margin-left: 0.25em; }
+
+        .header-toggle { display: inline-flex; align-items: center; justify-content: center; }
+
+        /* Collapse the action group into a dropdown panel anchored to the header */
+        .header-right {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--pb-white);
+            border-bottom: 1px solid var(--pb-lightgrey);
+            box-shadow: 0 6px 14px rgba(0,0,0,0.08);
+            padding: 8px 14px 12px;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0;
+            z-index: 99;
+        }
+        .header-right.is-open { display: flex; }
+        .header-right span { display: none; } /* hide "|" separators */
+        .header-right a {
+            display: block;
+            padding: 12px 4px;
+            font-size: 15px;
+            opacity: 1;
+            border-bottom: 1px solid var(--pb-lightgrey);
+        }
+        .header-right a:last-child { border-bottom: none; }
+        .header-right .btn-header {
+            display: inline-block;
+            align-self: flex-start;
+            margin-top: 10px;
+            padding: 10px 18px;
+            font-size: 14px;
+            border-bottom: none;
+        }
+        .header-right .lang-selector {
+            align-self: flex-start;
+            margin: 10px 0;
+            font-size: 14px;
+            padding: 6px 8px;
+        }
+        .header-right .logout-form {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--pb-lightgrey);
+        }
+        .header-right .logout-form button { width: 100%; padding: 10px; font-size: 14px; }
+    }
 </style>
 
 <div class="header">
@@ -86,7 +163,8 @@
         <img src="/static/brand/enso_logo_256.png" alt="Project Brainstorm logo" onerror="this.style.display='none'">
         <span class="brand-wordmark"{% if current_section == 'app' %} id="brand-wordmark"{% endif %}><span class="brand-en">Project Brainstorm</span><span class="brand-cn">集思計劃</span></span>
     </div>
-    <div class="header-right">
+    <button type="button" class="header-toggle" aria-controls="appHeaderRight" aria-expanded="false" aria-label="Open menu" onclick="(function(b){var r=document.getElementById('appHeaderRight');if(!r)return;var open=r.classList.toggle('is-open');b.setAttribute('aria-expanded',open?'true':'false');b.setAttribute('aria-label',open?'Close menu':'Open menu');b.innerHTML=open?'&#x2715;':'&#9776;';})(this)">&#9776;</button>
+    <div class="header-right" id="appHeaderRight">
         {% if current_section == 'app' %}
             {% if is_admin %}
                 <a href="#acc-messages" onclick="toggleAdminAcc('acc-messages-body');document.getElementById('acc-messages').scrollIntoView({behavior:'smooth'});return false;" style="position: relative; cursor:pointer;">
