@@ -142,34 +142,45 @@
             .container { margin: 18px auto; padding: 0 14px; }
             .page-title { font-size: 20px; margin-bottom: 16px; }
 
-            /* Pinned/first card: more prominent, vertical with title + date */
+            /* Default (non-pinned): compact horizontal row — smaller thumb, title + date */
             .post-card {
-                flex-direction: column;
-                gap: 10px;
-                padding: 16px;
-                margin-bottom: 12px;
+                flex-direction: row;
+                gap: 12px;
+                padding: 12px;
+                margin-bottom: 10px;
+                align-items: center;
             }
+            .post-card h2 {
+                font-size: 15px;
+                line-height: 1.35;
+                margin-bottom: 4px;
+            }
+            .post-card .post-date { font-size: 12px; }
+            .post-thumbnail {
+                width: 88px;
+                height: 64px;
+                border-radius: 6px;
+                flex-shrink: 0;
+            }
+
+            /* Pinned / first card: hero treatment — vertical, large image */
             .post-card.pinned {
+                flex-direction: column;
+                align-items: stretch;
                 border-left: none;
                 border-top: 4px solid #f59e0b;
-                padding-top: 14px;
+                padding: 14px 16px 16px;
+                gap: 10px;
+            }
+            .post-card.pinned .post-thumbnail {
+                width: 100%;
+                height: 180px;
+                border-radius: 8px;
             }
             .post-card.pinned h2 {
                 font-size: 18px;
                 line-height: 1.3;
             }
-            .post-card h2 {
-                font-size: 16px;
-                line-height: 1.35;
-            }
-            .post-card .post-date { font-size: 12px; }
-
-            .post-thumbnail {
-                width: 100%;
-                height: 140px;
-                border-radius: 8px;
-            }
-            .post-card.pinned .post-thumbnail { height: 180px; }
 
             .pagination { gap: 8px; }
             .pagination a { padding: 8px 12px; font-size: 14px; min-height: 40px; }
