@@ -1121,9 +1121,12 @@
                             <div class="landing-flow-frame">
                                 <img
                                     src="/static/flow_en.png"
-                                    alt="Project Brainstorm research workflow: Mark frames, Lisa executes, Ben guards quality"
+                                    alt="Project Brainstorm research workflow: Mark frames, Lisa executes, Ben guards quality. Activate to enlarge."
                                     class="landing-flow"
+                                    role="button"
+                                    tabindex="0"
                                     onclick="openFlowLightbox(); return false;"
+                                    onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); openFlowLightbox();}"
                                 />
                                 <button
                                     type="button"
