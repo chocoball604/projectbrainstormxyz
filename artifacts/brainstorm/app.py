@@ -3522,7 +3522,7 @@ def index():
             "landing.html",
             error=error,
             show_auth_tab=show_auth_tab,
-            latest_blog_posts=get_latest_blog_posts(2),
+            latest_blog_posts=get_latest_blog_posts(3),
         )
 
     verify_redirect = require_verified_user(token, user, is_admin)
@@ -4239,7 +4239,7 @@ def index():
         user_storage_used=user_storage_used,
         user_storage_cap_mb=user_storage_cap_mb,
         user_storage_cap=UPLOAD_USER_STORAGE_CAP,
-        latest_blog_posts=get_latest_blog_posts(2),
+        latest_blog_posts=get_latest_blog_posts(3),
         dm_view=dm_view,
         dm_messages_list=dm_messages_list,
         dm_page=dm_page,
@@ -11903,7 +11903,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
             "landing.html",
             error=message,
             show_auth_tab=show_tab,
-            latest_blog_posts=get_latest_blog_posts(2),
+            latest_blog_posts=get_latest_blog_posts(3),
         )
     pending_users = []
     all_users = []
@@ -12058,7 +12058,7 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         user_storage_used=0,
         user_storage_cap_mb=UPLOAD_USER_STORAGE_CAP // (1024 * 1024),
         user_storage_cap=UPLOAD_USER_STORAGE_CAP,
-        latest_blog_posts=get_latest_blog_posts(2),
+        latest_blog_posts=get_latest_blog_posts(3),
         dm_unread_count=0,
         dm_messages_list=[],
         dm_page=1,
