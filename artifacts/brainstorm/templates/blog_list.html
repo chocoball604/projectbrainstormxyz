@@ -163,23 +163,31 @@
                 flex-shrink: 0;
             }
 
-            /* Pinned / first card: hero treatment — vertical, large image */
-            .post-card.pinned {
+            /* Pinned OR first card: hero treatment — vertical, large image, excerpt visible */
+            .post-card.pinned,
+            .post-card.first-card {
                 flex-direction: column;
                 align-items: stretch;
-                border-left: none;
-                border-top: 4px solid #f59e0b;
                 padding: 14px 16px 16px;
                 gap: 10px;
             }
-            .post-card.pinned .post-thumbnail {
+            .post-card.pinned { border-left: none; border-top: 4px solid #f59e0b; }
+            .post-card.pinned .post-thumbnail,
+            .post-card.first-card .post-thumbnail {
                 width: 100%;
                 height: 180px;
                 border-radius: 8px;
             }
-            .post-card.pinned h2 {
+            .post-card.pinned h2,
+            .post-card.first-card h2 {
                 font-size: 18px;
                 line-height: 1.3;
+            }
+            .post-excerpt {
+                font-size: 14px;
+                line-height: 1.5;
+                color: #555;
+                margin-top: 6px;
             }
 
             .pagination { gap: 8px; }
@@ -201,7 +209,7 @@
 
     {% if posts %}
         {% for post in posts %}
-        <div class="post-card{% if post.is_pinned %} pinned{% endif %}">
+        <div class="post-card{% if post.is_pinned %} pinned{% endif %}{% if loop.first %} first-card{% endif %}">
             {% if post.image_path %}
             <img src="/static/blog/{{ post.image_path }}" alt="{{ post.title }}" class="post-thumbnail">
             {% else %}
@@ -210,6 +218,12 @@
             <div class="post-content">
                 <h2><a href="/blog/{{ post.id }}{% if token %}?token={{ token }}{% endif %}">{{ post.title }}</a>{% if post.is_pinned %}<span class="pin-badge">Pinned</span>{% endif %}</h2>
                 <div class="post-date">{{ post.created_at }}</div>
+                {% if loop.first and post.body %}
+                    {% set _excerpt = post.body | striptags %}
+                    {% if _excerpt %}
+                    <p class="post-excerpt">{{ _excerpt[:180] }}{% if _excerpt|length > 180 %}&hellip;{% endif %}</p>
+                    {% endif %}
+                {% endif %}
             </div>
         </div>
         {% endfor %}
