@@ -84,6 +84,53 @@
             margin-left: 0;
             list-style-position: inside;
         }
+        .post-body img { max-width: 100%; height: auto; }
+
+        @media (max-width: 720px) {
+            .container { margin: 14px auto; padding: 0 12px; }
+            .post-article {
+                padding: 18px 16px;
+                border-radius: 8px;
+            }
+            .post-article h1 {
+                font-size: 22px;
+                line-height: 1.25;
+            }
+            .post-date { font-size: 12px; }
+            .post-image { max-height: 220px; }
+
+            .post-body {
+                font-size: 15px;
+                line-height: 1.65;
+                color: #333;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+            }
+            .post-body p, .post-body li { font-size: 15px; line-height: 1.65; }
+            .post-body h1 { font-size: 21px; }
+            .post-body h2 { font-size: 19px; }
+            .post-body h3 { font-size: 17px; }
+            .post-body img {
+                max-width: 100% !important;
+                width: auto !important;
+                height: auto !important;
+                display: block;
+                margin: 12px auto;
+            }
+            .post-body table,
+            .post-body pre {
+                display: block;
+                max-width: 100%;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .post-body iframe,
+            .post-body video {
+                max-width: 100%;
+                height: auto;
+            }
+            .back-link { font-size: 14px; min-height: 40px; }
+        }
     </style>
 </head>
 <body>

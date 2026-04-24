@@ -369,6 +369,321 @@
                 font-weight: 500;
             }
             {% endif %}
+
+            /* ====== V2 English landing layout ====== */
+            .landing-v2 {
+                background: #f5f7fa;
+                padding: 32px 36px;
+                border-radius: 12px;
+            }
+            .landing-v2 .landing-hero h1 {
+                font-size: 28px;
+                font-weight: 700;
+                margin: 0 0 8px;
+                line-height: 1.2;
+            }
+            .landing-v2 .landing-subhead {
+                font-size: 17px;
+                font-weight: 600;
+                color: #333;
+                margin: 0 0 14px;
+            }
+            .landing-v2 .landing-intro {
+                font-size: 15px;
+                line-height: 1.55;
+                margin: 0 0 24px;
+            }
+            .landing-v2 h2 {
+                font-size: 18px;
+                font-weight: 700;
+                margin: 0 0 8px;
+            }
+            .landing-v2 ul {
+                margin: 0 0 12px;
+                padding-left: 22px;
+            }
+            .landing-v2 li {
+                font-size: 15px;
+                line-height: 1.55;
+                margin-bottom: 4px;
+            }
+            .landing-v2 p {
+                font-size: 15px;
+                line-height: 1.55;
+                margin: 0 0 8px;
+            }
+            .landing-v2 .landing-fornot-grid {
+                display: grid;
+                grid-template-columns: 60% 40%;
+                gap: 28px;
+                margin-bottom: 18px;
+                align-items: start;
+            }
+            .landing-v2 .landing-note {
+                font-style: italic;
+                color: #444;
+                margin: 6px 0 22px;
+                padding: 10px 14px;
+                background: #fff;
+                border-left: 3px solid var(--pb-accent);
+                border-radius: 4px;
+            }
+            .landing-v2 .landing-block {
+                margin-bottom: 22px;
+            }
+            .landing-v2 .landing-cta-block {
+                display: grid;
+                grid-template-columns: 1fr auto;
+                gap: 24px;
+                align-items: center;
+                background: #fff;
+                padding: 18px 22px;
+                border-radius: 10px;
+                margin-bottom: 28px;
+            }
+            .landing-v2 .landing-cta-text h2 { margin-bottom: 4px; }
+            .landing-v2 .landing-cta-text p { margin: 0; }
+            .landing-v2 .landing-signup-btn {
+                display: inline-block;
+                background: #27ae60;
+                color: #fff;
+                text-decoration: none;
+                padding: 13px 24px;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: 700;
+                white-space: nowrap;
+                transition: background 0.2s;
+            }
+            .landing-v2 .landing-signup-btn:hover { background: #219a52; }
+
+            /* Below-the-fold: workflow + thinking */
+            .landing-v2 .landing-belowfold {
+                display: grid;
+                grid-template-columns: 65% 35%;
+                gap: 28px;
+                margin-top: 18px;
+                padding-top: 24px;
+                border-top: 1px solid #e2e8f0;
+                align-items: start;
+            }
+            .landing-v2 .landing-flow-frame {
+                background: #fff;
+                border-radius: 10px;
+                padding: 14px;
+                position: relative;
+            }
+            .landing-v2 .landing-flow {
+                display: block;
+                width: 100%;
+                height: auto;
+                max-width: 100%;
+            }
+            .landing-v2 .landing-flow-expand {
+                display: none; /* desktop: not needed */
+                margin-top: 8px;
+                padding: 9px 14px;
+                background: #fff;
+                color: var(--pb-accent);
+                border: 1px solid var(--pb-accent);
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                width: 100%;
+                min-height: 42px;
+            }
+            .landing-v2 .landing-flow-expand:hover {
+                background: var(--pb-accent);
+                color: #fff;
+            }
+            .landing-v2 .landing-flow-caption {
+                font-size: 13px;
+                font-style: italic;
+                color: #555;
+                margin: 10px 4px 0;
+                text-align: center;
+            }
+            .landing-v2 .landing-thinking-col {
+                background: #fff;
+                border-radius: 10px;
+                padding: 18px 20px;
+            }
+            .landing-v2 .landing-thinking-title {
+                font-size: 18px;
+                font-weight: 700;
+                margin-bottom: 10px;
+            }
+            .landing-v2 .landing-thinking-lead {
+                display: block;
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--pb-accent);
+                text-decoration: none;
+                margin-bottom: 6px;
+            }
+            .landing-v2 .landing-thinking-lead:hover { text-decoration: underline; }
+            .landing-v2 .landing-thinking-excerpt {
+                font-size: 14px;
+                line-height: 1.5;
+                color: #555;
+                margin: 0 0 16px;
+            }
+            .landing-v2 .landing-thinking-cards {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+                margin-bottom: 14px;
+            }
+            .landing-v2 .landing-thinking-card {
+                display: block;
+                text-decoration: none;
+                color: inherit;
+                background: #f5f7fa;
+                border-radius: 8px;
+                padding: 8px;
+                transition: background 0.2s;
+            }
+            .landing-v2 .landing-thinking-card:hover { background: #e8eef3; }
+            .landing-v2 .landing-thinking-thumb {
+                width: 100%;
+                height: 64px;
+                object-fit: cover;
+                border-radius: 4px;
+                margin-bottom: 6px;
+            }
+            .landing-v2 .landing-thinking-thumb-placeholder {
+                background: linear-gradient(135deg, #d4dde2, #a2a2a2);
+            }
+            .landing-v2 .landing-thinking-card h3 {
+                font-size: 13px;
+                font-weight: 600;
+                line-height: 1.35;
+                margin: 0;
+                color: var(--pb-text);
+            }
+            .landing-v2 .landing-thinking-index {
+                display: block;
+                font-size: 12px;
+                color: var(--pb-accent);
+                text-decoration: none;
+                font-weight: 600;
+                text-align: right;
+            }
+            .landing-v2 .landing-thinking-index:hover { text-decoration: underline; }
+
+            /* Workflow lightbox (used on mobile, available on all) */
+            .flow-lightbox {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.85);
+                z-index: 300;
+                padding: 24px;
+                overflow: auto;
+                align-items: flex-start;
+                justify-content: center;
+            }
+            .flow-lightbox[aria-hidden="false"],
+            .flow-lightbox.active {
+                display: flex;
+            }
+            .flow-lightbox-img {
+                width: auto;
+                max-width: 100%;
+                height: auto;
+                background: #fff;
+                border-radius: 6px;
+                margin-top: 24px;
+            }
+            .flow-lightbox-close {
+                position: fixed;
+                top: 14px;
+                right: 18px;
+                background: rgba(0,0,0,0.6);
+                color: #fff;
+                border: none;
+                width: 44px;
+                height: 44px;
+                border-radius: 50%;
+                font-size: 28px;
+                line-height: 1;
+                cursor: pointer;
+                z-index: 301;
+            }
+            .flow-lightbox-close:hover { background: rgba(0,0,0,0.85); }
+            body.flow-lightbox-open { overflow: hidden; }
+
+            /* ====== Mobile (≤720px) ====== */
+            @media (max-width: 720px) {
+                .landing-content { padding: 16px 12px 28px; }
+                .landing-content-inner { max-width: 100%; }
+
+                .landing-v2 {
+                    padding: 18px 16px;
+                    border-radius: 8px;
+                }
+                .landing-v2 .landing-hero h1 { font-size: 24px; }
+                .landing-v2 .landing-subhead { font-size: 16px; }
+                .landing-v2 .landing-intro,
+                .landing-v2 p,
+                .landing-v2 li {
+                    font-size: 15px;
+                    line-height: 1.6;
+                }
+                .landing-v2 h2 { font-size: 17px; }
+
+                /* Single column for the for/not split and CTA */
+                .landing-v2 .landing-fornot-grid,
+                .landing-v2 .landing-cta-block,
+                .landing-v2 .landing-belowfold {
+                    grid-template-columns: 1fr;
+                    gap: 16px;
+                }
+                .landing-v2 .landing-cta-block {
+                    text-align: center;
+                    padding: 16px;
+                }
+                .landing-v2 .landing-signup-btn {
+                    display: block;
+                    width: 100%;
+                    text-align: center;
+                    min-height: 46px;
+                    padding: 14px 18px;
+                }
+
+                /* Mobile workflow: thumbnail + expand button */
+                .landing-v2 .landing-flow-frame {
+                    padding: 10px;
+                }
+                .landing-v2 .landing-flow {
+                    max-height: 180px;
+                    object-fit: contain;
+                    object-position: center;
+                }
+                .landing-v2 .landing-flow-expand { display: block; }
+
+                .landing-v2 .landing-thinking-col { padding: 14px; }
+                .landing-v2 .landing-thinking-cards {
+                    grid-template-columns: 1fr;
+                }
+                .landing-v2 .landing-thinking-thumb { height: 120px; }
+
+                /* Header tightening on mobile so it fits 320px */
+                .landing-header {
+                    padding: 10px 12px;
+                    gap: 6px;
+                }
+                .landing-header-right { gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+                .brand-wordmark { font-size: 16px; }
+                .brand-lockup img { height: 30px; width: 30px; }
+
+                /* Collapse zh single-column readability on mobile too */
+                .landing-copy-zh { padding: 16px; font-size: 15px; }
+                .landing-copy-zh h1 { font-size: 20px; }
+                .landing-copy-zh h2 { font-size: 17px; }
+                .landing-copy-zh p, .landing-copy-zh li { font-size: 15px; line-height: 1.6; }
+            }
         </style>
     </head>
     <body>
@@ -718,158 +1033,127 @@
                     </section>
                 </div>
                 {% else %}
-                <div class="landing-copy">
-                    <h1 style="font-size:24px;">Project Brainstorm (Beta)</h1>
-                    <h2>AI-Native Market Research for Decision-Making</h2>
-                    <p>Project Brainstorm is an experimental AI&#8209;native market research platform, designed to help teams explore markets, populations, and decision contexts before committing real resources.</p>
-                    <p>Instead of starting with products or predicted outcomes, it starts with a simpler question: <em>Who exists in a market &mdash; and how might those people think or react &mdash; before any product or solution bias is introduced?</em></p>
-                    <h2>What the Beta Does</h2>
-                    <p>Project Brainstorm Beta V1A supports discovery-stage research through:</p>
-                    <ul>
-                        <li>Synthetic surveys</li>
-                        <li>Synthetic focus groups</li>
-                        <li>Synthetic in-depth interviews (IDI)</li>
-                    </ul>
-                    <p>The outputs look familiar &ndash; research findings, transcripts, structured insight summaries &ndash; but they are generated through AI-native market simulation, not human panels.</p>
-                    <p>At the core are synthetic personas: statistically plausible, population-grounded representations of people in a specific market context, informed by demographic structure and local context.</p>
-                    <h2>What this Beta Is (and Isn&#8217;t)</h2>
-                    <p>This Beta is for:</p>
-                    <ul>
-                        <li>Understanding populations</li>
-                        <li>Surfacing patterns, tensions, and reactions</li>
-                        <li>Stress-testing assumptions early</li>
-                    </ul>
-                    <p>It is not designed to:</p>
-                    <ul>
-                        <li>Predict winners</li>
-                        <li>Optimize pricing</li>
-                        <li>Answer &#8220;who will buy this&#8221; questions</li>
-                    </ul>
-                    <p>Those are later-stage problems and are intentionally out of scope for V1A.</p>
-                    <h2>Who This Is For</h2>
-                    <p>Project Brainstorm is built for people who need to make high-stakes decisions under uncertainty, including:</p>
-                    <ul>
-                        <li>Strategy &amp; insights</li>
-                        <li>Marketing &amp; innovation</li>
-                        <li>Investment &amp; corporate development</li>
-                        <li>Entrepreneurship and venture building</li>
-                        <li>Policy, regulation, or complex market analysis</li>
-                    </ul>
-                    <p>Especially those operating in Asia-Pacific, where markets are fast-moving, fragmented, and culturally nuanced.</p>
-                    <h2>Why We&#8217;re Running a Beta</h2>
-                    <p>This approach needs to be tested in real decision contexts.</p>
-                    <p>Project Brainstorm is deliberately experimental. We&#8217;re looking for practitioners who want to use it, challenge it, and help shape what comes next.</p>
-                    <h2>Learn More</h2>
-                    <p>For deeper explanation of why simulation is used, what synthetic personas are, and how this differs from traditional research:</p>
-                    <p><a href="/blog" style="color:var(--pb-accent);font-weight:600;text-decoration:none;">Read the blog: What is Project Brainstorm? &rarr;</a></p>
-                    <h2>Join the Beta</h2>
-                    <p>Project Brainstorm is currently in active Beta (V1A).</p>
-                    <p>If you&#8217;d like to explore the platform and share feedback, sign up to request access below.</p>
-                    <div class="landing-button-wrap">
-                        <a
-                            href="#"
-                            class="landing-signup-btn"
-                            onclick="openAuthModal('signup'); return false;"
-                            >Sign Up for the Beta</a
-                        >
+                <div class="landing-copy landing-v2">
+                    <header class="landing-hero">
+                        <h1>Explore Markets Before You Commit</h1>
+                        <p class="landing-subhead">An experimental platform for decision-makers working under uncertainty.</p>
+                        <p class="landing-intro">Project Brainstorm helps teams explore who exists in a market, how populations differ, and where assumptions may break &ndash; before money, people, or reputations are on the line.</p>
+                    </header>
+
+                    <div class="landing-fornot-grid">
+                        <section class="landing-fornot-col">
+                            <h2>What this beta is for</h2>
+                            <ul>
+                                <li>Early-stage market exploration</li>
+                                <li>Understanding population structure and viewpoints</li>
+                                <li>Surfacing tensions, contradictions, and blind spots</li>
+                                <li>Stress-testing assumptions before committing resources</li>
+                            </ul>
+                        </section>
+                        <section class="landing-fornot-col">
+                            <h2>What it is not</h2>
+                            <ul>
+                                <li>A prediction engine</li>
+                                <li>A replacement for live research</li>
+                                <li>A pricing or demand optimizer</li>
+                                <li>Proof of &ldquo;who will buy&rdquo;</li>
+                            </ul>
+                        </section>
                     </div>
-                    <div class="landing-flow-wrap">
-                        <img
-                            src="/static/flow_en.png"
-                            alt=""
-                            class="landing-flow"
-                        />
-                    </div>
-                    <section
-                        class="landing-section section-accent"
-                        id="section-blog"
-                    >
-                        <div class="landing-section-inner">
-                            <a href="/blog" class="blog-section-btn"
-                                >Blog / News</a
+
+                    <p class="landing-note">Beta V1A intentionally stops before claims of real-world outcomes.</p>
+
+                    <section class="landing-block">
+                        <h2>Typical uses in the beta</h2>
+                        <ul>
+                            <li>Clarify a vague or risky business question</li>
+                            <li>Explore how different population groups react to the same idea</li>
+                            <li>Identify where intuition and evidence diverge</li>
+                            <li>Decide what needs real-world validation next</li>
+                        </ul>
+                    </section>
+
+                    <section class="landing-block">
+                        <h2>Why this is a beta</h2>
+                        <p>Market simulation at this level hasn&rsquo;t existed before.</p>
+                        <p>We&rsquo;re running Project Brainstorm as a beta because:</p>
+                        <ul>
+                            <li>The workflows need to be pressure-tested in real decisions</li>
+                            <li>We want critical feedback, not passive usage</li>
+                            <li>Some constraints are intentional, by design</li>
+                        </ul>
+                    </section>
+
+                    <section class="landing-block landing-cta-block">
+                        <div class="landing-cta-text">
+                            <h2>Request beta access</h2>
+                            <p>For people willing to use it critically and tell us what breaks, sign up to request access below.</p>
+                        </div>
+                        <div class="landing-cta-action">
+                            <a
+                                href="#"
+                                class="landing-signup-btn"
+                                onclick="openAuthModal('signup'); return false;"
+                                >Request Beta Access</a
                             >
-                            {% if latest_blog_posts %}
-                            <div
-                                style="
-                                    display: grid;
-                                    grid-template-columns: repeat(
-                                        auto-fill,
-                                        minmax(280px, 1fr)
-                                    );
-                                    gap: 18px;
-                                    margin-top: 20px;
-                                "
-                            >
-                                {% for post in latest_blog_posts %}
-                                <a
-                                    href="/blog/{{ post.id }}"
-                                    style="
-                                        text-decoration: none;
-                                        color: inherit;
-                                    "
-                                >
-                                    <div
-                                        style="
-                                            background: #f5f7fa;
-                                            border-radius: 12px;
-                                            padding: 18px;
-                                            transition: background 0.2s;
-                                        "
-                                    >
-                                        {% if post.image_path %}
-                                        <img
-                                            src="/static/blog/{{ post.image_path }}"
-                                            alt="{{ post.title }}"
-                                            style="
-                                                width: 100%;
-                                                height: 120px;
-                                                object-fit: cover;
-                                                border-radius: 8px;
-                                                margin-bottom: 10px;
-                                            "
-                                        />
-                                        {% endif %}
-                                        <h3
-                                            style="
-                                                font-size: var(--font-heading);
-                                                font-weight: 600;
-                                                margin-bottom: 6px;
-                                                color: var(--pb-text);
-                                            "
-                                        >
-                                            {{ post.title }}
-                                        </h3>
-                                        <p
-                                            style="
-                                                font-size: var(--font-small);
-                                                color: #999;
-                                            "
-                                        >
-                                            {{ post.created_at }}
-                                        </p>
-                                    </div>
-                                </a>
-                                {% endfor %}
-                            </div>
-                            <div style="text-align: center; margin-top: 20px">
-                                <a
-                                    href="/blog"
-                                    style="
-                                        color: var(--pb-accent);
-                                        font-weight: 600;
-                                        text-decoration: none;
-                                        font-size: var(--font-body);
-                                    "
-                                    >Read more &rarr;</a
-                                >
-                            </div>
-                            {% else %}
-                            <div class="blog-placeholder">
-                                <p>Coming soon</p>
-                            </div>
-                            {% endif %}
                         </div>
                     </section>
+
+                    <section class="landing-belowfold" aria-label="Workflow and reading">
+                        <div class="landing-flow-col">
+                            <div class="landing-flow-frame">
+                                <img
+                                    src="/static/flow_en.png"
+                                    alt="Project Brainstorm research workflow: Mark frames, Lisa executes, Ben guards quality"
+                                    class="landing-flow"
+                                />
+                                <button
+                                    type="button"
+                                    class="landing-flow-expand"
+                                    onclick="openFlowLightbox(); return false;"
+                                    aria-label="View workflow diagram full size"
+                                >
+                                    + View workflow diagram
+                                </button>
+                            </div>
+                            <p class="landing-flow-caption">Project Brainstorm separates thinking, execution, and governance so exploratory research stays bounded and auditable.</p>
+                        </div>
+                        <aside class="landing-thinking-col" id="section-blog">
+                            <h2 class="landing-thinking-title">Want the thinking?</h2>
+                            {% if latest_blog_posts %}
+                                {% set first_post = latest_blog_posts[0] %}
+                                <a class="landing-thinking-lead" href="/blog/{{ first_post.id }}">
+                                    Read: {{ first_post.title }} &rarr;
+                                </a>
+                                {% set first_excerpt = first_post.body | striptags %}
+                                {% if first_excerpt %}
+                                <p class="landing-thinking-excerpt">&ldquo;{{ first_excerpt[:160] }}{% if first_excerpt|length > 160 %}&hellip;{% endif %}&rdquo;</p>
+                                {% endif %}
+                                {% if latest_blog_posts|length > 1 %}
+                                <div class="landing-thinking-cards">
+                                    {% for post in latest_blog_posts[1:3] %}
+                                    <a href="/blog/{{ post.id }}" class="landing-thinking-card">
+                                        {% if post.image_path %}
+                                        <img src="/static/blog/{{ post.image_path }}" alt="{{ post.title }}" class="landing-thinking-thumb" />
+                                        {% else %}
+                                        <div class="landing-thinking-thumb landing-thinking-thumb-placeholder"></div>
+                                        {% endif %}
+                                        <h3>{{ post.title }}</h3>
+                                    </a>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                <a href="/blog" class="landing-thinking-index">Blog index &rarr;</a>
+                            {% else %}
+                                <a href="/blog" class="landing-thinking-index">Blog index &rarr;</a>
+                            {% endif %}
+                        </aside>
+                    </section>
+                </div>
+
+                <div class="flow-lightbox" id="flowLightbox" role="dialog" aria-modal="true" aria-label="Workflow diagram" hidden>
+                    <button type="button" class="flow-lightbox-close" onclick="closeFlowLightbox()" aria-label="Close">&times;</button>
+                    <img src="/static/flow_en.png" alt="Project Brainstorm research workflow" class="flow-lightbox-img" />
                 </div>
                 {% endif %}
             </div>
@@ -1136,6 +1420,33 @@
                 location.reload();
             });
 
+            // Workflow diagram lightbox
+            function openFlowLightbox() {
+                var lb = document.getElementById('flowLightbox');
+                if (!lb) return;
+                lb.hidden = false;
+                lb.classList.add('active');
+                document.body.classList.add('flow-lightbox-open');
+                lb.setAttribute('aria-hidden', 'false');
+            }
+            function closeFlowLightbox() {
+                var lb = document.getElementById('flowLightbox');
+                if (!lb) return;
+                lb.classList.remove('active');
+                lb.hidden = true;
+                lb.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('flow-lightbox-open');
+            }
+            (function() {
+                var lb = document.getElementById('flowLightbox');
+                if (!lb) return;
+                lb.addEventListener('click', function(e) {
+                    if (e.target === lb) closeFlowLightbox();
+                });
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape' && !lb.hidden) closeFlowLightbox();
+                });
+            })();
 
             {% if error %}
             openAuthModal('{{ show_auth_tab }}');

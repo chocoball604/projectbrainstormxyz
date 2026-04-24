@@ -4510,7 +4510,7 @@ def landing_page():
         "landing.html",
         error=error,
         show_auth_tab=show_auth_tab,
-        latest_blog_posts=get_latest_blog_posts(2),
+        latest_blog_posts=get_latest_blog_posts(3),
     )
 
 
