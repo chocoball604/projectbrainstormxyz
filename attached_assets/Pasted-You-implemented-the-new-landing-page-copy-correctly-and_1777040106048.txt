@@ -1,0 +1,38 @@
+You implemented the new landing page copy correctly and the layout is responsive. Now please apply the following fixes without changing any database code, routes, endpoints, button behaviors, or link destinations. Do not break existing JS selectors. Only adjust HTML/CSS (and minimal JS if needed for modal).
+
+
+Increase desktop max width: The main content container/card is too narrow on full-width laptop/desktop screens, leaving large blank margins. Increase the max-width so the content area fills a typical laptop viewport better (still readable, but not a narrow column). [Screenshot...4.28.27 PM | PDF]
+
+
+Tighten vertical spacing: Reduce excessive spacing between sections/rows (headings, lists, paragraph blocks) so the page feels denser and less tall, while keeping readability. [Screenshot...4.28.27 PM | PDF]
+
+
+Highlight paired scope blocks: Put both “What this beta is for” and “What it is not” inside a shared lighter background card (or two matched cards on the same light background) to visually group them as one concept. Also adjust the column ratio so they’re closer to ~55/45 (currently the left feels much wider). [Screenshot...4.28.27 PM | PDF]
+
+
+Relax V1A limitation emphasis: The sentence “Beta V1A intentionally stops before claims of real-world outcomes.” is too visually prominent (white highlight bar). Remove the highlight bar and reduce emphasis. Position it tighter to the “What this beta is for / What it is not” block as a normal supporting line. [Screenshot...4.28.27 PM | PDF]
+
+
+Merge the two “Why beta” lead lines: “Market simulation at this level hasn’t existed before.” and “We’re running Project Brainstorm as a beta because:” should read as one continuous paragraph/lead-in (not two separate paragraph blocks). Keep the bullet list below unchanged. [Screenshot...4.28.27 PM | PDF]
+
+
+Fix CTA microcopy (‘below’): The “Request beta access” button moves responsively (sometimes right-aligned, sometimes below), so the text must not say “below.” Update the sentence to remove “below”, e.g.:
+
+“For people willing to use it critically and tell us what breaks, sign up to request access.”
+Keep the button itself unchanged and working. [Screenshot...4.28.27 PM | PDF]
+
+
+
+Workflow diagram: add enlarge/inspect + remove extra sentence: The workflow diagram is too small to read inline and currently has no enlarge function. Add an “expand/inspect” behavior (click/tap opens modal/lightbox overlay with near-native resolution and easy close). Also remove the breakout sentence “Project Brainstorm separates thinking, execution, and governance so exploratory research stays bounded and auditable.” from the landing page (it should not be shown here). [Screenshot...4.28.27 PM | PDF]
+
+
+Fix pinned blog #3 rendering: On the landing page blog section, pinned blog #1 and #2 appear, but the third pinned slot is blank. Update the layout/logic so three pinned blogs can display correctly (or if fewer than three exist, do not render an empty placeholder). Do not change blog URLs or routing. [Screenshot...4.28.27 PM | PDF]
+
+
+Regression check (must do): After changes, smoke-test on desktop and mobile widths:
+
+Landing page layout + CTA works and links still work
+Workflow diagram modal opens/closes properly
+Blog section renders properly (no blank pinned slot)
+Header/footer links unchanged
+Do not alter database, authentication, or existing endpoints.
