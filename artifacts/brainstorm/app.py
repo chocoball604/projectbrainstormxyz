@@ -976,19 +976,26 @@ def _send_admin_system_dm(subject, body, category="System Alert", throttle_key=N
     /send-message route's limits (30 / 300 chars) so the inbox UI renders
     them cleanly.
 
-    `throttle_key` (typically the failing model id) deduplicates per process:
-    one DM per key per `_ADMIN_DM_THROTTLE_SECONDS`. Pass None to bypass.
-    The throttle timestamp is updated only AFTER a successful DM write so
-    that a transient file-write failure does not silently suppress the next
-    legitimate alert.
+    Throttling: when `throttle_key` is supplied, the check and the slot
+    reservation happen atomically under `_ADMIN_DM_LAST_LOCK`. Two
+    concurrent callers therefore cannot both pass the pre-check and both
+    write a DM in the same window. If the subsequent file write fails the
+    reservation is rolled back so a transient I/O error does not silently
+    suppress the next legitimate alert.
     """
+    prior_ts = None
+    reserved = False
+    if throttle_key:
+        now_dt = datetime.now(timezone.utc)
+        with _ADMIN_DM_LAST_LOCK:
+            prev_dt = _ADMIN_DM_LAST_SENT.get(throttle_key)
+            if prev_dt is not None and (now_dt - prev_dt).total_seconds() < _ADMIN_DM_THROTTLE_SECONDS:
+                return False
+            prior_ts = prev_dt
+            _ADMIN_DM_LAST_SENT[throttle_key] = now_dt
+            reserved = True
+
     try:
-        if throttle_key:
-            now_dt = datetime.now(timezone.utc)
-            with _ADMIN_DM_LAST_LOCK:
-                prev_dt = _ADMIN_DM_LAST_SENT.get(throttle_key)
-                if prev_dt is not None and (now_dt - prev_dt).total_seconds() < _ADMIN_DM_THROTTLE_SECONDS:
-                    return False
         msg = {
             "id": secrets.token_hex(8),
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
@@ -1004,13 +1011,19 @@ def _send_admin_system_dm(subject, body, category="System Alert", throttle_key=N
         msgs = _load_dm_messages()
         msgs.append(msg)
         _save_dm_messages(msgs)
-        # Only commit the throttle timestamp now that the write succeeded,
-        # so a transient I/O failure leaves the next call free to retry.
-        if throttle_key:
-            with _ADMIN_DM_LAST_LOCK:
-                _ADMIN_DM_LAST_SENT[throttle_key] = datetime.now(timezone.utc)
         return True
     except Exception as _e:
+        # Roll back the reservation so a transient I/O failure does not
+        # silently suppress the next legitimate alert for this key.
+        if reserved and throttle_key:
+            try:
+                with _ADMIN_DM_LAST_LOCK:
+                    if prior_ts is None:
+                        _ADMIN_DM_LAST_SENT.pop(throttle_key, None)
+                    else:
+                        _ADMIN_DM_LAST_SENT[throttle_key] = prior_ts
+            except Exception:
+                pass
         try:
             print(f"ADMIN_DM_WRITE_ERROR err={_e}", flush=True)
         except Exception:

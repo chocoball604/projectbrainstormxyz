@@ -125,6 +125,34 @@ class AlertAdminHookTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(len(self._new_msgs()), 0)
 
+    def test_concurrent_alerts_only_one_succeeds(self):
+        """Under multi-threaded contention, only one of N concurrent alerts
+        for the same model id writes a DM (atomic check-and-reserve)."""
+        import threading
+        results = []
+        results_lock = threading.Lock()
+
+        def _go():
+            r = app._alert_admin_ai_study_failure(
+                1, "S", "synthetic_survey", "openai/foo",
+                RuntimeError("LLM timeout for openai/foo: x"))
+            with results_lock:
+                results.append(r)
+
+        threads = [threading.Thread(target=_go) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        successes = sum(1 for r in results if r)
+        self.assertEqual(
+            successes, 1,
+            f"expected exactly one success out of 10 concurrent calls, got {successes}")
+        self.assertEqual(
+            len(self._new_msgs()), 1,
+            "exactly one DM should be in the file")
+
     def test_throttle_only_committed_after_successful_write(self):
         """If the file write fails, the next call must NOT be suppressed."""
         original_save = app._save_dm_messages
