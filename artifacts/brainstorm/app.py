@@ -10449,7 +10449,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
     lisa_model_id = ""  # noqa: F841 — read inside catch blocks via locals().get for safety
     # Per-run guard: at most one admin AI-failure DM per study run, even if a
     # future code path adds additional LLM calls inside one execution.
-    _ai_failure_dm_sent = [False]
+    ai_failure_dm_sent = False
     if study_type == "synthetic_survey":
         try:
             mc = {
@@ -10601,13 +10601,13 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         except Exception as e:
             app.logger.warning(f"Lisa LLM survey call failed, using placeholder: {e}")
             try:
-                if not _ai_failure_dm_sent[0] and _is_ai_failure_exception(e):
+                if not ai_failure_dm_sent and _is_ai_failure_exception(e):
                     # Flip the per-run flag immediately on the first qualifying
                     # AI failure, regardless of whether the DM write itself
                     # succeeds or is throttled. This prevents duplicate audit
                     # entries from a single run if more LLM calls are added
                     # to this code path in the future.
-                    _ai_failure_dm_sent[0] = True
+                    ai_failure_dm_sent = True
                     _alert_admin_ai_study_failure(
                         study_id,
                         dict(study).get("title", ""),
@@ -10778,11 +10778,11 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             print(f"LISA_QUAL=FALLBACK study_id={study_id} reason={e}")
             app.logger.warning(f"LISA_QUAL=FALLBACK for study {study_id}: {e}")
             try:
-                if not _ai_failure_dm_sent[0] and _is_ai_failure_exception(e):
+                if not ai_failure_dm_sent and _is_ai_failure_exception(e):
                     # Flip the per-run flag immediately on the first qualifying
                     # AI failure, regardless of throttle / write outcome (see
                     # equivalent comment in the survey path above).
-                    _ai_failure_dm_sent[0] = True
+                    ai_failure_dm_sent = True
                     _alert_admin_ai_study_failure(
                         study_id,
                         dict(study).get("title", ""),
