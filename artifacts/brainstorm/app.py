@@ -926,6 +926,130 @@ def _dm_latest_preview(user_id=None, is_admin=False):
     return filtered[0] if filtered else None
 
 
+# --- Admin system-DM alerting (used by Task #72: notify admin on AI study failure) ---
+_ADMIN_DM_LAST_LOCK = _threading_mod.Lock()
+_ADMIN_DM_LAST_SENT = {}  # throttle key (e.g. model_id) -> datetime of last DM
+_ADMIN_DM_THROTTLE_SECONDS = 300  # at most one admin DM per key per 5 minutes
+
+
+def _is_ai_failure_exception(exc):
+    """True if `exc` looks like an LLM/AI integration failure raised by call_llm.
+
+    call_llm raises:
+      - NotImplementedError when integration env vars are missing
+      - RuntimeError("LLM timeout ...") on wall-clock or APITimeoutError
+      - RuntimeError("LLM error ...") on openai.APIError
+    Anything else (config errors, ValueError, schema bugs) returns False so
+    we don't mis-attribute non-AI failures to the AI integration.
+    """
+    if exc is None:
+        return False
+    if isinstance(exc, NotImplementedError):
+        return True
+    if isinstance(exc, RuntimeError):
+        msg = str(exc) or ""
+        if msg.startswith("LLM timeout") or msg.startswith("LLM error"):
+            return True
+    # Defensive: call_llm currently wraps openai exceptions into RuntimeError
+    # (the branch above), but if a future code path raises an openai exception
+    # directly we still want to classify it as an AI failure.
+    try:
+        import openai as _openai
+        if isinstance(exc, (_openai.APIError, _openai.APITimeoutError)):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _send_admin_system_dm(subject, body, category="System Alert", throttle_key=None):
+    """Append a system-generated DM to the admin inbox.
+
+    Best-effort: never raises. Returns True if a message was written, False
+    if rate-limited or on any error. Subject/body are truncated to match the
+    /send-message route's limits (30 / 300 chars) so the inbox UI renders
+    them cleanly.
+
+    `throttle_key` (typically the failing model id) deduplicates per process:
+    one DM per key per `_ADMIN_DM_THROTTLE_SECONDS`. Pass None to bypass.
+    """
+    try:
+        if throttle_key:
+            now_dt = datetime.now(timezone.utc)
+            with _ADMIN_DM_LAST_LOCK:
+                prev_dt = _ADMIN_DM_LAST_SENT.get(throttle_key)
+                if prev_dt is not None and (now_dt - prev_dt).total_seconds() < _ADMIN_DM_THROTTLE_SECONDS:
+                    return False
+                _ADMIN_DM_LAST_SENT[throttle_key] = now_dt
+        msg = {
+            "id": secrets.token_hex(8),
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            "sender_type": "admin",
+            "sender_id": None,
+            "recipient_type": "admin",
+            "recipient_user_id": None,
+            "subject": (subject or "")[:30],
+            "body": (body or "")[:300],
+            "category": category or "System Alert",
+            "read": False,
+        }
+        msgs = _load_dm_messages()
+        msgs.append(msg)
+        _save_dm_messages(msgs)
+        return True
+    except Exception as _e:
+        try:
+            print(f"ADMIN_DM_WRITE_ERROR err={_e}", flush=True)
+        except Exception:
+            pass
+        return False
+
+
+def _alert_admin_ai_study_failure(study_id, study_title, study_type, model_id, exc):
+    """Hook invoked from _run_study_core catch blocks when an AI/LLM call fails.
+
+    Sends one admin DM (rate-limited per model id) and mirrors the alert
+    into audit_log for a durable trail. No-op for non-AI failures.
+    """
+    try:
+        if not _is_ai_failure_exception(exc):
+            return False
+        err_excerpt = (str(exc) or type(exc).__name__)[:150]
+        title_short = (study_title or "Untitled")[:40]
+        model_short = (model_id or "unknown")[:60]
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        subject = f"AI failure: study #{study_id}"
+        body = (
+            f"Study '{title_short}' (#{study_id}, {study_type}) hit an AI failure at {ts}. "
+            f"Model: {model_short}. Error: {err_excerpt}"
+        )
+        wrote = _send_admin_system_dm(
+            subject,
+            body,
+            category="System Alert",
+            throttle_key=f"ai_study_failure:{model_short}",
+        )
+        try:
+            audit_log(
+                "ai_study_failure_alert",
+                study_id=study_id,
+                study_type=study_type,
+                model_id=model_short,
+                exc_type=type(exc).__name__,
+                error=err_excerpt,
+                dm_sent=("1" if wrote else "0_throttled_or_failed"),
+            )
+        except Exception:
+            pass
+        return wrote
+    except Exception as _e:
+        try:
+            print(f"ALERT_ADMIN_AI_FAILURE_ERROR study={study_id} err={_e}", flush=True)
+        except Exception:
+            pass
+        return False
+
+
 VALID_STUDY_STATUSES = [
     "draft",
     "in_progress",
@@ -10296,6 +10420,7 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         _ctx_sources_block = "\n".join(_ctx_lines)
 
     output = None
+    lisa_model_id = ""  # noqa: F841 — read inside catch blocks via locals().get for safety
     if study_type == "synthetic_survey":
         try:
             mc = {
@@ -10446,6 +10571,16 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             app.logger.info(f"Lisa LLM survey output generated for study {study_id}")
         except Exception as e:
             app.logger.warning(f"Lisa LLM survey call failed, using placeholder: {e}")
+            try:
+                _alert_admin_ai_study_failure(
+                    study_id,
+                    dict(study).get("title", ""),
+                    study_type,
+                    locals().get("lisa_model_id", ""),
+                    e,
+                )
+            except Exception:
+                pass
             output = None
             try:
                 conn.execute("SELECT 1")
@@ -10606,6 +10741,16 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         except Exception as e:
             print(f"LISA_QUAL=FALLBACK study_id={study_id} reason={e}")
             app.logger.warning(f"LISA_QUAL=FALLBACK for study {study_id}: {e}")
+            try:
+                _alert_admin_ai_study_failure(
+                    study_id,
+                    dict(study).get("title", ""),
+                    study_type,
+                    locals().get("lisa_model_id", ""),
+                    e,
+                )
+            except Exception:
+                pass
             output = None
             try:
                 conn.execute("SELECT 1")
