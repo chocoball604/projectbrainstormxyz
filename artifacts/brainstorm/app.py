@@ -972,6 +972,9 @@ def _send_admin_system_dm(subject, body, category="System Alert", throttle_key=N
 
     `throttle_key` (typically the failing model id) deduplicates per process:
     one DM per key per `_ADMIN_DM_THROTTLE_SECONDS`. Pass None to bypass.
+    The throttle timestamp is updated only AFTER a successful DM write so
+    that a transient file-write failure does not silently suppress the next
+    legitimate alert.
     """
     try:
         if throttle_key:
@@ -980,7 +983,6 @@ def _send_admin_system_dm(subject, body, category="System Alert", throttle_key=N
                 prev_dt = _ADMIN_DM_LAST_SENT.get(throttle_key)
                 if prev_dt is not None and (now_dt - prev_dt).total_seconds() < _ADMIN_DM_THROTTLE_SECONDS:
                     return False
-                _ADMIN_DM_LAST_SENT[throttle_key] = now_dt
         msg = {
             "id": secrets.token_hex(8),
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
@@ -996,6 +998,11 @@ def _send_admin_system_dm(subject, body, category="System Alert", throttle_key=N
         msgs = _load_dm_messages()
         msgs.append(msg)
         _save_dm_messages(msgs)
+        # Only commit the throttle timestamp now that the write succeeded,
+        # so a transient I/O failure leaves the next call free to retry.
+        if throttle_key:
+            with _ADMIN_DM_LAST_LOCK:
+                _ADMIN_DM_LAST_SENT[throttle_key] = datetime.now(timezone.utc)
         return True
     except Exception as _e:
         try:
@@ -10421,6 +10428,9 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
 
     output = None
     lisa_model_id = ""  # noqa: F841 — read inside catch blocks via locals().get for safety
+    # Per-run guard: at most one admin AI-failure DM per study run, even if a
+    # future code path adds additional LLM calls inside one execution.
+    _ai_failure_dm_sent = [False]
     if study_type == "synthetic_survey":
         try:
             mc = {
@@ -10572,13 +10582,15 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         except Exception as e:
             app.logger.warning(f"Lisa LLM survey call failed, using placeholder: {e}")
             try:
-                _alert_admin_ai_study_failure(
-                    study_id,
-                    dict(study).get("title", ""),
-                    study_type,
-                    locals().get("lisa_model_id", ""),
-                    e,
-                )
+                if not _ai_failure_dm_sent[0]:
+                    if _alert_admin_ai_study_failure(
+                        study_id,
+                        dict(study).get("title", ""),
+                        study_type,
+                        locals().get("lisa_model_id", ""),
+                        e,
+                    ):
+                        _ai_failure_dm_sent[0] = True
             except Exception:
                 pass
             output = None
@@ -10742,13 +10754,15 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             print(f"LISA_QUAL=FALLBACK study_id={study_id} reason={e}")
             app.logger.warning(f"LISA_QUAL=FALLBACK for study {study_id}: {e}")
             try:
-                _alert_admin_ai_study_failure(
-                    study_id,
-                    dict(study).get("title", ""),
-                    study_type,
-                    locals().get("lisa_model_id", ""),
-                    e,
-                )
+                if not _ai_failure_dm_sent[0]:
+                    if _alert_admin_ai_study_failure(
+                        study_id,
+                        dict(study).get("title", ""),
+                        study_type,
+                        locals().get("lisa_model_id", ""),
+                        e,
+                    ):
+                        _ai_failure_dm_sent[0] = True
             except Exception:
                 pass
             output = None
