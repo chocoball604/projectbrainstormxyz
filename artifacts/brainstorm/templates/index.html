@@ -5277,7 +5277,19 @@
                         {% for pm in persona_pool_list %}
                         <tr>
                             <td><code>{{ pm.model_id }}</code></td>
-                            <td><span class="badge badge-{{ 'active' if pm.status == 'active' else 'disabled' }}">{{ pm.status }}</span></td>
+                            <td>
+                                <span class="badge badge-{{ 'active' if pm.status == 'active' else 'disabled' }}">{{ pm.status }}</span>
+                                {% if pm.effectively_excluded %}
+                                <span class="badge"
+                                      style="background:#fff3cd;color:#856404;border:1px solid #ffc107;margin-left:4px;"
+                                      title="Auto-excluded by Model Health (status: FAIL). The system will skip this model during persona generation until the next daily health check restores it.{% if pm.health_last_error %} Last error: {{ pm.health_last_error }}{% endif %}">
+                                    Excluded (FAIL)
+                                </span>
+                                <div style="font-size:11px;color:#856404;margin-top:4px;line-height:1.3;">
+                                    Skipped during persona generation &mdash; see Model Health below.{% if pm.health_last_error %}<br><span style="color:#777;">Last error: {{ pm.health_last_error }}</span>{% endif %}
+                                </div>
+                                {% endif %}
+                            </td>
                             <td style="font-size: 12px;">{{ pm.added_at }}</td>
                             <td>
                                 <form action="/admin/toggle-pool-model/{{ pm.id }}" method="POST" style="display: inline;">{{ csrf_input() }}

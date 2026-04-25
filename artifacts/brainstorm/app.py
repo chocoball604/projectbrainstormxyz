@@ -1798,6 +1798,36 @@ def is_gpt_family(model_id: str) -> bool:
     )
 
 
+def _enrich_pool_with_health(pool_list, health_status_list):
+    """Annotate each persona-pool row with its current health status.
+
+    Returns the same list with each row gaining three new keys:
+      - ``health_status``: 'pass' | 'fail' | None (None = never tested)
+      - ``health_last_error``: short error excerpt (str) or ''
+      - ``effectively_excluded``: True iff this row is admin-active but
+        currently FAIL in health, i.e. the system would skip it during
+        persona generation. Used by the admin UI to surface the conflict
+        between the manual ``active`` toggle and the auto-updated health
+        status (e.g. a transient HTTP 429 from a daily health check).
+    """
+    health_map = {}
+    for hs in health_status_list or []:
+        mid = hs.get("model_id") if isinstance(hs, dict) else hs["model_id"]
+        health_map[mid] = hs
+    for pm in pool_list or []:
+        hs = health_map.get(pm.get("model_id"))
+        if hs is None:
+            pm["health_status"] = None
+            pm["health_last_error"] = ""
+        else:
+            pm["health_status"] = hs.get("status")
+            pm["health_last_error"] = (hs.get("last_error") or "")[:160]
+        pm["effectively_excluded"] = (
+            pm.get("status") == "active" and pm.get("health_status") == "fail"
+        )
+    return pool_list
+
+
 def _get_healthy_pool_models(conn):
     pool_rows = conn.execute(
         "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
@@ -4041,6 +4071,11 @@ def index():
         if wr:
             latest_weekly_report = dict(wr)
         conn3.close()
+
+        # Annotate each persona-pool row with its current health so the admin
+        # UI can flag rows that are admin-active but auto-excluded by the
+        # daily health check (e.g. transient HTTP 429 from the provider).
+        _enrich_pool_with_health(persona_pool_list, health_status_list)
 
     studies_page = 1
     studies_q = ""
@@ -12384,6 +12419,18 @@ def render_error(message, show_new_research=False, show_new_persona=False):
                 "SELECT * FROM persona_model_pool ORDER BY model_id"
             ).fetchall()
         ]
+        # Annotate pool rows with current health so the Persona Model Pool
+        # table consistently shows "Excluded (FAIL)" on error pages too.
+        try:
+            _err_health_rows = [
+                dict(r)
+                for r in conn2.execute(
+                    "SELECT * FROM model_health_status ORDER BY model_id"
+                ).fetchall()
+            ]
+            _enrich_pool_with_health(persona_pool_list, _err_health_rows)
+        except Exception:
+            pass
         conn2.close()
     all_blog_posts_err = []
     if is_admin:
