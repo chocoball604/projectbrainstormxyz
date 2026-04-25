@@ -1,8 +1,13 @@
 """Smoke tests for the admin AI-failure DM hook (Task #72).
 
-Run from artifacts/brainstorm/:
+Run from artifacts/brainstorm/ in development mode (the app's startup
+hardening rejects a weak ADMIN_PASSWORD when FLASK_ENV is not 'development'):
 
-    python test_admin_ai_failure_dm.py
+    FLASK_ENV=development python test_admin_ai_failure_dm.py
+
+Or, if ADMIN_PASSWORD is set to a strong value in your shell:
+
+    ADMIN_PASSWORD='<strong>' python test_admin_ai_failure_dm.py
 
 The tests:
   1. _is_ai_failure_exception correctly classifies AI vs non-AI exceptions.

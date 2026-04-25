@@ -952,9 +952,15 @@ def _is_ai_failure_exception(exc):
             return True
     # Defensive: call_llm currently wraps openai exceptions into RuntimeError
     # (the branch above), but if a future code path raises an openai exception
-    # directly we still want to classify it as an AI failure.
+    # directly we still want to classify it as an AI failure. We match against
+    # the OpenAIError base class first (covers all subclasses including
+    # APIError, APITimeoutError, AuthenticationError, RateLimitError, etc.)
+    # and fall back to the narrower classes if OpenAIError isn't present.
     try:
         import openai as _openai
+        _base = getattr(_openai, "OpenAIError", None)
+        if _base is not None and isinstance(exc, _base):
+            return True
         if isinstance(exc, (_openai.APIError, _openai.APITimeoutError)):
             return True
     except Exception:
@@ -10582,15 +10588,20 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
         except Exception as e:
             app.logger.warning(f"Lisa LLM survey call failed, using placeholder: {e}")
             try:
-                if not _ai_failure_dm_sent[0]:
-                    if _alert_admin_ai_study_failure(
+                if not _ai_failure_dm_sent[0] and _is_ai_failure_exception(e):
+                    # Flip the per-run flag immediately on the first qualifying
+                    # AI failure, regardless of whether the DM write itself
+                    # succeeds or is throttled. This prevents duplicate audit
+                    # entries from a single run if more LLM calls are added
+                    # to this code path in the future.
+                    _ai_failure_dm_sent[0] = True
+                    _alert_admin_ai_study_failure(
                         study_id,
                         dict(study).get("title", ""),
                         study_type,
                         locals().get("lisa_model_id", ""),
                         e,
-                    ):
-                        _ai_failure_dm_sent[0] = True
+                    )
             except Exception:
                 pass
             output = None
@@ -10754,15 +10765,18 @@ def _run_study_core(_active_conn, study, study_type, personas_used, persona_name
             print(f"LISA_QUAL=FALLBACK study_id={study_id} reason={e}")
             app.logger.warning(f"LISA_QUAL=FALLBACK for study {study_id}: {e}")
             try:
-                if not _ai_failure_dm_sent[0]:
-                    if _alert_admin_ai_study_failure(
+                if not _ai_failure_dm_sent[0] and _is_ai_failure_exception(e):
+                    # Flip the per-run flag immediately on the first qualifying
+                    # AI failure, regardless of throttle / write outcome (see
+                    # equivalent comment in the survey path above).
+                    _ai_failure_dm_sent[0] = True
+                    _alert_admin_ai_study_failure(
                         study_id,
                         dict(study).get("title", ""),
                         study_type,
                         locals().get("lisa_model_id", ""),
                         e,
-                    ):
-                        _ai_failure_dm_sent[0] = True
+                    )
             except Exception:
                 pass
             output = None
