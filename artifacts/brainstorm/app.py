@@ -1049,12 +1049,28 @@ def _alert_admin_ai_study_failure(study_id, study_title, study_type, model_id, e
             f"Study '{title_short}' (#{study_id}, {study_type}) hit an AI failure at {ts}. "
             f"Model: {model_short}. Error: {err_excerpt}"
         )
+        # Classify the DM outcome for triage: was it suppressed by the
+        # cross-run throttle, or did the underlying file write fail?
+        throttle_key = f"ai_study_failure:{model_short}"
+        with _ADMIN_DM_LAST_LOCK:
+            _prev_dt = _ADMIN_DM_LAST_SENT.get(throttle_key)
+            _now_dt = datetime.now(timezone.utc)
+            would_throttle = (
+                _prev_dt is not None
+                and (_now_dt - _prev_dt).total_seconds() < _ADMIN_DM_THROTTLE_SECONDS
+            )
         wrote = _send_admin_system_dm(
             subject,
             body,
             category="System Alert",
-            throttle_key=f"ai_study_failure:{model_short}",
+            throttle_key=throttle_key,
         )
+        if wrote:
+            dm_status = "sent"
+        elif would_throttle:
+            dm_status = "throttled"
+        else:
+            dm_status = "write_failed"
         try:
             audit_log(
                 "ai_study_failure_alert",
@@ -1063,7 +1079,7 @@ def _alert_admin_ai_study_failure(study_id, study_title, study_type, model_id, e
                 model_id=model_short,
                 exc_type=type(exc).__name__,
                 error=err_excerpt,
-                dm_sent=("1" if wrote else "0_throttled_or_failed"),
+                dm_status=dm_status,
             )
         except Exception:
             pass

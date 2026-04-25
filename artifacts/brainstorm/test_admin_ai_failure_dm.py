@@ -125,6 +125,68 @@ class AlertAdminHookTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(len(self._new_msgs()), 0)
 
+    def test_per_run_dedupe_contract_at_both_catch_sites(self):
+        """Lock in the one-DM-per-study-run contract structurally.
+
+        _run_study_core has two LLM-failure catch blocks (synthetic_survey
+        and qualitative paths). Each must:
+          1. Initialize a per-run flag `ai_failure_dm_sent = False` once.
+          2. Guard each call to `_alert_admin_ai_study_failure(...)` with
+             `if not ai_failure_dm_sent and _is_ai_failure_exception(e):`.
+          3. Set `ai_failure_dm_sent = True` BEFORE invoking the alert
+             helper, so that even a throttled or write-failed first
+             attempt prevents a second DM from a future LLM call added
+             to the same run.
+        A regression that drops the guard or flips the flag after the
+        helper would let one run emit multiple DMs.
+        """
+        src_path = os.path.join(HERE, "app.py")
+        with open(src_path, "r", encoding="utf-8") as f:
+            src = f.read()
+
+        self.assertEqual(
+            src.count("ai_failure_dm_sent = False"), 1,
+            "expected exactly one initialization of ai_failure_dm_sent in app.py")
+
+        guard_count = src.count(
+            "if not ai_failure_dm_sent and _is_ai_failure_exception(e):")
+        self.assertEqual(
+            guard_count, 2,
+            f"expected 2 per-run guarded catch sites, found {guard_count}")
+
+        alert_call_count = src.count("_alert_admin_ai_study_failure(")
+        self.assertGreaterEqual(
+            alert_call_count, 3,  # 1 def + 2 call sites
+            f"expected at least 3 references to _alert_admin_ai_study_failure, "
+            f"found {alert_call_count}")
+
+        guard_idx = 0
+        sites_checked = 0
+        while True:
+            guard_idx = src.find(
+                "if not ai_failure_dm_sent and _is_ai_failure_exception(e):",
+                guard_idx)
+            if guard_idx == -1:
+                break
+            window = src[guard_idx:guard_idx + 600]
+            flag_pos = window.find("ai_failure_dm_sent = True")
+            call_pos = window.find("_alert_admin_ai_study_failure(")
+            self.assertNotEqual(
+                flag_pos, -1,
+                "missing 'ai_failure_dm_sent = True' inside guarded block")
+            self.assertNotEqual(
+                call_pos, -1,
+                "missing '_alert_admin_ai_study_failure(' inside guarded block")
+            self.assertLess(
+                flag_pos, call_pos,
+                "ai_failure_dm_sent must be set to True BEFORE calling "
+                "_alert_admin_ai_study_failure so a throttled / write-failed "
+                "first attempt still prevents a second DM in the same run")
+            sites_checked += 1
+            guard_idx += 1
+        self.assertEqual(sites_checked, 2,
+            f"expected to verify 2 catch sites, verified {sites_checked}")
+
     def test_concurrent_alerts_only_one_succeeds(self):
         """Under multi-threaded contention, only one of N concurrent alerts
         for the same model id writes a DM (atomic check-and-reserve)."""
