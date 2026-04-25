@@ -1049,8 +1049,79 @@ def derive_ui_phase(study):
     return "STEP_2_ANCHORS"
 
 
+# --- Live model-health tracking ---------------------------------------
+#
+# Every successful or failed real LLM call updates ``model_health_status``
+# so the Configure Study "AI" badge (compute_ai_connectivity) reflects
+# current reality without waiting for an admin to trigger a manual or
+# daily health check.
+#
+# Throttling: identical-status writes for the same model are throttled to
+# one DB write per ``_MODEL_HEALTH_THROTTLE_SECONDS`` so a study run that
+# fires hundreds of calls to the same model doesn't hammer the DB. A
+# status TRANSITION (pass <-> fail) bypasses the throttle and writes
+# immediately so the badge flips fast.
+import threading as _mh_threading
+
+_MODEL_HEALTH_LAST_WRITE: dict = {}
+_MODEL_HEALTH_LAST_LOCK = _mh_threading.Lock()
+_MODEL_HEALTH_THROTTLE_SECONDS = 30
+
+
+def _record_model_health(model_id, status, error=None):
+    """Update model_health_status for a real LLM call result.
+
+    Best-effort: never raises. The caller's success/failure path must not
+    be affected by a DB issue here.
+    """
+    if not model_id or model_id == "_probe_":
+        return
+    if status not in ("pass", "fail"):
+        return
+    try:
+        now_dt = datetime.now(timezone.utc)
+        now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+        err_short = (str(error)[:300] if error else None)
+
+        with _MODEL_HEALTH_LAST_LOCK:
+            prev = _MODEL_HEALTH_LAST_WRITE.get(model_id)
+            if prev is not None:
+                prev_status, prev_dt = prev
+                if (
+                    prev_status == status
+                    and (now_dt - prev_dt).total_seconds() < _MODEL_HEALTH_THROTTLE_SECONDS
+                ):
+                    return
+            _MODEL_HEALTH_LAST_WRITE[model_id] = (status, now_dt)
+
+        conn = get_db()
+        try:
+            conn.execute(
+                "INSERT INTO model_health_status (model_id, status, last_tested_at, last_error) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(model_id) DO UPDATE SET status=?, last_tested_at=?, last_error=?",
+                (model_id, status, now_str, err_short,
+                 status, now_str, err_short),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as _e:
+        print(
+            f"RECORD_MODEL_HEALTH_ERROR model={model_id} status={status} err={_e}",
+            flush=True,
+        )
+
+
 def call_llm(model_id, messages, purpose="", timeout_seconds=60):
-    """Single wrapper for all LLM calls via Replit AI Integrations (OpenRouter)."""
+    """Single wrapper for all LLM calls via Replit AI Integrations (OpenRouter).
+
+    Side effect: on success or API failure, updates ``model_health_status``
+    for ``model_id`` via ``_record_model_health`` so the Configure Study
+    "AI" badge reacts in near real-time. Config errors (NotImplementedError
+    when the integration env vars are missing) are NOT recorded per-model
+    because they are an environment problem, not a model problem.
+    """
     import openai as _openai
     import concurrent.futures
 
@@ -1073,13 +1144,21 @@ def call_llm(model_id, messages, purpose="", timeout_seconds=60):
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_do_call)
             resp = future.result(timeout=wall_clock_limit)
-        return cap_llm_output(resp.choices[0].message.content or "", purpose=purpose)
+        out = cap_llm_output(resp.choices[0].message.content or "", purpose=purpose)
+        _record_model_health(model_id, "pass")
+        return out
     except concurrent.futures.TimeoutError:
-        raise RuntimeError(f"LLM timeout for {model_id}: Wall-clock limit ({wall_clock_limit}s) exceeded")
+        _err = f"LLM timeout for {model_id}: Wall-clock limit ({wall_clock_limit}s) exceeded"
+        _record_model_health(model_id, "fail", error=_err)
+        raise RuntimeError(_err)
     except _openai.APITimeoutError as e:
-        raise RuntimeError(f"LLM timeout for {model_id}: {str(e)[:200]}")
+        _err = f"LLM timeout for {model_id}: {str(e)[:200]}"
+        _record_model_health(model_id, "fail", error=_err)
+        raise RuntimeError(_err)
     except _openai.APIError as e:
-        raise RuntimeError(f"LLM error for {model_id}: {str(e)[:200]}")
+        _err = f"LLM error for {model_id}: {str(e)[:200]}"
+        _record_model_health(model_id, "fail", error=_err)
+        raise RuntimeError(_err)
 
 
 # from datetime import datetime  ->  from datetime import datetime, timezone
