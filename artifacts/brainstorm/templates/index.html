@@ -596,6 +596,22 @@
             {% endif %}
         </div>
 
+        {% if configure_study.study_type and configure_study.qa_status == 'precheck_passed' %}
+            {% if ai_connectivity.level == 'down' %}
+            <div id="ai-preflight-warning" style="margin-bottom: 16px; padding: 12px 16px; border-radius: 6px; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; font-size: 13px;" title="{{ ai_connectivity.detail }}">
+                <strong>&#10005; AI is offline.</strong> Starting the study now will fail because the AI provider is unreachable. Please ask an admin to check the Model Health page before clicking <strong>Start Study</strong>.
+            </div>
+            {% elif ai_connectivity.level == 'degraded' %}
+            <div id="ai-preflight-warning" style="margin-bottom: 16px; padding: 12px 16px; border-radius: 6px; background: #fff3cd; border: 1px solid #ffc107; color: #856404; font-size: 13px;" title="{{ ai_connectivity.detail }}">
+                <strong>&#9888; AI is degraded.</strong> Some configured models are failing the latest health check. The study can still run but may fall back to other models or take longer than usual.
+            </div>
+            {% elif ai_connectivity.level == 'unknown' %}
+            <div id="ai-preflight-warning" style="margin-bottom: 16px; padding: 12px 16px; border-radius: 6px; background: #e2e3e5; border: 1px solid #d6d8db; color: #383d41; font-size: 13px;" title="{{ ai_connectivity.detail }}">
+                <strong>AI: Unchecked.</strong> AI models have not been health-checked yet, so we can't guarantee Start Study will succeed. An admin can run a health check from the Model Health page.
+            </div>
+            {% endif %}
+        {% endif %}
+
         <div style="display: flex; gap: 20px; align-items: flex-start;">
 
         {% set is_discovery_stage = not configure_study.study_type %}
@@ -2398,6 +2414,20 @@
 
             function autoRunStudy() {
                 if (_executionRunning) return;
+                var ai = _aiConnectivity || {};
+                if (ai.level === 'down') {
+                    if (!window.confirm('AI is currently offline.\n\n' + (ai.detail || 'AI features will fail until at least one model is restored.') + '\n\nStarting the study now will almost certainly fail. Continue anyway?')) {
+                        return;
+                    }
+                } else if (ai.level === 'degraded') {
+                    if (!window.confirm('AI is currently degraded.\n\n' + (ai.detail || 'Some configured models are failing the latest health check.') + '\n\nThe study may fall back to other models. Continue?')) {
+                        return;
+                    }
+                } else if (ai.level === 'unknown') {
+                    if (!window.confirm('AI status is unchecked.\n\n' + (ai.detail || 'AI models have not been health-checked yet.') + '\n\nWe can\u2019t guarantee Start Study will succeed. Continue?')) {
+                        return;
+                    }
+                }
                 if (!window.confirm('Start the study now?\n\nAnchors will be locked. Changes after this point require restarting or duplicating the study.\n\nContinue?')) {
                     return;
                 }
@@ -4074,6 +4104,20 @@
                 <a href="/?token={{ token }}&new_research=1" class="btn btn-primary" style="background: #28a745; border-color: #28a745;">New Research</a>
                 {% endif %}
             </div>
+
+            {% if ai_connectivity and ai_connectivity.level == 'down' %}
+            <div style="margin-bottom: 12px; padding: 10px 14px; border-radius: 6px; font-size: 13px; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24;" title="{{ ai_connectivity.detail }}">
+                <strong>AI: Offline.</strong> Starting a study right now will fail. Ask an admin to check the Model Health page.
+            </div>
+            {% elif ai_connectivity and ai_connectivity.level == 'degraded' %}
+            <div style="margin-bottom: 12px; padding: 10px 14px; border-radius: 6px; font-size: 13px; background: #fff3cd; border: 1px solid #ffc107; color: #856404;" title="{{ ai_connectivity.detail }}">
+                <strong>AI: Degraded.</strong> Some models are failing the latest health check. Studies may run more slowly or fall back to other models.
+            </div>
+            {% elif ai_connectivity and ai_connectivity.level == 'unknown' %}
+            <div style="margin-bottom: 12px; padding: 10px 14px; border-radius: 6px; font-size: 13px; background: #e2e3e5; border: 1px solid #d6d8db; color: #383d41;" title="{{ ai_connectivity.detail }}">
+                <strong>AI: Unchecked.</strong> AI models have not been health-checked yet. An admin can run a health check from the Model Health page.
+            </div>
+            {% endif %}
 
             <form method="GET" action="/" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
                 <input type="hidden" name="token" value="{{ token }}">

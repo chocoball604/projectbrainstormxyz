@@ -3902,6 +3902,8 @@ def index():
 
         conn = get_db()
 
+        ai_connectivity = compute_ai_connectivity(conn)
+
         usage_count, usage_limit, usage_window_start, usage_window_end = (
             get_monthly_usage(conn, user["id"])
         )
@@ -4044,8 +4046,6 @@ def index():
 
                 chat_save_buttons = get_save_buttons(configure_study)
                 chat_save_buttons = []
-
-                ai_connectivity = compute_ai_connectivity(conn)
 
                 if configure_study.get("status") == "draft" and configure_study.get("study_type"):
                     try:
