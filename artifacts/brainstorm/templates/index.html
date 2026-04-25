@@ -546,14 +546,26 @@
         <div id="exec-control-strip" data-study-id="{{ configure_study.id }}" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 14px 24px; margin-bottom: 16px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
             <strong style="font-size: 14px; color: #1a1a2e;">Mission Control</strong>
             {% if configure_study.study_type %}
-            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
-                <strong>Ben QA:</strong>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;" title="Static check: required brief fields are filled in and persona pool size is valid. This does not test the AI models.">
+                <strong>Anchors:</strong>
                 {% if configure_study.qa_status == 'precheck_passed' %}
-                <span style="color: #27ae60;">&#10003; Pass</span>
+                <span style="color: #27ae60;">&#10003; Complete</span>
                 {% elif configure_study.qa_status == 'precheck_failed' %}
                 <span style="color: #e67e22;">&#9888; {{ configure_study.precheck_failures|length }} item{{ 's' if configure_study.precheck_failures|length != 1 else '' }} remaining</span>
                 {% else %}
                 <span style="color: #999;">&mdash; Not set</span>
+                {% endif %}
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;" title="{{ ai_connectivity.detail }}">
+                <strong>AI:</strong>
+                {% if ai_connectivity.level == 'healthy' %}
+                <span style="color: #27ae60;">&#10003; Healthy</span>
+                {% elif ai_connectivity.level == 'degraded' %}
+                <span style="color: #e67e22;">&#9888; Degraded</span>
+                {% elif ai_connectivity.level == 'down' %}
+                <span style="color: #e74c3c;">&#10005; Offline</span>
+                {% else %}
+                <span style="color: #999;">&mdash; Unchecked</span>
                 {% endif %}
             </div>
             <div style="display: flex; align-items: center; gap: 6px; font-size: 13px;">
@@ -2192,6 +2204,7 @@
 
             var _executionRunning = false;
             var _previousQaStatus = '{{ configure_study.qa_status or "" }}';
+            var _aiConnectivity = {{ ai_connectivity|tojson }};
 
             function updatePrecheckStatusBox(data) {
                 var box = document.getElementById('precheck-status-box');
@@ -2240,15 +2253,29 @@
                 if (personaTable) personaCount = personaTable.querySelectorAll('tr').length;
                 var studyType = '{{ configure_study.study_type or "" }}';
                 var h = '<strong style="font-size:14px;color:#1a1a2e;">Mission Control</strong>';
-                h += '<div style="display:flex;align-items:center;gap:6px;font-size:13px;"><strong>Ben QA:</strong> ';
+                var anchorsTitle = 'Static check: required brief fields are filled in and persona pool size is valid. This does not test the AI models.';
+                h += '<div style="display:flex;align-items:center;gap:6px;font-size:13px;" title="' + anchorsTitle + '"><strong>Anchors:</strong> ';
                 if (data.qa_status === 'precheck_passed') {
-                    h += '<span style="color:#27ae60;">&#10003; Pass</span>';
+                    h += '<span style="color:#27ae60;">&#10003; Complete</span>';
                 } else if (data.qa_status === 'precheck_failed') {
                     var n = (data.qa_failures || []).length;
                     var s = n !== 1 ? 's' : '';
                     h += '<span style="color:#e67e22;">&#9888; ' + n + ' item' + s + ' remaining</span>';
                 } else {
                     h += '<span style="color:#999;">&mdash; Not set</span>';
+                }
+                h += '</div>';
+                var ai = _aiConnectivity || {level: 'unknown', detail: '', label: 'Unchecked'};
+                var aiTitle = (ai.detail || '').replace(/"/g, '&quot;');
+                h += '<div style="display:flex;align-items:center;gap:6px;font-size:13px;" title="' + aiTitle + '"><strong>AI:</strong> ';
+                if (ai.level === 'healthy') {
+                    h += '<span style="color:#27ae60;">&#10003; Healthy</span>';
+                } else if (ai.level === 'degraded') {
+                    h += '<span style="color:#e67e22;">&#9888; Degraded</span>';
+                } else if (ai.level === 'down') {
+                    h += '<span style="color:#e74c3c;">&#10005; Offline</span>';
+                } else {
+                    h += '<span style="color:#999;">&mdash; Unchecked</span>';
                 }
                 h += '</div>';
                 h += '<div style="display:flex;align-items:center;gap:6px;font-size:13px;"><strong>Personas:</strong> ';

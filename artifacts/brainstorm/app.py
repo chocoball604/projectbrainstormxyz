@@ -1319,6 +1319,123 @@ def run_model_health_check(run_type="manual"):
         }
 
 
+def compute_ai_connectivity(conn):
+    """Compute AI connectivity status for the Configure Study page.
+
+    Reads from the existing ``model_health_status`` table (populated by the
+    daily ``run_model_health_check``) so this view agrees with the admin
+    Model Health page and incurs no extra LLM calls per page load.
+
+    Returns a dict with:
+        level: 'healthy' | 'degraded' | 'down' | 'unknown'
+        label: short human label for the badge
+        detail: tooltip / explanation
+        failing: list of model IDs that are failing or not connected
+    """
+    try:
+        mc = {
+            r["key"]: r["value"]
+            for r in conn.execute("SELECT key, value FROM model_config").fetchall()
+        }
+        relevant = set()
+        for key in ("mark_model", "lisa_model", "ben_model"):
+            mid = mc.get(key)
+            if mid:
+                relevant.add(mid)
+        for r in conn.execute(
+            "SELECT model_id FROM persona_model_pool WHERE status = 'active'"
+        ).fetchall():
+            relevant.add(r["model_id"])
+
+        if not relevant:
+            return {
+                "level": "unknown",
+                "label": "Unchecked",
+                "detail": "No AI models configured yet.",
+                "failing": [],
+            }
+
+        health_rows = conn.execute(
+            "SELECT model_id, status, last_tested_at FROM model_health_status"
+        ).fetchall()
+        health = {r["model_id"]: r["status"] for r in health_rows}
+        last_checked_at = ""
+        for r in health_rows:
+            ts = r["last_tested_at"] or ""
+            if ts > last_checked_at:
+                last_checked_at = ts
+
+        pass_count = 0
+        fail_models = []
+        not_connected = []
+        unchecked = []
+        for mid in relevant:
+            s = health.get(mid)
+            if s == "pass":
+                pass_count += 1
+            elif s == "fail":
+                fail_models.append(mid)
+            elif s == "not_connected":
+                not_connected.append(mid)
+            else:
+                unchecked.append(mid)
+
+        bad = fail_models + not_connected
+
+        suffix = f" Last checked: {last_checked_at} UTC." if last_checked_at else ""
+
+        if pass_count == 0 and not bad:
+            return {
+                "level": "unknown",
+                "label": "Unchecked",
+                "detail": "AI models have not been health-checked yet. Run a health check from the admin panel.",
+                "last_checked_at": last_checked_at,
+                "failing": [],
+            }
+
+        if pass_count == 0 and bad:
+            if not_connected and not fail_models:
+                detail = "LLM integration is not connected. AI features will fail until it is restored."
+            else:
+                detail = "All AI models are failing the latest health check. AI features will fail until at least one model is restored."
+            return {
+                "level": "down",
+                "label": "Offline",
+                "detail": detail + suffix,
+                "last_checked_at": last_checked_at,
+                "failing": bad,
+            }
+
+        if bad:
+            preview = ", ".join(sorted(bad)[:5])
+            if len(bad) > 5:
+                preview += f", +{len(bad) - 5} more"
+            return {
+                "level": "degraded",
+                "label": "Degraded",
+                "detail": f"{len(bad)} model(s) failing the latest health check: {preview}. Some AI features may fall back to other models." + suffix,
+                "last_checked_at": last_checked_at,
+                "failing": bad,
+            }
+
+        return {
+            "level": "healthy",
+            "label": "Healthy",
+            "detail": f"All {pass_count} configured model(s) passed the latest health check." + suffix,
+            "last_checked_at": last_checked_at,
+            "failing": [],
+        }
+    except Exception as e:
+        print(f"COMPUTE_AI_CONNECTIVITY_ERROR: {e}", flush=True)
+        return {
+            "level": "unknown",
+            "label": "Unchecked",
+            "detail": "Could not read model health status.",
+            "last_checked_at": "",
+            "failing": [],
+        }
+
+
 def generate_weekly_qa_report():
     conn = get_db()
     try:
@@ -3537,6 +3654,13 @@ def index():
     configure_study = None
     configure_study_personas = []
     available_personas = []
+    ai_connectivity = {
+        "level": "unknown",
+        "label": "Unchecked",
+        "detail": "AI health has not been checked.",
+        "last_checked_at": "",
+        "failing": [],
+    }
     clone_source = None
     study_uploads = []
     study_uploads_total_size = 0
@@ -3841,6 +3965,8 @@ def index():
 
                 chat_save_buttons = get_save_buttons(configure_study)
                 chat_save_buttons = []
+
+                ai_connectivity = compute_ai_connectivity(conn)
 
                 if configure_study.get("status") == "draft" and configure_study.get("study_type"):
                     try:
@@ -4182,6 +4308,7 @@ def index():
         ui_phase=ui_phase,
         configure_study_personas=configure_study_personas,
         available_personas=available_personas,
+        ai_connectivity=ai_connectivity,
         step1_library=load_step1_library(),
         step1_session_id=uuid.uuid4().hex,
         study_type_limits=STUDY_TYPE_LIMITS,
@@ -12001,6 +12128,13 @@ def render_error(message, show_new_research=False, show_new_persona=False):
         configure_study=configure_study,
         configure_study_personas=[],
         available_personas=[],
+        ai_connectivity={
+            "level": "unknown",
+            "label": "Unchecked",
+            "detail": "AI health has not been checked.",
+            "last_checked_at": "",
+            "failing": [],
+        },
         step1_library=load_step1_library(),
         step1_session_id=uuid.uuid4().hex,
         study_type_limits=STUDY_TYPE_LIMITS,
